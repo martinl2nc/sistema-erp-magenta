@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // @react-pdf/renderer needs to be excluded from SSR bundling
+  serverExternalPackages: ['@react-pdf/renderer'],
 };
 
 export default nextConfig;
