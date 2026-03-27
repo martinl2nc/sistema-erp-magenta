@@ -6,6 +6,7 @@ import { useQuotesList, useUpdateQuoteStatus, useDeleteQuote, useUpdateQuoteFoll
 import { useSellersList } from '@/hooks/useSellers';
 import type { Quote, QuoteStatus } from '@/services/quotes.service';
 import EmailHistoryModal from '@/features/quotes/EmailHistoryModal';
+import GenerarPedidoModal from '@/features/pedidos/GenerarPedidoModal';
 
 export default function QuotesList() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function QuotesList() {
   const [selectedSeller, setSelectedSeller] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [historyQuote, setHistoryQuote] = useState<{ id: string; idStr: string } | null>(null);
+  const [pedidoQuote, setPedidoQuote] = useState<Quote | null>(null);
 
   const handleStatusChange = (id: string, newStatus: string) => {
     updateStatusMutation.mutate({ id, status: newStatus as QuoteStatus });
@@ -169,6 +171,11 @@ export default function QuotesList() {
                       </label>
                     )}
                     <div className="flex items-center gap-2 ml-auto">
+                      {quote.estado === 'Enviada' && (
+                        <button onClick={() => setPedidoQuote(quote)} className="border border-[#10B981]/40 text-[#10B981] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#10B981]/10 transition-colors" title="Generar Pedido">
+                          <iconify-icon icon="solar:box-linear" class="text-lg"></iconify-icon>
+                        </button>
+                      )}
                       <button onClick={() => setHistoryQuote({ id: quote.id, idStr: `COT-${quote.numero_correlativo}` })} className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors" title="Historial de envíos">
                         <iconify-icon icon="solar:history-2-linear" class="text-lg"></iconify-icon>
                       </button>
@@ -221,6 +228,11 @@ export default function QuotesList() {
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-right flex items-center justify-end gap-2">
+                        {quote.estado === 'Enviada' && (
+                          <button onClick={() => setPedidoQuote(quote)} className="border border-[#10B981]/40 text-[#10B981] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#10B981]/10 transition-colors" title="Generar Pedido">
+                            <iconify-icon icon="solar:box-linear" class="text-lg"></iconify-icon>
+                          </button>
+                        )}
                         <button onClick={() => setHistoryQuote({ id: quote.id, idStr: `COT-${quote.numero_correlativo}` })} className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors" title="Historial de envíos">
                           <iconify-icon icon="solar:history-2-linear" class="text-lg"></iconify-icon>
                         </button>
@@ -243,6 +255,11 @@ export default function QuotesList() {
         onClose={() => setHistoryQuote(null)}
         cotizacionId={historyQuote?.id ?? null}
         quoteIdStr={historyQuote?.idStr ?? ''}
+      />
+      <GenerarPedidoModal
+        isOpen={Boolean(pedidoQuote)}
+        onClose={() => setPedidoQuote(null)}
+        quote={pedidoQuote}
       />
     </div>
   );
