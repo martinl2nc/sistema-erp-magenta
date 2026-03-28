@@ -13,6 +13,8 @@ import type { ConfiguracionSerie } from '@/services/configuracionSeries.service'
 // ─── Tipos ─────────────────────────────────────────────────────
 
 interface LineaEditable extends PedidoLinea {
+  unidad_sunat: string;
+  afectacion_igv: string;
   mto_valor_unitario: number;
   mto_base_igv: number;
   mto_igv: number;
@@ -42,6 +44,11 @@ const AFECTACION_IGV = [
   { value: '30', label: '30 – Inafecto' },
 ];
 
+const TIPO_DOC_MAP: Record<string, string> = {
+  factura: '01',
+  boleta: '03',
+};
+
 function calcularSunat(precioUnitario: number, cantidad: number, afectacionIgv: string) {
   const subtotal = parseFloat((cantidad * precioUnitario).toFixed(2));
   if (afectacionIgv === '10') {
@@ -53,8 +60,13 @@ function calcularSunat(precioUnitario: number, cantidad: number, afectacionIgv: 
   return { subtotal, mto_valor_unitario: precioUnitario, mto_base_igv: 0, mto_igv: 0 };
 }
 
-function toLineaEditable(l: PedidoLinea): LineaEditable {
-  return { ...l, ...calcularSunat(l.precio_unitario, l.cantidad, l.afectacion_igv) };
+function toLineaEditable(l: PedidoLinea, defaultAfectacion: string): LineaEditable {
+  return {
+    ...l,
+    unidad_sunat: 'NIU',
+    afectacion_igv: defaultAfectacion,
+    ...calcularSunat(l.precio_unitario, l.cantidad, defaultAfectacion),
+  };
 }
 
 // ─── Componente ────────────────────────────────────────────────
@@ -84,9 +96,10 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
   // Cargar líneas del pedido
   useEffect(() => {
     if (!isOpen || !pedido) return;
+    const defaultAfectacion = pedido.cotizaciones?.aplica_igv ? '10' : '20';
     setLoadingLineas(true);
     pedidosService.getPedidoLineas(pedido.id).then((data) => {
-      setLineas(data.map(toLineaEditable));
+      setLineas(data.map((l) => toLineaEditable(l, defaultAfectacion)));
     }).catch(() => {
       toast.error('No se pudieron cargar las líneas del pedido');
     }).finally(() => setLoadingLineas(false));
@@ -97,7 +110,8 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     if (!isOpen) return;
     setLoadingSerie(true);
     setSerie(null);
-    configuracionSeriesService.getSerieByTipo(tipoComprobante).then(setSerie).catch(() => setSerie(null)).finally(() => setLoadingSerie(false));
+    const tipoDocCodigo = TIPO_DOC_MAP[tipoComprobante];
+    configuracionSeriesService.getSerieByTipoDoc(tipoDocCodigo).then(setSerie).catch(() => setSerie(null)).finally(() => setLoadingSerie(false));
   }, [isOpen, tipoComprobante]);
 
   // Totales calculados
@@ -178,10 +192,11 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     setIsSubmitting(true);
     try {
       const fechaHoy = new Date().toISOString().split('T')[0];
+      const tipoDocCodigo = TIPO_DOC_MAP[tipoComprobante];
 
       await emitirComprobante.mutateAsync({
         pedido_id: pedido.id,
-        tipo_comprobante: tipoComprobante,
+        tipo_doc_codigo: tipoDocCodigo,
         cliente_id: cliente.id,
         fecha_emision: fechaHoy,
         subtotal: totales.subtotal,
@@ -189,7 +204,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
         total: totales.total,
         lineas: lineas.map((l) => ({
           producto_id: l.producto_id,
-          nombre_producto: l.nombre_producto,
+          nombre_producto: l.nombre_producto_historico,
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,
           mto_valor_unitario: l.mto_valor_unitario,
@@ -202,8 +217,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
         direccion_facturacion: direccionFacturacion.trim() || undefined,
       });
 
-      // El webhook a n8n es no-fatal: la factura ya está creada en BD.
-      // Si n8n no está disponible, el admin puede reintentar manualmente.
+      // El webhook a n8n es no-fatal: el comprobante ya está creado en BD.
       try {
         await triggerFacturacionWebhook(pedido.id);
         toast.success('Comprobante emitido y enviado a procesar');
@@ -395,7 +409,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
                   <tbody className="divide-y divide-[#334155]">
                     {lineas.map((l, idx) => (
                       <tr key={l.id ?? idx} className="bg-[#181B21]">
-                        <td className="px-3 py-2 text-xs text-[#E2E8F0]">{l.nombre_producto}</td>
+                        <td className="px-3 py-2 text-xs text-[#E2E8F0]">{l.nombre_producto_historico}</td>
                         <td className="px-3 py-2 text-xs text-[#94A3B8] text-center">{l.cantidad}</td>
                         <td className="px-3 py-2 text-xs text-[#94A3B8] text-right">{formatCurrency(l.precio_unitario)}</td>
                         <td className="px-3 py-2">

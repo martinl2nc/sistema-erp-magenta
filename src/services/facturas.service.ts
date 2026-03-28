@@ -1,25 +1,34 @@
 import { createClient } from '@/lib/supabase/client';
 
-export type FacturaEstado = 'emitida' | 'aceptada_sunat' | 'rechazada_sunat' | 'anulada';
+export type ComprobanteEstadoSunat = 'borrador' | 'emitida' | 'aceptada_sunat' | 'rechazada_sunat' | 'anulada';
 
-export interface Factura {
+export interface Comprobante {
   id: string;
   pedido_id: string;
   cliente_id: string;
-  tipo_comprobante: 'factura' | 'boleta';
+  tipo_doc_codigo: string; // '01' factura, '03' boleta, '07' NC
   serie: string;
-  numero: number;
+  correlativo: number;
   serie_numero: string;
+  comprobante_referencia_id: string | null;
+  motivo_nota: string | null;
   fecha_emision: string;
+  fecha_vencimiento: string | null;
+  tipo_moneda: string;
+  forma_pago: string;
+  mto_oper_gravadas: number;
+  mto_oper_exoneradas: number;
+  mto_oper_inafectas: number;
+  mto_igv: number;
+  total_impuestos: number;
+  valor_venta: number;
   subtotal: number;
-  igv_monto: number;
-  total: number;
+  mto_imp_venta: number;
   enlace_pdf: string | null;
   enlace_xml: string | null;
   enlace_cdr: string | null;
   apisperu_response: Record<string, unknown> | null;
-  estado: FacturaEstado;
-  fecha_creacion: string;
+  estado_sunat: ComprobanteEstadoSunat;
   // Relations
   clientes?: {
     razon_social: string | null;
@@ -32,22 +41,13 @@ export interface Factura {
   };
 }
 
-export interface NotaCredito {
-  id: string;
-  factura_id: string;
-  tipo_nota: '01' | '07';
-  motivo: string;
-  serie_numero: string | null;
-  enlace_pdf: string | null;
-  enlace_xml: string | null;
-  apisperu_response: Record<string, unknown> | null;
-  estado: 'pendiente' | 'emitida' | 'error';
-  fecha_creacion: string;
-}
+// --- Backward-compat aliases used by pages ---
+export type Factura = Comprobante;
+export type FacturaEstado = ComprobanteEstadoSunat;
 
 export interface EmitirComprobantePayload {
   pedido_id: string;
-  tipo_comprobante: 'factura' | 'boleta';
+  tipo_doc_codigo: string; // '01' | '03'
   cliente_id: string;
   fecha_emision: string; // 'YYYY-MM-DD'
   subtotal: number;
@@ -69,24 +69,24 @@ export interface EmitirComprobantePayload {
 }
 
 export const facturasService = {
-  async getFacturas(): Promise<Factura[]> {
+  async getFacturas(): Promise<Comprobante[]> {
     const supabase = createClient();
     const { data, error } = await supabase
-      .from('facturas')
+      .from('comprobantes')
       .select(`
         *,
         clientes ( razon_social, nombres_contacto, apellidos_contacto, numero_documento ),
         pedidos ( cotizaciones ( numero_correlativo ) )
       `)
-      .order('fecha_creacion', { ascending: false });
+      .order('fecha_emision', { ascending: false });
     if (error) throw error;
     return data || [];
   },
 
-  async getFacturaByPedido(pedidoId: string): Promise<Factura | null> {
+  async getComprobanteByPedido(pedidoId: string): Promise<Comprobante | null> {
     const supabase = createClient();
     const { data, error } = await supabase
-      .from('facturas')
+      .from('comprobantes')
       .select('*')
       .eq('pedido_id', pedidoId)
       .maybeSingle();
@@ -98,7 +98,7 @@ export const facturasService = {
     const supabase = createClient();
     const { data, error } = await supabase.rpc('emitir_comprobante', {
       p_pedido_id:             payload.pedido_id,
-      p_tipo_comprobante:      payload.tipo_comprobante,
+      p_tipo_doc_codigo:       payload.tipo_doc_codigo,
       p_cliente_id:            payload.cliente_id,
       p_fecha_emision:         payload.fecha_emision,
       p_subtotal:              payload.subtotal,
@@ -108,25 +108,37 @@ export const facturasService = {
       p_direccion_facturacion: payload.direccion_facturacion ?? null,
     });
     if (error) throw error;
-    return data as string; // returns factura_id (UUID)
+    return data as string; // returns comprobante_id (UUID)
   },
 
   async createNotaCredito(payload: {
-    factura_id: string;
-    tipo_nota: '01' | '07';
+    comprobante_id: string;
     motivo: string;
-  }): Promise<NotaCredito> {
+  }): Promise<Comprobante> {
     const supabase = createClient();
     const { data, error } = await supabase
-      .from('notas_credito')
-      .insert([{ ...payload, estado: 'pendiente' }])
+      .from('comprobantes')
+      .insert([{
+        pedido_id: (await supabase.from('comprobantes').select('pedido_id, cliente_id').eq('id', payload.comprobante_id).single()).data!.pedido_id,
+        cliente_id: (await supabase.from('comprobantes').select('cliente_id').eq('id', payload.comprobante_id).single()).data!.cliente_id,
+        tipo_doc_codigo: '07',
+        serie: 'FC01',
+        correlativo: 0,
+        serie_numero: 'NC-PENDIENTE',
+        comprobante_referencia_id: payload.comprobante_id,
+        motivo_nota: payload.motivo,
+        estado_sunat: 'borrador',
+      }])
       .select()
       .single();
     if (error) throw error;
+
+    // Mark original as anulada
     await supabase
-      .from('facturas')
-      .update({ estado: 'anulada' as FacturaEstado })
-      .eq('id', payload.factura_id);
+      .from('comprobantes')
+      .update({ estado_sunat: 'anulada' as ComprobanteEstadoSunat })
+      .eq('id', payload.comprobante_id);
+
     return data;
   },
 };

@@ -11,11 +11,9 @@ import type { Quote } from '@/services/quotes.service';
 
 interface LineaLocal {
   producto_id: string | null;
-  nombre_producto: string;
+  nombre_producto_historico: string;
   cantidad: number;
   precio_unitario: number;
-  unidad_sunat: string;
-  afectacion_igv: string;
   fraccionable: boolean;
 }
 
@@ -49,11 +47,9 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
       setLineas(
         cotLineas.map((l) => ({
           producto_id: l.producto_id ?? null,
-          nombre_producto: l.nombre_producto_historico,
+          nombre_producto_historico: l.nombre_producto_historico,
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,
-          unidad_sunat: 'NIU',
-          afectacion_igv: defaultIgv,
           fraccionable: l.productos?.fraccionable ?? false,
         }))
       );
@@ -120,6 +116,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
       const { path, nombre } = await pedidosService.uploadSustento(file, quote.id);
       const nuevoPedido = await createPedido.mutateAsync({
         cotizacion_id: quote.id,
+        cliente_id: quote.cliente_id,
         vendedor_id: quote.vendedor_id ?? null,
         nro_oc_cliente: nroOc.trim() || undefined,
         sustento_url: path,
@@ -132,12 +129,10 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
         lineas.map((l) => ({
           pedido_id: nuevoPedido.id,
           producto_id: l.producto_id,
-          nombre_producto: l.nombre_producto,
+          nombre_producto_historico: l.nombre_producto_historico,
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,
           subtotal_linea: calcSubtotal(l),
-          unidad_sunat: l.unidad_sunat,
-          afectacion_igv: l.afectacion_igv,
         }))
       );
 
@@ -250,7 +245,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                   <tbody className="divide-y divide-[#334155]">
                     {lineas.map((l, idx) => (
                       <tr key={idx} className="bg-[#181B21]">
-                        <td className="px-3 py-2.5 text-xs text-[#E2E8F0]">{l.nombre_producto}</td>
+                        <td className="px-3 py-2.5 text-xs text-[#E2E8F0]">{l.nombre_producto_historico}</td>
                         <td className="px-3 py-2.5 text-center">
                           <input
                             type="number"

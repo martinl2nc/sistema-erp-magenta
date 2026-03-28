@@ -7,19 +7,17 @@ import type { Pedido, PedidoEstado } from '@/services/pedidos.service';
 
 const ESTADO_LABELS: Record<PedidoEstado, string> = {
   pendiente_facturacion: 'Pendiente',
-  procesando: 'Procesando',
-  enviado_sunat: 'Enviado SUNAT',
+  procesando_facturacion: 'Procesando',
   facturado: 'Facturado',
-  error_sunat: 'Error SUNAT',
+  error_facturacion: 'Error',
   anulado: 'Anulado',
 };
 
 const ESTADO_STYLES: Record<PedidoEstado, string> = {
   pendiente_facturacion: 'bg-yellow-500/10 text-yellow-400',
-  procesando: 'bg-blue-500/10 text-blue-400',
-  enviado_sunat: 'bg-purple-500/10 text-[#A855F7]',
+  procesando_facturacion: 'bg-blue-500/10 text-blue-400',
   facturado: 'bg-[#10B981]/10 text-[#10B981]',
-  error_sunat: 'bg-red-500/10 text-red-400',
+  error_facturacion: 'bg-red-500/10 text-red-400',
   anulado: 'bg-[#94A3B8]/10 text-[#94A3B8]',
 };
 
@@ -151,9 +149,6 @@ export default function PedidosPage() {
                   {p.nro_oc_cliente && (
                     <p className="text-xs text-[#94A3B8]">OC: {p.nro_oc_cliente}</p>
                   )}
-                  {p.error_detalle && (
-                    <p className="text-xs text-red-400 truncate">{p.error_detalle}</p>
-                  )}
                 </div>
               ))}
             </div>
@@ -184,16 +179,9 @@ export default function PedidosPage() {
                         {formatCurrency(p.cotizaciones?.total_final ?? 0)}
                       </td>
                       <td className="px-5 py-3.5">
-                        <div className="flex flex-col gap-1">
-                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full inline-block w-fit ${ESTADO_STYLES[p.estado]}`}>
-                            {ESTADO_LABELS[p.estado]}
-                          </span>
-                          {p.error_detalle && (
-                            <span className="text-[10px] text-red-400 truncate max-w-[130px]" title={p.error_detalle}>
-                              {p.error_detalle}
-                            </span>
-                          )}
-                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full inline-block w-fit ${ESTADO_STYLES[p.estado]}`}>
+                          {ESTADO_LABELS[p.estado]}
+                        </span>
                       </td>
                     </tr>
                   ))}

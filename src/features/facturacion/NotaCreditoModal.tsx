@@ -3,15 +3,14 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useCreateNotaCredito } from '@/hooks/useFacturas';
-import { usePedidosList } from '@/hooks/usePedidos';
 import { useQueryClient } from '@tanstack/react-query';
 import { pedidosKeys } from '@/hooks/usePedidos';
-import type { Factura } from '@/services/facturas.service';
+import type { Comprobante } from '@/services/facturas.service';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  factura: Factura | null;
+  factura: Comprobante | null;
 }
 
 const TIPOS_NOTA = [
@@ -48,8 +47,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
     }
     try {
       await createNota.mutateAsync({
-        factura_id: factura.id,
-        tipo_nota: tipoNota,
+        comprobante_id: factura.id,
         motivo: motivo.trim(),
       });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
@@ -94,7 +92,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0">
-          {/* Resumen factura */}
+          {/* Resumen comprobante */}
           <div className="p-3 bg-[#0F1115] border border-[#334155] rounded-lg space-y-1.5">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
@@ -103,7 +101,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xs text-[#94A3B8]">Total</p>
-                <p className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(factura.total)}</p>
+                <p className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(factura.mto_imp_venta)}</p>
               </div>
             </div>
             <p className="text-xs text-[#94A3B8]">Cliente: <span className="text-[#E2E8F0]">{clienteName}</span></p>
@@ -113,7 +111,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
           <div className="flex items-start gap-2 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
             <iconify-icon icon="solar:danger-triangle-linear" class="text-yellow-400 text-base shrink-0 mt-0.5"></iconify-icon>
             <p className="text-xs text-[#94A3B8]">
-              La nota de crédito quedará en estado <span className="text-yellow-400">pendiente</span> hasta que n8n la emita ante SUNAT. La factura se marcará como anulada.
+              La nota de crédito quedará en estado <span className="text-yellow-400">borrador</span> hasta que n8n la emita ante SUNAT. El comprobante original se marcará como anulado.
             </p>
           </div>
 

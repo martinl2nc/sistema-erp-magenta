@@ -5,7 +5,7 @@ import { facturasService } from '@/services/facturas.service';
 import type { EmitirComprobantePayload } from '@/services/facturas.service';
 
 export const facturasKeys = {
-  all: ['facturas'] as const,
+  all: ['comprobantes'] as const,
   list: () => [...facturasKeys.all, 'list'] as const,
 };
 

@@ -50,8 +50,9 @@ CREATE TABLE "productos" (
   "categoria_id" uuid,
   "precio_base" numeric(10,2) NOT NULL DEFAULT 0,
   "activo" boolean DEFAULT true,
-  "unidad_codigo" varchar(5) NOT NULL DEFAULT 'NIU',
-  "tip_afe_igv_codigo" varchar(2) NOT NULL DEFAULT '10',
+  "unidad_medida" varchar(5) NOT NULL DEFAULT 'NIU',
+  "afectacion_igv" varchar(2) NOT NULL DEFAULT '10',
+  "fraccionable" boolean DEFAULT false,
   "fecha_creacion" timestamp
 );
 
@@ -199,9 +200,9 @@ CREATE TABLE "configuracion_series" (
 
 ALTER TABLE "productos" ADD FOREIGN KEY ("categoria_id") REFERENCES "categorias" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "productos" ADD FOREIGN KEY ("unidad_codigo") REFERENCES "cat_unidades_medida" ("codigo") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "productos" ADD FOREIGN KEY ("unidad_medida") REFERENCES "cat_unidades_medida" ("codigo") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "productos" ADD FOREIGN KEY ("tip_afe_igv_codigo") REFERENCES "cat_tipo_afectacion_igv" ("codigo") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "productos" ADD FOREIGN KEY ("afectacion_igv") REFERENCES "cat_tipo_afectacion_igv" ("codigo") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "cotizaciones" ADD FOREIGN KEY ("cliente_id") REFERENCES "clientes" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
@@ -213,7 +214,7 @@ ALTER TABLE "cotizaciones_lineas" ADD FOREIGN KEY ("producto_id") REFERENCES "pr
 
 ALTER TABLE "cotizacion_envios" ADD FOREIGN KEY ("cotizacion_id") REFERENCES "cotizaciones" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "cotizaciones" ADD FOREIGN KEY ("id") REFERENCES "pedidos" ("cotizacion_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "pedidos" ADD FOREIGN KEY ("cotizacion_id") REFERENCES "cotizaciones" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "pedidos" ADD FOREIGN KEY ("cliente_id") REFERENCES "clientes" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
@@ -225,7 +226,7 @@ ALTER TABLE "comprobantes" ADD FOREIGN KEY ("cliente_id") REFERENCES "clientes" 
 
 ALTER TABLE "comprobantes" ADD FOREIGN KEY ("tipo_doc_codigo") REFERENCES "cat_tipo_documento" ("codigo") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "comprobantes" ADD FOREIGN KEY ("id") REFERENCES "comprobantes" ("comprobante_referencia_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "comprobantes" ADD FOREIGN KEY ("comprobante_referencia_id") REFERENCES "comprobantes" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "comprobantes_detalles" ADD FOREIGN KEY ("comprobante_id") REFERENCES "comprobantes" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
@@ -239,6 +240,6 @@ ALTER TABLE "pedidos_lineas" ADD FOREIGN KEY ("pedido_id") REFERENCES "pedidos" 
 
 ALTER TABLE "pedidos_lineas" ADD FOREIGN KEY ("producto_id") REFERENCES "productos" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "pedidos" ADD FOREIGN KEY ("sustento_url") REFERENCES "pedidos" ("cliente_id") DEFERRABLE INITIALLY IMMEDIATE;
+-- (Removed erroneous FK: sustento_url is a text URL, not a foreign key)
 
 ALTER TABLE "configuracion_series" ADD FOREIGN KEY ("tipo_doc_codigo") REFERENCES "cat_tipo_documento" ("codigo") DEFERRABLE INITIALLY IMMEDIATE;

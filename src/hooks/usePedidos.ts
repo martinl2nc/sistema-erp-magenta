@@ -30,7 +30,7 @@ export function useCreatePedido() {
 export function useUpdatePedidoForEmision() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { tipo_comprobante: 'factura' | 'boleta'; direccion_facturacion?: string } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { direccion_facturacion?: string } }) =>
       pedidosService.updateForEmision(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
@@ -41,8 +41,8 @@ export function useUpdatePedidoForEmision() {
 export function useUpdatePedidoEstado() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, estado, extra }: { id: string; estado: PedidoEstado; extra?: { error_detalle?: string } }) =>
-      pedidosService.updateEstado(id, estado, extra),
+    mutationFn: ({ id, estado }: { id: string; estado: PedidoEstado }) =>
+      pedidosService.updateEstado(id, estado),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
     },
