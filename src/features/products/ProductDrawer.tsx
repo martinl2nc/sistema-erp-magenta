@@ -137,6 +137,19 @@ export default function ProductDrawer({ open, product, onClose, onSave, isSaving
               />
             </div>
 
+            {/* Descripción */}
+            <div>
+              <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Descripción</label>
+              <textarea
+                name="descripcion"
+                value={formData.descripcion}
+                onChange={handleChange}
+                rows={3}
+                placeholder="Detalles sobre el producto..."
+                className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow resize-none"
+              />
+            </div>
+
             {/* Categoría */}
             <div>
               <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Categoría</label>
