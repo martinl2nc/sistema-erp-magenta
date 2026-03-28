@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useCategoriesList } from '@/hooks/useCategories';
+import { useUnidadesMedida, useAfectacionesIgv } from '@/hooks/useCatalogos';
 import type { Product } from '@/services/products.service';
 import type { ProductFormData } from '@/services/products.service';
 
@@ -18,11 +19,15 @@ const initialForm: ProductFormData = {
   descripcion: '',
   categoria_id: null,
   precio_base: 0,
+  unidad_medida: 'NIU',
+  afectacion_igv: '10',
   fraccionable: false,
 };
 
 export default function ProductDrawer({ open, product, onClose, onSave, isSaving }: ProductDrawerProps) {
   const { data: categories = [] } = useCategoriesList();
+  const { data: unidades = [] } = useUnidadesMedida();
+  const { data: afectaciones = [] } = useAfectacionesIgv();
   const [formData, setFormData] = useState<ProductFormData>(initialForm);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -35,6 +40,8 @@ export default function ProductDrawer({ open, product, onClose, onSave, isSaving
         descripcion: product.descripcion || '',
         categoria_id: product.categoria_id,
         precio_base: parseFloat(product.precio_base) || 0,
+        unidad_medida: product.unidad_medida || 'NIU',
+        afectacion_igv: product.afectacion_igv || '10',
         fraccionable: product.fraccionable ?? false,
       });
     } else {
@@ -147,6 +154,48 @@ export default function ProductDrawer({ open, product, onClose, onSave, isSaving
                 </select>
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                   <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[#94A3B8] text-base"></iconify-icon>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Unidad SUNAT */}
+              <div>
+                <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Unidad MED. (SUNAT)</label>
+                <div className="relative">
+                  <select
+                    name="unidad_medida"
+                    value={formData.unidad_medida}
+                    onChange={handleChange}
+                    className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow appearance-none cursor-pointer"
+                  >
+                    {unidades.map(u => (
+                      <option key={u.codigo} value={u.codigo}>{u.codigo} - {u.descripcion}</option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[#94A3B8] text-base"></iconify-icon>
+                  </div>
+                </div>
+              </div>
+
+              {/* Afectación IGV (SUNAT) */}
+              <div>
+                <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Afectación IGV</label>
+                <div className="relative">
+                  <select
+                    name="afectacion_igv"
+                    value={formData.afectacion_igv}
+                    onChange={handleChange}
+                    className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow appearance-none cursor-pointer"
+                  >
+                    {afectaciones.map(a => (
+                      <option key={a.codigo} value={a.codigo}>{a.codigo} - {a.descripcion}</option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[#94A3B8] text-base"></iconify-icon>
+                  </div>
                 </div>
               </div>
             </div>

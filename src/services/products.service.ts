@@ -11,6 +11,8 @@ export interface Product {
   categoria_id: string | null;
   precio_base: string; // numeric comes as string from Supabase
   activo: boolean;
+  unidad_medida: string;
+  afectacion_igv: string;
   fraccionable: boolean;
   fecha_creacion: string;
   categorias: { nombre: string } | null; // Relational join
@@ -22,6 +24,8 @@ export interface ProductFormData {
   descripcion: string;
   categoria_id: string | null;
   precio_base: number;
+  unidad_medida: string;
+  afectacion_igv: string;
   fraccionable: boolean;
 }
 
