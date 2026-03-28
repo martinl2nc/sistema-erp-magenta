@@ -280,7 +280,8 @@ export default function QuoteForm({ id }: QuoteFormProps) {
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border
             ${quoteData.estado === 'Aprobada' || quoteData.estado === 'Enviada' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' :
               quoteData.estado === 'Borrador' ? 'bg-[#94A3B8]/10 text-[#94A3B8] border-[#94A3B8]/20' :
-            'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20'}`}>
+              quoteData.estado === 'Cancelada' ? 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20' :
+            'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'}`}>
             {quoteData.estado}
           </span>
         </div>

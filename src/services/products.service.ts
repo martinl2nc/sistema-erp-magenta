@@ -11,6 +11,7 @@ export interface Product {
   categoria_id: string | null;
   precio_base: string; // numeric comes as string from Supabase
   activo: boolean;
+  fraccionable: boolean;
   fecha_creacion: string;
   categorias: { nombre: string } | null; // Relational join
 }
@@ -21,6 +22,7 @@ export interface ProductFormData {
   descripcion: string;
   categoria_id: string | null;
   precio_base: number;
+  fraccionable: boolean;
 }
 
 // ─── Service Functions (Capa 1) ──────────────────────────────

@@ -45,6 +45,29 @@ export interface NotaCredito {
   fecha_creacion: string;
 }
 
+export interface EmitirComprobantePayload {
+  pedido_id: string;
+  tipo_comprobante: 'factura' | 'boleta';
+  cliente_id: string;
+  fecha_emision: string; // 'YYYY-MM-DD'
+  subtotal: number;
+  igv_monto: number;
+  total: number;
+  lineas: {
+    producto_id: string | null;
+    nombre_producto: string;
+    cantidad: number;
+    precio_unitario: number;
+    mto_valor_unitario: number;
+    mto_base_igv: number;
+    mto_igv: number;
+    subtotal: number;
+    unidad_sunat: string;
+    afectacion_igv: string;
+  }[];
+  direccion_facturacion?: string;
+}
+
 export const facturasService = {
   async getFacturas(): Promise<Factura[]> {
     const supabase = createClient();
@@ -69,6 +92,23 @@ export const facturasService = {
       .maybeSingle();
     if (error) throw error;
     return data;
+  },
+
+  async emitirComprobante(payload: EmitirComprobantePayload): Promise<string> {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc('emitir_comprobante', {
+      p_pedido_id:             payload.pedido_id,
+      p_tipo_comprobante:      payload.tipo_comprobante,
+      p_cliente_id:            payload.cliente_id,
+      p_fecha_emision:         payload.fecha_emision,
+      p_subtotal:              payload.subtotal,
+      p_igv_monto:             payload.igv_monto,
+      p_total:                 payload.total,
+      p_lineas:                payload.lineas,
+      p_direccion_facturacion: payload.direccion_facturacion ?? null,
+    });
+    if (error) throw error;
+    return data as string; // returns factura_id (UUID)
   },
 
   async createNotaCredito(payload: {

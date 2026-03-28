@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { pedidosService } from '@/services/pedidos.service';
 import { quotesService } from '@/services/quotes.service';
@@ -8,6 +8,16 @@ import { useCreatePedido } from '@/hooks/usePedidos';
 import { useQueryClient } from '@tanstack/react-query';
 import { quotesKeys } from '@/hooks/useQuotes';
 import type { Quote } from '@/services/quotes.service';
+
+interface LineaLocal {
+  producto_id: string | null;
+  nombre_producto: string;
+  cantidad: number;
+  precio_unitario: number;
+  unidad_sunat: string;
+  afectacion_igv: string;
+  fraccionable: boolean;
+}
 
 interface Props {
   isOpen: boolean;
@@ -25,14 +35,40 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lineas, setLineas] = useState<LineaLocal[]>([]);
+  const [loadingLineas, setLoadingLineas] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cargar líneas de la cotización cuando abre el modal
+  useEffect(() => {
+    if (!isOpen || !quote) return;
+    setLoadingLineas(true);
+    quotesService.getQuoteById(quote.id).then((fullQuote) => {
+      const cotLineas = fullQuote.cotizaciones_lineas || [];
+      const defaultIgv = fullQuote.aplica_igv ? '10' : '20';
+      setLineas(
+        cotLineas.map((l) => ({
+          producto_id: l.producto_id ?? null,
+          nombre_producto: l.nombre_producto_historico,
+          cantidad: l.cantidad,
+          precio_unitario: l.precio_unitario,
+          unidad_sunat: 'NIU',
+          afectacion_igv: defaultIgv,
+          fraccionable: l.productos?.fraccionable ?? false,
+        }))
+      );
+    }).catch(() => {
+      toast.error('No se pudieron cargar las líneas de la cotización');
+    }).finally(() => setLoadingLineas(false));
+  }, [isOpen, quote?.id]);
 
   if (!isOpen || !quote) return null;
 
   const cliente = quote.clientes;
-  const clienteName = cliente?.razon_social?.trim()
-    || `${cliente?.nombres_contacto || ''} ${cliente?.apellidos_contacto || ''}`.trim()
-    || 'Cliente desconocido';
+  const clienteName =
+    cliente?.razon_social?.trim() ||
+    `${cliente?.nombres_contacto || ''} ${cliente?.apellidos_contacto || ''}`.trim() ||
+    'Cliente desconocido';
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
@@ -57,15 +93,32 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     if (f) handleFile(f);
   };
 
+  const updateCantidad = (idx: number, value: string) => {
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return;
+    setLineas((prev) =>
+      prev.map((l, i) => (i === idx ? { ...l, cantidad: num } : l))
+    );
+  };
+
+  const calcSubtotal = (l: LineaLocal) =>
+    parseFloat((l.cantidad * l.precio_unitario).toFixed(2));
+
+  const totalLineas = lineas.reduce((sum, l) => sum + calcSubtotal(l), 0);
+
   const handleSubmit = async () => {
     if (!file) {
       toast.error('El sustento de aprobación es obligatorio');
       return;
     }
+    if (lineas.length === 0) {
+      toast.error('No hay líneas de productos en esta cotización');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const { path, nombre } = await pedidosService.uploadSustento(file, quote.id);
-      await createPedido.mutateAsync({
+      const nuevoPedido = await createPedido.mutateAsync({
         cotizacion_id: quote.id,
         vendedor_id: quote.vendedor_id ?? null,
         nro_oc_cliente: nroOc.trim() || undefined,
@@ -74,6 +127,20 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
         observaciones: observaciones.trim() || undefined,
         fecha_pedido: fechaPedido || undefined,
       });
+
+      await pedidosService.createPedidoLineas(
+        lineas.map((l) => ({
+          pedido_id: nuevoPedido.id,
+          producto_id: l.producto_id,
+          nombre_producto: l.nombre_producto,
+          cantidad: l.cantidad,
+          precio_unitario: l.precio_unitario,
+          subtotal_linea: calcSubtotal(l),
+          unidad_sunat: l.unidad_sunat,
+          afectacion_igv: l.afectacion_igv,
+        }))
+      );
+
       await quotesService.updateQuoteStatus(quote.id, 'Aprobada');
       queryClient.invalidateQueries({ queryKey: quotesKeys.list() });
       toast.success('Pedido generado correctamente');
@@ -90,6 +157,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     setFechaPedido('');
     setObservaciones('');
     setFile(null);
+    setLineas([]);
     onClose();
   };
 
@@ -99,7 +167,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
       onClick={handleClose}
     >
       <div
-        className="w-full sm:max-w-lg bg-[#181B21] border-t sm:border sm:border-[#334155] rounded-t-2xl sm:rounded-xl flex flex-col max-h-[90vh]"
+        className="w-full sm:max-w-2xl bg-[#181B21] border-t sm:border sm:border-[#334155] rounded-t-2xl sm:rounded-xl flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle mobile */}
@@ -132,14 +200,81 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
               <p className="text-sm font-medium text-[#E2E8F0] truncate">{clienteName}</p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-xs text-[#94A3B8]">Total</p>
+              <p className="text-xs text-[#94A3B8]">Total cotización</p>
               <p className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(quote.total_final)}</p>
             </div>
           </div>
         </div>
 
         {/* Form */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 min-h-0">
+
+          {/* Tabla de productos editable */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-[#E2E8F0]">
+                Productos del Pedido
+                <span className="text-[#94A3B8] font-normal ml-1">(ajusta cantidades si el cliente confirmó menos)</span>
+              </p>
+              {lineas.length > 0 && (
+                <p className="text-xs text-[#94A3B8]">
+                  Total: <span className="text-[#E2E8F0] font-medium">{formatCurrency(totalLineas)}</span>
+                </p>
+              )}
+            </div>
+
+            {loadingLineas && (
+              <div className="flex items-center gap-2 py-4 text-[#94A3B8] text-xs">
+                <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base text-[#3B82F6]"></iconify-icon>
+                Cargando productos...
+              </div>
+            )}
+
+            {!loadingLineas && lineas.length === 0 && (
+              <div className="py-4 text-center text-xs text-[#94A3B8] border border-dashed border-[#334155] rounded-lg">
+                No se encontraron productos en la cotización
+              </div>
+            )}
+
+            {!loadingLineas && lineas.length > 0 && (
+              <div className="border border-[#334155] rounded-lg overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-[#0F1115]">
+                    <tr>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Producto</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-24 text-center">Cantidad</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-28 text-right">P. Unitario</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-28 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#334155]">
+                    {lineas.map((l, idx) => (
+                      <tr key={idx} className="bg-[#181B21]">
+                        <td className="px-3 py-2.5 text-xs text-[#E2E8F0]">{l.nombre_producto}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <input
+                            type="number"
+                            min={l.fraccionable ? '0.001' : '1'}
+                            step={l.fraccionable ? '0.001' : '1'}
+                            value={l.cantidad}
+                            onChange={(e) => updateCantidad(idx, e.target.value)}
+                            className="w-20 bg-[#0F1115] border border-[#334155] rounded px-2 py-1 text-xs text-[#E2E8F0] text-center focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6]"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-[#94A3B8] text-right">
+                          {formatCurrency(l.precio_unitario)}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs font-medium text-[#E2E8F0] text-right">
+                          {formatCurrency(calcSubtotal(l))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Sustento — obligatorio */}
           <div>
             <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
@@ -183,7 +318,9 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
               ) : (
                 <div className="flex flex-col items-center gap-1.5">
                   <iconify-icon icon="solar:upload-linear" class="text-[#94A3B8] text-2xl"></iconify-icon>
-                  <p className="text-sm text-[#94A3B8]">Arrastra el archivo aquí o <span className="text-[#3B82F6]">selecciona</span></p>
+                  <p className="text-sm text-[#94A3B8]">
+                    Arrastra el archivo aquí o <span className="text-[#3B82F6]">selecciona</span>
+                  </p>
                 </div>
               )}
             </div>
@@ -203,31 +340,31 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
             />
           </div>
 
-          {/* Fecha pedido */}
-          <div>
-            <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-              Fecha del Pedido <span className="text-[#94A3B8] font-normal">(opcional)</span>
-            </label>
-            <input
-              type="date"
-              value={fechaPedido}
-              onChange={(e) => setFechaPedido(e.target.value)}
-              className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
-            />
-          </div>
-
-          {/* Observaciones */}
-          <div>
-            <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-              Observaciones <span className="text-[#94A3B8] font-normal">(opcional)</span>
-            </label>
-            <textarea
-              value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-              rows={3}
-              placeholder="Ej: Pago a 30 días, entrega en obra..."
-              className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors resize-none"
-            />
+          {/* Fecha pedido + observaciones en grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                Fecha del Pedido <span className="text-[#94A3B8] font-normal">(opcional)</span>
+              </label>
+              <input
+                type="date"
+                value={fechaPedido}
+                onChange={(e) => setFechaPedido(e.target.value)}
+                className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                Observaciones <span className="text-[#94A3B8] font-normal">(opcional)</span>
+              </label>
+              <textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                rows={2}
+                placeholder="Ej: Pago a 30 días, entrega en obra..."
+                className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors resize-none"
+              />
+            </div>
           </div>
         </div>
 
@@ -242,7 +379,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !file}
+            disabled={isSubmitting || !file || lineas.length === 0}
             className="flex-1 bg-[#3B82F6] text-white text-sm font-medium py-2.5 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSubmitting ? (

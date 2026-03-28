@@ -27,6 +27,12 @@ export default function QuotesList() {
     updateStatusMutation.mutate({ id, status: newStatus as QuoteStatus });
   };
 
+  const getEstadoClass = (estado: string) => {
+    if (estado === 'Enviada' || estado === 'Aprobada') return 'bg-[#10B981]/10 text-[#10B981]';
+    if (estado === 'Cancelada') return 'bg-[#EF4444]/10 text-[#EF4444]';
+    return 'bg-[#94A3B8]/10 text-[#94A3B8]';
+  };
+
   const handleDelete = (id: string) => {
     const confirmed = window.confirm('¿Estás seguro de que deseas eliminar esta cotización?');
     if (!confirmed) return;
@@ -150,12 +156,16 @@ export default function QuotesList() {
                 <div key={quote.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-[#E2E8F0]">COT-{quote.numero_correlativo}</span>
-                    <select value={quote.estado} onChange={(e) => handleStatusChange(quote.id, e.target.value)} className={`text-[10px] font-bold px-2 py-1 rounded-full border-none cursor-pointer ${quote.estado === 'Aprobada' || quote.estado === 'Enviada' ? 'bg-[#10B981]/10 text-[#10B981]' : quote.estado === 'Borrador' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : 'bg-[#EF4444]/10 text-[#EF4444]'}`}>
-                      <option value="Borrador" className="bg-[#181B21]">Borrador</option>
-                      <option value="Aprobada" className="bg-[#181B21]">Aprobada</option>
-                      <option value="Enviada" className="bg-[#181B21]">Enviada</option>
-                      <option value="Cancelada" className="bg-[#181B21]">Cancelada</option>
-                    </select>
+                    {(quote.estado === 'Aprobada' || quote.estado === 'Enviada') ? (
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${getEstadoClass(quote.estado)}`}>
+                        {quote.estado}
+                      </span>
+                    ) : (
+                      <select value={quote.estado} onChange={(e) => handleStatusChange(quote.id, e.target.value)} className={`text-[10px] font-bold px-2 py-1 rounded-full border-none cursor-pointer ${getEstadoClass(quote.estado)}`}>
+                        <option value="Borrador" className="bg-[#181B21]">Borrador</option>
+                        <option value="Cancelada" className="bg-[#181B21]">Cancelada</option>
+                      </select>
+                    )}
                   </div>
                   <p className="text-sm text-[#E2E8F0]">{getClientName(quote.clientes)}</p>
                   <div className="flex items-center justify-between">
@@ -213,12 +223,16 @@ export default function QuotesList() {
                       <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{getSellerName(quote.perfiles_usuario)}</td>
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium text-right">{formatCurrency(quote.total_final)}</td>
                       <td className="px-5 py-3.5 text-sm uppercase">
-                        <select value={quote.estado} onChange={(e) => handleStatusChange(quote.id, e.target.value)} className={`text-[10px] font-bold px-2 py-1 rounded-full border-none cursor-pointer ${quote.estado === 'Aprobada' || quote.estado === 'Enviada' ? 'bg-[#10B981]/10 text-[#10B981]' : quote.estado === 'Borrador' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : 'bg-[#EF4444]/10 text-[#EF4444]'}`}>
-                          <option value="Borrador" className="bg-[#181B21]">Borrador</option>
-                          <option value="Aprobada" className="bg-[#181B21]">Aprobada</option>
-                          <option value="Enviada" className="bg-[#181B21]">Enviada</option>
-                          <option value="Cancelada" className="bg-[#181B21]">Cancelada</option>
-                        </select>
+                        {(quote.estado === 'Aprobada' || quote.estado === 'Enviada') ? (
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${getEstadoClass(quote.estado)}`}>
+                            {quote.estado}
+                          </span>
+                        ) : (
+                          <select value={quote.estado} onChange={(e) => handleStatusChange(quote.id, e.target.value)} className={`text-[10px] font-bold px-2 py-1 rounded-full border-none cursor-pointer ${getEstadoClass(quote.estado)}`}>
+                            <option value="Borrador" className="bg-[#181B21]">Borrador</option>
+                            <option value="Cancelada" className="bg-[#181B21]">Cancelada</option>
+                          </select>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 text-center">
                         {quote.estado === 'Enviada' ? (

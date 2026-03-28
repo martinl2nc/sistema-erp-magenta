@@ -18,6 +18,7 @@ const initialForm: ProductFormData = {
   descripcion: '',
   categoria_id: null,
   precio_base: 0,
+  fraccionable: false,
 };
 
 export default function ProductDrawer({ open, product, onClose, onSave, isSaving }: ProductDrawerProps) {
@@ -34,6 +35,7 @@ export default function ProductDrawer({ open, product, onClose, onSave, isSaving
         descripcion: product.descripcion || '',
         categoria_id: product.categoria_id,
         precio_base: parseFloat(product.precio_base) || 0,
+        fraccionable: product.fraccionable ?? false,
       });
     } else {
       setFormData(initialForm);
@@ -147,6 +149,27 @@ export default function ProductDrawer({ open, product, onClose, onSave, isSaving
                   <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[#94A3B8] text-base"></iconify-icon>
                 </div>
               </div>
+            </div>
+
+            {/* Fraccionable */}
+            <div className="flex items-center justify-between py-1">
+              <div>
+                <p className="text-xs font-medium text-[#94A3B8]">¿Se vende por fracción?</p>
+                <p className="text-[11px] text-[#94A3B8]/60 mt-0.5">Permite cantidades decimales (ej: 2.5 kg, 1.5 m)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, fraccionable: !prev.fraccionable }))}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                  formData.fraccionable ? 'bg-[#3B82F6]' : 'bg-[#334155]'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                    formData.fraccionable ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
             </div>
 
             {/* Precio Base */}

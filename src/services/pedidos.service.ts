@@ -1,5 +1,32 @@
 import { createClient } from '@/lib/supabase/client';
 
+// ─── Pedido Lineas ────────────────────────────────────────────
+
+export interface PedidoLinea {
+  id: string;
+  pedido_id: string;
+  producto_id: string | null;
+  nombre_producto: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal_linea: number;
+  unidad_sunat: string;
+  afectacion_igv: string;
+}
+
+export interface CreatePedidoLineaPayload {
+  pedido_id: string;
+  producto_id: string | null;
+  nombre_producto: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal_linea: number;
+  unidad_sunat?: string;
+  afectacion_igv?: string;
+}
+
+// ─── Pedido ───────────────────────────────────────────────────
+
 export type PedidoEstado =
   | 'pendiente_facturacion'
   | 'procesando'
@@ -123,6 +150,25 @@ export const pedidosService = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  async getPedidoLineas(pedidoId: string): Promise<PedidoLinea[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('pedidos_lineas')
+      .select('*')
+      .eq('pedido_id', pedidoId)
+      .order('fecha_creacion', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async createPedidoLineas(lineas: CreatePedidoLineaPayload[]): Promise<void> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('pedidos_lineas')
+      .insert(lineas);
+    if (error) throw error;
   },
 
   async updateEstado(id: string, estado: PedidoEstado, extra?: { error_detalle?: string }): Promise<void> {

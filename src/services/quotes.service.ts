@@ -89,6 +89,7 @@ export interface QuoteLineItem {
   precio_unitario: number;
   descuento_linea_monto: number;
   subtotal_linea: number;
+  productos?: { fraccionable: boolean } | null;
 }
 
 export type QuoteStatus = 'Aprobada' | 'Enviada' | 'Cancelada' | 'Borrador';
@@ -149,7 +150,7 @@ export const quotesService = {
         *,
         clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, email, telefono, direccion ),
         perfiles_usuario ( id, nombre, email ),
-        cotizaciones_lineas (*)
+        cotizaciones_lineas (*, productos(fraccionable))
       `)
       .eq('id', id)
       .single();
