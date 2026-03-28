@@ -114,26 +114,37 @@ export const facturasService = {
   async createNotaCredito(payload: {
     comprobante_id: string;
     motivo: string;
+    tipo_nota_codigo?: string; // catálogo 09 SUNAT, ej: '01' = Anulación
   }): Promise<Comprobante> {
     const supabase = createClient();
+
+    // Obtener datos del comprobante original en una sola consulta
+    const { data: original, error: origErr } = await supabase
+      .from('comprobantes')
+      .select('pedido_id, cliente_id')
+      .eq('id', payload.comprobante_id)
+      .single();
+    if (origErr || !original) throw origErr ?? new Error('Comprobante original no encontrado');
+
     const { data, error } = await supabase
       .from('comprobantes')
       .insert([{
-        pedido_id: (await supabase.from('comprobantes').select('pedido_id, cliente_id').eq('id', payload.comprobante_id).single()).data!.pedido_id,
-        cliente_id: (await supabase.from('comprobantes').select('cliente_id').eq('id', payload.comprobante_id).single()).data!.cliente_id,
-        tipo_doc_codigo: '07',
-        serie: 'FC01',
-        correlativo: 0,
-        serie_numero: 'NC-PENDIENTE',
+        pedido_id:                 original.pedido_id,
+        cliente_id:               original.cliente_id,
+        tipo_doc_codigo:          '07',
+        serie:                    'NC01',
+        correlativo:              0,
+        serie_numero:             'NC-PENDIENTE',
         comprobante_referencia_id: payload.comprobante_id,
-        motivo_nota: payload.motivo,
-        estado_sunat: 'borrador',
+        motivo_nota:              payload.motivo,
+        tipo_nota_codigo:         payload.tipo_nota_codigo ?? null,
+        estado_sunat:             'borrador',
       }])
       .select()
       .single();
     if (error) throw error;
 
-    // Mark original as anulada
+    // Marcar comprobante original como anulado
     await supabase
       .from('comprobantes')
       .update({ estado_sunat: 'anulada' as ComprobanteEstadoSunat })

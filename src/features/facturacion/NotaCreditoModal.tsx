@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useCreateNotaCredito } from '@/hooks/useFacturas';
+import { useTiposNotaCredito } from '@/hooks/useCatalogos';
 import { useQueryClient } from '@tanstack/react-query';
 import { pedidosKeys } from '@/hooks/usePedidos';
 import type { Comprobante } from '@/services/facturas.service';
@@ -13,17 +14,22 @@ interface Props {
   factura: Comprobante | null;
 }
 
-const TIPOS_NOTA = [
-  { value: '01', label: 'Anulación total', desc: 'Cancela completamente el comprobante' },
-  { value: '07', label: 'Corrección de datos', desc: 'Corrige RUC, razón social u otro dato' },
-] as const;
+
 
 export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
   const queryClient = useQueryClient();
   const createNota = useCreateNotaCredito();
+  const { data: tiposNota = [], isLoading: loadingTipos } = useTiposNotaCredito();
 
-  const [tipoNota, setTipoNota] = useState<'01' | '07'>('01');
+  const [tipoNota, setTipoNota] = useState<string>('');
   const [motivo, setMotivo] = useState('');
+
+  // Seleccionar el primer tipo disponible cuando se carguen los catálogos
+  useEffect(() => {
+    if (tiposNota.length > 0 && !tipoNota) {
+      setTipoNota(tiposNota[0].codigo);
+    }
+  }, [tiposNota, tipoNota]);
 
   if (!isOpen || !factura) return null;
 
@@ -35,7 +41,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
 
   const handleClose = () => {
-    setTipoNota('01');
+    setTipoNota(tiposNota[0]?.codigo ?? '');
     setMotivo('');
     onClose();
   };
@@ -47,8 +53,9 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
     }
     try {
       await createNota.mutateAsync({
-        comprobante_id: factura.id,
-        motivo: motivo.trim(),
+        comprobante_id:   factura.id,
+        motivo:           motivo.trim(),
+        tipo_nota_codigo: tipoNota || undefined,
       });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
       toast.success('Nota de crédito registrada. Se enviará a SUNAT vía n8n.');
@@ -120,24 +127,31 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
             <label className="block text-xs font-medium text-[#E2E8F0] mb-2">
               Tipo de Nota <span className="text-red-400">*</span>
             </label>
-            <div className="space-y-2">
-              {TIPOS_NOTA.map((tipo) => (
-                <button
-                  key={tipo.value}
-                  onClick={() => setTipoNota(tipo.value)}
-                  className={`w-full text-left px-3 py-2.5 rounded-md border transition-colors ${
-                    tipoNota === tipo.value
-                      ? 'border-red-400/50 bg-red-400/5'
-                      : 'border-[#334155] hover:border-[#334155]/80 hover:bg-[#0F1115]'
-                  }`}
-                >
-                  <p className={`text-sm font-medium ${tipoNota === tipo.value ? 'text-red-400' : 'text-[#E2E8F0]'}`}>
-                    {tipo.value} — {tipo.label}
-                  </p>
-                  <p className="text-xs text-[#94A3B8] mt-0.5">{tipo.desc}</p>
-                </button>
-              ))}
-            </div>
+            {loadingTipos ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-14 bg-[#334155]/30 rounded-md animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {tiposNota.map((tipo) => (
+                  <button
+                    key={tipo.codigo}
+                    onClick={() => setTipoNota(tipo.codigo)}
+                    className={`w-full text-left px-3 py-2.5 rounded-md border transition-colors ${
+                      tipoNota === tipo.codigo
+                        ? 'border-red-400/50 bg-red-400/5'
+                        : 'border-[#334155] hover:border-[#334155]/80 hover:bg-[#0F1115]'
+                    }`}
+                  >
+                    <p className={`text-sm font-medium ${tipoNota === tipo.codigo ? 'text-red-400' : 'text-[#E2E8F0]'}`}>
+                      {tipo.codigo} — {tipo.descripcion}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Motivo */}

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { pedidosService } from '@/services/pedidos.service';
 import { configuracionSeriesService } from '@/services/configuracionSeries.service';
 import { useEmitirComprobante } from '@/hooks/useFacturas';
+import { useUnidadesMedida, useAfectacionesIgv, useTiposDocumento } from '@/hooks/useCatalogos';
 import { triggerFacturacionWebhook } from '@/services/webhook.service';
 import { numeroALetras } from '@/utils/numeroALetras';
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service';
@@ -29,25 +30,10 @@ interface Props {
 
 // ─── Helpers ───────────────────────────────────────────────────
 
-const UNIDADES_SUNAT = [
-  { value: 'NIU', label: 'NIU – Unidad' },
-  { value: 'ZZ',  label: 'ZZ – Servicio' },
-  { value: 'KGM', label: 'KGM – Kilogramo' },
-  { value: 'MTR', label: 'MTR – Metro' },
-  { value: 'LTR', label: 'LTR – Litro' },
-  { value: 'SET', label: 'SET – Juego' },
-];
-
-const AFECTACION_IGV = [
-  { value: '10', label: '10 – Gravado' },
-  { value: '20', label: '20 – Exonerado' },
-  { value: '30', label: '30 – Inafecto' },
-];
-
-const TIPO_DOC_MAP: Record<string, string> = {
-  factura: '01',
-  boleta: '03',
-};
+// Defaults until catalog loads
+const DEFAULT_UNIDAD = 'NIU';
+const DEFAULT_AFECTACION_GRAVADA = '10';
+const DEFAULT_AFECTACION_EXONERADA = '20';
 
 function calcularSunat(precioUnitario: number, cantidad: number, afectacionIgv: string) {
   const subtotal = parseFloat((cantidad * precioUnitario).toFixed(2));
@@ -74,8 +60,17 @@ function toLineaEditable(l: PedidoLinea, defaultAfectacion: string): LineaEditab
 export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Props) {
   const emitirComprobante = useEmitirComprobante();
 
-  const [tipoComprobante, setTipoComprobante] = useState<'factura' | 'boleta'>('factura');
-  const [direccionFacturacion, setDireccionFacturacion] = useState('');
+  // ── Catálogos dinámicos desde BD ─────────────────────────────
+  const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesMedida();
+  const { data: afectaciones = [], isLoading: loadingAfectaciones } = useAfectacionesIgv();
+  const { data: tiposDoc = [], isLoading: loadingTiposDoc } = useTiposDocumento();
+
+  // Solo comprobantes activos (01=Factura, 03=Boleta)
+  const tiposComprobante = tiposDoc.filter((t) => t.categoria === 'comprobante');
+  const loadingCatalogos = loadingUnidades || loadingAfectaciones || loadingTiposDoc;
+
+  const [tipoDocCodigo, setTipoDocCodigo] = useState('01'); // default Factura
+  const [direccionFacturacion, setDireccionFacturacion]= useState('');
   const [lineas, setLineas] = useState<LineaEditable[]>([]);
   const [serie, setSerie] = useState<ConfiguracionSerie | null>(null);
   const [loadingLineas, setLoadingLineas] = useState(false);
@@ -85,18 +80,22 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
 
   const cliente = pedido?.cotizaciones?.clientes;
 
-  // Inicializar tipo y dirección según el cliente
+  // Inicializar tipo y dirección según el cliente una vez que los catálogos están disponibles
   useEffect(() => {
-    if (!pedido || !cliente) return;
+    if (!pedido || !cliente || tiposComprobante.length === 0) return;
     const preferido = cliente.comprobante_preferido?.toLowerCase();
-    setTipoComprobante(preferido === 'boleta' ? 'boleta' : 'factura');
+    // Buscar el código SUNAT según preferencia del cliente
+    const match = tiposComprobante.find((t) =>
+      t.descripcion.toLowerCase().includes(preferido ?? 'factura')
+    );
+    setTipoDocCodigo(match?.codigo ?? tiposComprobante[0]?.codigo ?? '01');
     setDireccionFacturacion(cliente.direccion || '');
-  }, [pedido?.id, cliente]);
+  }, [pedido?.id, cliente, tiposComprobante.length]);
 
   // Cargar líneas del pedido
   useEffect(() => {
     if (!isOpen || !pedido) return;
-    const defaultAfectacion = pedido.cotizaciones?.aplica_igv ? '10' : '20';
+    const defaultAfectacion = pedido.cotizaciones?.aplica_igv ? DEFAULT_AFECTACION_GRAVADA : DEFAULT_AFECTACION_EXONERADA;
     setLoadingLineas(true);
     pedidosService.getPedidoLineas(pedido.id).then((data) => {
       setLineas(data.map((l) => toLineaEditable(l, defaultAfectacion)));
@@ -105,14 +104,13 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     }).finally(() => setLoadingLineas(false));
   }, [isOpen, pedido?.id]);
 
-  // Cargar serie activa cuando cambia tipo
+  // Cargar serie activa cuando cambia tipo de documento
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !tipoDocCodigo) return;
     setLoadingSerie(true);
     setSerie(null);
-    const tipoDocCodigo = TIPO_DOC_MAP[tipoComprobante];
     configuracionSeriesService.getSerieByTipoDoc(tipoDocCodigo).then(setSerie).catch(() => setSerie(null)).finally(() => setLoadingSerie(false));
-  }, [isOpen, tipoComprobante]);
+  }, [isOpen, tipoDocCodigo]);
 
   // Totales calculados
   const totales = useMemo(() => {
@@ -192,7 +190,6 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     setIsSubmitting(true);
     try {
       const fechaHoy = new Date().toISOString().split('T')[0];
-      const tipoDocCodigo = TIPO_DOC_MAP[tipoComprobante];
 
       await emitirComprobante.mutateAsync({
         pedido_id: pedido.id,
@@ -314,21 +311,25 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
               <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
                 Tipo de Comprobante <span className="text-red-400">*</span>
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['factura', 'boleta'] as const).map((tipo) => (
-                  <button
-                    key={tipo}
-                    onClick={() => setTipoComprobante(tipo)}
-                    className={`py-2.5 rounded-md text-sm font-medium border transition-colors capitalize ${
-                      tipoComprobante === tipo
-                        ? 'border-[#3B82F6] bg-[#3B82F6]/10 text-[#3B82F6]'
-                        : 'border-[#334155] text-[#94A3B8] hover:border-[#3B82F6]/50 hover:text-[#E2E8F0]'
-                    }`}
-                  >
-                    {tipo === 'factura' ? 'Factura (RUC)' : 'Boleta (DNI)'}
-                  </button>
-                ))}
-              </div>
+              {loadingCatalogos ? (
+                <div className="h-10 bg-[#334155]/30 rounded-md animate-pulse" />
+              ) : (
+                <div className={`grid gap-2`} style={{ gridTemplateColumns: `repeat(${tiposComprobante.length}, 1fr)` }}>
+                  {tiposComprobante.map((tipo) => (
+                    <button
+                      key={tipo.codigo}
+                      onClick={() => setTipoDocCodigo(tipo.codigo)}
+                      className={`py-2.5 rounded-md text-sm font-medium border transition-colors ${
+                        tipoDocCodigo === tipo.codigo
+                          ? 'border-[#3B82F6] bg-[#3B82F6]/10 text-[#3B82F6]'
+                          : 'border-[#334155] text-[#94A3B8] hover:border-[#3B82F6]/50 hover:text-[#E2E8F0]'
+                      }`}
+                    >
+                      {tipo.descripcion} ({tipo.codigo === '01' ? 'RUC' : 'DNI'})
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -347,7 +348,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
                   </span>
                 )}
               </div>
-              {tipoComprobante === 'boleta' && (
+              {tipoDocCodigo === '03' && (
                 <p className="mt-1 text-[10px] text-[#94A3B8]">
                   Las boletas se validan en el resumen diario nocturno de SUNAT.
                 </p>
@@ -413,26 +414,38 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
                         <td className="px-3 py-2 text-xs text-[#94A3B8] text-center">{l.cantidad}</td>
                         <td className="px-3 py-2 text-xs text-[#94A3B8] text-right">{formatCurrency(l.precio_unitario)}</td>
                         <td className="px-3 py-2">
-                          <select
-                            value={l.unidad_sunat}
-                            onChange={(e) => updateUnidad(idx, e.target.value)}
-                            className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-[11px] text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
-                          >
-                            {UNIDADES_SUNAT.map((u) => (
-                              <option key={u.value} value={u.value}>{u.label}</option>
-                            ))}
-                          </select>
+                          {loadingUnidades ? (
+                            <div className="h-6 bg-[#334155]/30 rounded animate-pulse" />
+                          ) : (
+                            <select
+                              value={l.unidad_sunat}
+                              onChange={(e) => updateUnidad(idx, e.target.value)}
+                              className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-[11px] text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                            >
+                              {unidades.map((u) => (
+                                <option key={u.codigo} value={u.codigo}>
+                                  {u.codigo} – {u.descripcion}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                         <td className="px-3 py-2">
-                          <select
-                            value={l.afectacion_igv}
-                            onChange={(e) => updateAfectacion(idx, e.target.value)}
-                            className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-[11px] text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
-                          >
-                            {AFECTACION_IGV.map((a) => (
-                              <option key={a.value} value={a.value}>{a.label}</option>
-                            ))}
-                          </select>
+                          {loadingAfectaciones ? (
+                            <div className="h-6 bg-[#334155]/30 rounded animate-pulse" />
+                          ) : (
+                            <select
+                              value={l.afectacion_igv}
+                              onChange={(e) => updateAfectacion(idx, e.target.value)}
+                              className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-[11px] text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                            >
+                              {afectaciones.map((a) => (
+                                <option key={a.codigo} value={a.codigo}>
+                                  {a.codigo} – {a.descripcion}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-xs text-[#94A3B8] text-right">{formatCurrency(l.mto_igv)}</td>
                         <td className="px-3 py-2 text-xs font-medium text-[#E2E8F0] text-right">{formatCurrency(l.subtotal)}</td>

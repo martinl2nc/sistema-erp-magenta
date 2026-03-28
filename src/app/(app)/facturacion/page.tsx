@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { usePedidosList } from '@/hooks/usePedidos';
 import { useFacturasList } from '@/hooks/useFacturas';
+import { useTiposDocumento } from '@/hooks/useCatalogos';
 import { useAuth } from '@/context/AuthContext';
 import EmitirComprobanteModal from '@/features/facturacion/EmitirComprobanteModal';
 import NotaCreditoModal from '@/features/facturacion/NotaCreditoModal';
@@ -27,17 +28,19 @@ const ESTADO_LABELS: Record<string, string> = {
   anulado: 'Anulado',
 };
 
-const TIPO_DOC_LABELS: Record<string, string> = {
-  '01': 'Factura',
-  '03': 'Boleta',
-  '07': 'Nota Crédito',
-  '08': 'Nota Débito',
-};
+// TIPO_DOC_LABELS se construye dinámicamente desde cat_tipo_documento
 
 export default function FacturacionPage() {
   const { role } = useAuth();
   const { data: pedidos = [], isLoading: loadingPedidos } = usePedidosList();
   const { data: comprobantes = [], isLoading: loadingComprobantes } = useFacturasList();
+  const { data: tiposDoc = [] } = useTiposDocumento();
+
+  // Mapa dinámico: '01' → 'Factura', '03' → 'Boleta de Venta', etc.
+  const tipoDocLabels = useMemo(
+    () => Object.fromEntries(tiposDoc.map((t) => [t.codigo, t.descripcion])),
+    [tiposDoc]
+  );
 
   const [tab, setTab] = useState<Tab>('pendientes');
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
@@ -295,7 +298,7 @@ export default function FacturacionPage() {
                     {comprobantes.map((f) => (
                       <tr key={f.id} className="hover:bg-[#334155]/10 transition-colors">
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">{f.serie_numero}</td>
-                        <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{TIPO_DOC_LABELS[f.tipo_doc_codigo] || f.tipo_doc_codigo}</td>
+                        <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{tipoDocLabels[f.tipo_doc_codigo] || f.tipo_doc_codigo}</td>
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0]">{getClienteNameComprobante(f)}</td>
                         <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{formatDate(f.fecha_emision)}</td>
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium text-right">{formatCurrency(f.mto_imp_venta)}</td>
