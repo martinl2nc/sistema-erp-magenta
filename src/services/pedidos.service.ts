@@ -88,6 +88,12 @@ export interface CreatePedidoPayload {
   fecha_pedido?: string;
 }
 
+export interface UpdatePedidoBasicPayload {
+  nro_oc_cliente?: string | null;
+  observaciones?: string | null;
+  fecha_pedido?: string | null;
+}
+
 export const pedidosService = {
   async getPedidos(): Promise<Pedido[]> {
     const supabase = createClient();
@@ -193,5 +199,14 @@ export const pedidosService = {
       .update({ ...data, estado: 'procesando_facturacion' as PedidoEstado })
       .eq('id', id);
     if (error) throw error;
+  },
+
+  async updatePedidoBasic(id: string, data: UpdatePedidoBasicPayload): Promise<void> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('pedidos')
+      .update(data)
+      .eq('id', id);
+    if (error) throw new Error(error.message);
   },
 };

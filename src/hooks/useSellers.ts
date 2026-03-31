@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sellersService } from '@/services/sellers.service';
-import type { SellerFormData } from '@/services/sellers.service';
+import type { SellerFormData, CreateSellerData } from '@/services/sellers.service';
 
 export const sellersKeys = {
   all: ['sellers'] as const,
@@ -20,7 +20,7 @@ export function useSellersList() {
 export function useCreateSeller() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (newSeller: SellerFormData) => sellersService.createSeller(newSeller),
+    mutationFn: (newSeller: CreateSellerData) => sellersService.createSeller(newSeller),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: sellersKeys.list() });
     },

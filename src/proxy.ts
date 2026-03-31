@@ -29,7 +29,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // If not authenticated and trying to access protected routes → redirect to login
-  if (!user && pathname !== '/login') {
+  if (!user && pathname !== '/login' && pathname !== '/reset-password') {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
     return NextResponse.redirect(loginUrl);

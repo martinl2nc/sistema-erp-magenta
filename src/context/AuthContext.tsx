@@ -69,7 +69,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (
           event === 'INITIAL_SESSION' ||
           event === 'SIGNED_IN' ||
-          event === 'TOKEN_REFRESHED'
+          event === 'TOKEN_REFRESHED' ||
+          event === 'PASSWORD_RECOVERY'
         ) {
           if (session?.user) {
             setTimeout(() => {

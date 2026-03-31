@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pedidosService } from '@/services/pedidos.service';
-import type { PedidoEstado, CreatePedidoPayload } from '@/services/pedidos.service';
+import type { PedidoEstado, CreatePedidoPayload, UpdatePedidoBasicPayload } from '@/services/pedidos.service';
 
 export const pedidosKeys = {
   all: ['pedidos'] as const,
@@ -43,6 +43,17 @@ export function useUpdatePedidoEstado() {
   return useMutation({
     mutationFn: ({ id, estado }: { id: string; estado: PedidoEstado }) =>
       pedidosService.updateEstado(id, estado),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
+    },
+  });
+}
+
+export function useUpdatePedidoBasic() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdatePedidoBasicPayload }) =>
+      pedidosService.updatePedidoBasic(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
     },

@@ -5,6 +5,7 @@ import type { Client } from '@/services/clients.service';
 import type { Product } from '@/services/products.service';
 import type { Quote, QuoteFormData, QuoteLineItem } from '@/services/quotes.service';
 import { calculateQuoteTotals, createEmptyLineItem, getInitialQuoteData } from './quoteForm.utils';
+import { useAuth } from '@/context/AuthContext';
 
 interface UseQuoteFormStateParams {
   isEditing: boolean;
@@ -23,6 +24,9 @@ export const useQuoteFormState = ({
   allClients,
   products,
 }: UseQuoteFormStateParams) => {
+  const { user, role } = useAuth();
+  const isVendorLocked = role === 'vendedor';
+
   const [quoteData, setQuoteData] = useState<QuoteFormData>(() => getInitialQuoteData());
   const [lineItems, setLineItems] = useState<QuoteLineItem[]>([]);
   const [initialized, setInitialized] = useState(false);
@@ -44,11 +48,15 @@ export const useQuoteFormState = ({
       }));
       setLineItems(parsedLines);
     } else if (!isEditing) {
+      // Auto-populate vendor for sellers
+      if (isVendorLocked && user?.id) {
+        setQuoteData((prev) => ({ ...prev, vendedor_id: user.id }));
+      }
       setLineItems([createEmptyLineItem()]);
     }
 
     setInitialized(true);
-  }, [initialized, loading, isEditing, existingQuote]);
+  }, [initialized, loading, isEditing, existingQuote, isVendorLocked, user?.id]);
 
   const selectableClients = useMemo(() => {
     if (!quoteData.cliente_id) return activeClients;
@@ -121,6 +129,7 @@ export const useQuoteFormState = ({
     lineItems,
     totals,
     selectableClients,
+    isVendorLocked,
     handleQuoteChange,
     addLineItem,
     removeLineItem,

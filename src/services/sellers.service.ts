@@ -13,6 +13,12 @@ export interface SellerFormData {
   activo: boolean;
 }
 
+export interface CreateSellerData {
+  nombre: string;
+  email: string;
+  password: string;
+}
+
 export const sellersService = {
   async getSellers(): Promise<Seller[]> {
     const supabase = createClient();
@@ -26,28 +32,31 @@ export const sellersService = {
     return data || [];
   },
 
-  async createSeller(seller: SellerFormData): Promise<Seller> {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from('perfiles_usuario')
-      .insert([{ ...seller, rol: 'vendedor' }])
-      .select()
-      .single();
+  async createSeller(seller: CreateSellerData): Promise<Seller> {
+    const response = await fetch('/api/admin/create-seller', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(seller),
+    });
 
-    if (error) throw error;
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Error al crear el vendedor');
+    }
     return data;
   },
 
   async updateSeller(id: string, seller: Partial<SellerFormData>): Promise<Seller> {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from('perfiles_usuario')
-      .update(seller)
-      .eq('id', id)
-      .select()
-      .single();
+    const response = await fetch(`/api/admin/update-seller/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(seller),
+    });
 
-    if (error) throw error;
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Error al actualizar el vendedor');
+    }
     return data;
   },
 
@@ -62,15 +71,6 @@ export const sellersService = {
   },
 
   async toggleSellerActive(id: string, currentStatus: boolean): Promise<Seller> {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from('perfiles_usuario')
-      .update({ activo: !currentStatus })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
+    return sellersService.updateSeller(id, { activo: !currentStatus });
   },
 };

@@ -63,6 +63,7 @@ export default function QuoteForm({ id }: QuoteFormProps) {
     lineItems,
     totals,
     selectableClients,
+    isVendorLocked,
     handleQuoteChange,
     addLineItem,
     removeLineItem,
@@ -305,10 +306,19 @@ export default function QuoteForm({ id }: QuoteFormProps) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Vendedor Asignado</label>
-                <select className="w-full bg-[#0F1115] border border-[#334155] rounded-lg text-sm text-[#E2E8F0] px-3 py-2.5 focus:outline-none focus:border-[#3B82F6]" value={quoteData.vendedor_id || ''} onChange={(e) => handleQuoteChange('vendedor_id', e.target.value)}>
-                  <option value="">(Sin Asignar)</option>
-                  {sellers.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                </select>
+                {isVendorLocked ? (
+                  <div className="w-full bg-[#0F1115]/60 border border-[#334155]/60 rounded-lg px-3 py-2.5 text-sm text-[#94A3B8] cursor-not-allowed flex items-center gap-2">
+                    <iconify-icon icon="solar:lock-linear" class="text-base shrink-0"></iconify-icon>
+                    <span className="text-[#E2E8F0]">
+                      {sellers.find(s => s.id === quoteData.vendedor_id)?.nombre || '—'}
+                    </span>
+                  </div>
+                ) : (
+                  <select className="w-full bg-[#0F1115] border border-[#334155] rounded-lg text-sm text-[#E2E8F0] px-3 py-2.5 focus:outline-none focus:border-[#3B82F6]" value={quoteData.vendedor_id || ''} onChange={(e) => handleQuoteChange('vendedor_id', e.target.value)}>
+                    <option value="">(Sin Asignar)</option>
+                    {sellers.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  </select>
+                )}
               </div>
             </div>
 

@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { usePedidosList } from '@/hooks/usePedidos';
 import { useAuth } from '@/context/AuthContext';
 import type { Pedido, PedidoEstado } from '@/services/pedidos.service';
+import PedidoDetailDrawer from '@/features/pedidos/PedidoDetailDrawer';
 
 const ESTADO_LABELS: Record<PedidoEstado, string> = {
   pendiente_facturacion: 'Pendiente',
@@ -26,6 +27,7 @@ export default function PedidosPage() {
   const { data: allPedidos = [], isLoading, isError, error } = usePedidosList();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEstado, setSelectedEstado] = useState('');
+  const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
 
   const pedidos = useMemo(() => {
     let list = allPedidos;
@@ -132,7 +134,11 @@ export default function PedidosPage() {
             {/* Mobile cards */}
             <div className="md:hidden space-y-3 p-4">
               {pedidos.map((p) => (
-                <div key={p.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2.5">
+                <div
+                  key={p.id}
+                  onClick={() => setSelectedPedido(p)}
+                  className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2.5 cursor-pointer hover:border-[#3B82F6]/50 transition-colors"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-[#E2E8F0]">
                       COT-{p.cotizaciones?.numero_correlativo}
@@ -168,7 +174,11 @@ export default function PedidosPage() {
                 </thead>
                 <tbody className="divide-y divide-[#334155] bg-[#181B21]">
                   {pedidos.map((p) => (
-                    <tr key={p.id} className="hover:bg-[#334155]/10 transition-colors">
+                    <tr
+                      key={p.id}
+                      onClick={() => setSelectedPedido(p)}
+                      className="hover:bg-[#334155]/20 transition-colors cursor-pointer"
+                    >
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">
                         COT-{p.cotizaciones?.numero_correlativo}
                       </td>
@@ -191,6 +201,11 @@ export default function PedidosPage() {
           </>
         )}
       </div>
+
+      <PedidoDetailDrawer
+        pedido={selectedPedido}
+        onClose={() => setSelectedPedido(null)}
+      />
     </div>
   );
 }
