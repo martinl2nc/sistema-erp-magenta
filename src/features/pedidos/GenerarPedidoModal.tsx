@@ -7,6 +7,7 @@ import { quotesService } from '@/services/quotes.service';
 import { useCreatePedido } from '@/hooks/usePedidos';
 import { useQueryClient } from '@tanstack/react-query';
 import { quotesKeys } from '@/hooks/useQuotes';
+import { useProductsList } from '@/hooks/useProducts';
 import type { Quote } from '@/services/quotes.service';
 
 interface LineaLocal {
@@ -26,6 +27,7 @@ interface Props {
 export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
   const queryClient = useQueryClient();
   const createPedido = useCreatePedido();
+  const { data: products = [] } = useProductsList();
 
   const [nroOc, setNroOc] = useState('');
   const [fechaPedido, setFechaPedido] = useState('');
@@ -91,12 +93,36 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     if (f) handleFile(f);
   };
 
-  const updateCantidad = (idx: number, value: string) => {
-    const num = parseFloat(value);
-    if (isNaN(num) || num <= 0) return;
-    setLineas((prev) =>
-      prev.map((l, i) => (i === idx ? { ...l, cantidad: num } : l))
-    );
+  const updateLineItem = <K extends keyof LineaLocal>(index: number, field: K, value: LineaLocal[K]) => {
+    setLineas(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      const updated = { ...item, [field]: value };
+      
+      // Auto-completar datos si selecciona un producto del catálogo
+      if (field === 'producto_id' && value) {
+        const p = products.find(prod => prod.id === value);
+        if (p) {
+          updated.nombre_producto_historico = p.nombre;
+          updated.precio_unitario = Number(p.precio_base) || 0;
+          updated.fraccionable = p.fraccionable || false;
+        }
+      }
+      return updated;
+    }));
+  };
+
+  const addLineItem = () => {
+    setLineas(prev => [...prev, {
+      producto_id: null,
+      nombre_producto_historico: '',
+      cantidad: 1,
+      precio_unitario: 0,
+      fraccionable: false
+    }]);
+  };
+
+  const removeLineItem = (index: number) => {
+    setLineas(prev => prev.filter((_, i) => i !== index));
   };
 
   const calcSubtotal = (l: LineaLocal) =>
@@ -242,45 +268,96 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
 
             {!loadingLineas && lineas.length === 0 && (
               <div className="py-4 text-center text-xs text-[#94A3B8] border border-dashed border-[#334155] rounded-lg">
-                No se encontraron productos en la cotización
+                No se encontraron productos en este pedido
               </div>
             )}
 
+            {/* Tarjetas Mobile */}
             {!loadingLineas && lineas.length > 0 && (
-              <div className="border border-[#334155] rounded-lg overflow-hidden">
-                <table className="w-full text-left">
+              <div className="md:hidden space-y-3">
+                {lineas.map((l, idx) => (
+                  <div key={idx} className="bg-[#181B21] border border-[#334155] rounded-lg p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                       <select value={l.producto_id || ''} onChange={(e) => updateLineItem(idx, 'producto_id', e.target.value || null)} className="flex-1 bg-[#0F1115] border border-[#334155] rounded text-xs text-[#E2E8F0] px-2 py-1.5 focus:border-[#3B82F6] focus:outline-none">
+                         <option value="">Personalizado...</option>
+                         {products.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                       </select>
+                       <button onClick={() => removeLineItem(idx)} className="text-[#EF4444]/80 hover:text-[#EF4444] p-1.5 rounded hover:bg-[#EF4444]/10 transition-colors">
+                         <iconify-icon icon="solar:trash-bin-trash-linear" class="text-base block"></iconify-icon>
+                       </button>
+                    </div>
+                    <input type="text" value={l.nombre_producto_historico} onChange={(e) => updateLineItem(idx, 'nombre_producto_historico', e.target.value)} placeholder="Descripción del producto..." className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:border-[#3B82F6] focus:outline-none placeholder-[#334155]" />
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-[10px] text-[#94A3B8] block mb-1">Cant.</label>
+                        <input type="number" min={l.fraccionable ? '0.001' : '1'} step={l.fraccionable ? '0.001' : '1'} value={l.cantidad} onChange={(e) => updateLineItem(idx, 'cantidad', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] text-center focus:outline-none focus:border-[#3B82F6]" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-[10px] text-[#94A3B8] block mb-1">P. Unit (S/)</label>
+                        <input type="number" min="0" step="0.01" value={l.precio_unitario} onChange={(e) => updateLineItem(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] text-right focus:outline-none focus:border-[#3B82F6]" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <span className="text-[10px] text-[#94A3B8] mr-1">Subtotal:</span>
+                      <span className="text-xs font-semibold text-[#E2E8F0]">{formatCurrency(calcSubtotal(l))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tabla Desktop */}
+            {!loadingLineas && lineas.length > 0 && (
+              <div className="hidden md:block border border-[#334155] rounded-lg overflow-x-auto">
+                <table className="w-full text-left min-w-[600px]">
                   <thead className="bg-[#0F1115]">
                     <tr>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Producto</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-24 text-center">Cantidad</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-28 text-right">P. Unitario</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-28 text-right">Subtotal</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[180px]">De Catálogo</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Producto personalizado</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[80px] text-center">Cant.</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[100px] text-right">P. Unit</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[100px] text-right">Subtotal</th>
+                      <th className="px-3 py-2 w-[40px]"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#334155]">
                     {lineas.map((l, idx) => (
                       <tr key={idx} className="bg-[#181B21]">
-                        <td className="px-3 py-2.5 text-xs text-[#E2E8F0]">{l.nombre_producto_historico}</td>
-                        <td className="px-3 py-2.5 text-center">
-                          <input
-                            type="number"
-                            min={l.fraccionable ? '0.001' : '1'}
-                            step={l.fraccionable ? '0.001' : '1'}
-                            value={l.cantidad}
-                            onChange={(e) => updateCantidad(idx, e.target.value)}
-                            className="w-20 bg-[#0F1115] border border-[#334155] rounded px-2 py-1 text-xs text-[#E2E8F0] text-center focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6]"
-                          />
+                        <td className="px-3 py-2.5">
+                          <select value={l.producto_id || ''} onChange={(e) => updateLineItem(idx, 'producto_id', e.target.value || null)} className="w-full bg-[#0F1115] border border-[#334155] rounded text-xs text-[#E2E8F0] px-2 py-1.5 focus:border-[#3B82F6] focus:outline-none">
+                            <option value="">Personalizado...</option>
+                            {products.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                          </select>
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-[#94A3B8] text-right">
-                          {formatCurrency(l.precio_unitario)}
+                        <td className="px-3 py-2.5">
+                           <input type="text" value={l.nombre_producto_historico} onChange={(e) => updateLineItem(idx, 'nombre_producto_historico', e.target.value)} placeholder="Descripción..." className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:border-[#3B82F6] focus:outline-none placeholder-[#334155]" />
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <input type="number" min={l.fraccionable ? '0.001' : '1'} step={l.fraccionable ? '0.001' : '1'} value={l.cantidad} onChange={(e) => updateLineItem(idx, 'cantidad', parseFloat(e.target.value) || 0)} className="w-[60px] bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1.5 text-xs text-[#E2E8F0] text-center focus:outline-none focus:border-[#3B82F6]" />
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <input type="number" min="0" step="0.01" value={l.precio_unitario} onChange={(e) => updateLineItem(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="w-[80px] bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] text-right focus:outline-none focus:border-[#3B82F6]" />
                         </td>
                         <td className="px-3 py-2.5 text-xs font-medium text-[#E2E8F0] text-right">
                           {formatCurrency(calcSubtotal(l))}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <button onClick={() => removeLineItem(idx)} className="text-[#EF4444]/80 hover:text-[#EF4444] p-1 rounded hover:bg-[#EF4444]/10 transition-colors">
+                            <iconify-icon icon="solar:trash-bin-trash-linear" class="text-base block"></iconify-icon>
+                          </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {!loadingLineas && (
+              <div className="pt-2">
+                <button onClick={addLineItem} className="flex items-center gap-1.5 text-xs font-medium text-[#3B82F6] hover:text-[#60A5FA] px-2 py-1.5 rounded hover:bg-[#3B82F6]/10 transition-colors focus:outline-none">
+                  <iconify-icon icon="solar:add-circle-linear" class="text-base"></iconify-icon> Añadir Producto
+                </button>
               </div>
             )}
 

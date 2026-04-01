@@ -391,7 +391,7 @@ export default function QuoteForm({ id }: QuoteFormProps) {
               <thead>
                 <tr className="bg-[#0F1115] border-b border-[#334155]">
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[220px]">De Catálogo</th>
-                  <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase min-w-[250px]">Descripción Producto</th>
+                  <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase min-w-[250px]">Producto personalizado</th>
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[100px]">Cant.</th>
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[140px]">Precio U. (S/)</th>
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[130px]">Desc (S/)</th>
