@@ -93,6 +93,7 @@ export interface UpdatePedidoBasicPayload {
   nro_oc_cliente?: string | null;
   observaciones?: string | null;
   fecha_pedido?: string | null;
+  direccion_facturacion?: string | null;
 }
 
 export const pedidosService = {

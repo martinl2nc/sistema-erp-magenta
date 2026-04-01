@@ -140,10 +140,17 @@ export default function PedidosPage() {
                   className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2.5 cursor-pointer hover:border-[#3B82F6]/50 transition-colors"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-[#E2E8F0]">
-                      PED-{p.numero_pedido}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${ESTADO_STYLES[p.estado]}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-[#E2E8F0]">
+                        PED-{p.numero_pedido}
+                      </span>
+                      {p.cotizaciones?.numero_correlativo && (
+                        <span className="text-[10px] text-[#94A3B8] px-1.5 py-0.5 rounded bg-[#334155]/30 border border-[#334155]/50 shrink-0">
+                          COT-{p.cotizaciones.numero_correlativo}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ${ESTADO_STYLES[p.estado]}`}>
                       {ESTADO_LABELS[p.estado]}
                     </span>
                   </div>
@@ -165,6 +172,7 @@ export default function PedidosPage() {
                 <thead>
                   <tr className="border-b border-[#334155] bg-[#0F1115]">
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[110px]">Pedido</th>
+                    <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[110px]">Cotización</th>
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase">Cliente</th>
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[90px]">OC Cliente</th>
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[120px]">Fecha</th>
@@ -181,6 +189,9 @@ export default function PedidosPage() {
                     >
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">
                         PED-{p.numero_pedido}
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-[#94A3B8]">
+                        {p.cotizaciones?.numero_correlativo ? `COT-${p.cotizaciones.numero_correlativo}` : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0]">{getClienteName(p)}</td>
                       <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{p.nro_oc_cliente || '—'}</td>

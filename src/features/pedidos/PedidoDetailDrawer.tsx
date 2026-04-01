@@ -39,6 +39,7 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
   const [localOc, setLocalOc] = useState('');
   const [localObs, setLocalObs] = useState('');
   const [localFecha, setLocalFecha] = useState('');
+  const [localDireccion, setLocalDireccion] = useState('');
 
   // Sync form fields when pedido changes
   useEffect(() => {
@@ -46,6 +47,7 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
       setLocalOc(pedido.nro_oc_cliente ?? '');
       setLocalObs(pedido.observaciones ?? '');
       setLocalFecha(pedido.fecha_pedido ? pedido.fecha_pedido.slice(0, 10) : '');
+      setLocalDireccion(pedido.direccion_facturacion ?? '');
     }
   }, [pedido]);
 
@@ -67,7 +69,8 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
   const isDirty =
     localOc !== (pedido?.nro_oc_cliente ?? '') ||
     localObs !== (pedido?.observaciones ?? '') ||
-    localFecha !== (pedido?.fecha_pedido ? pedido.fecha_pedido.slice(0, 10) : '');
+    localFecha !== (pedido?.fecha_pedido ? pedido.fecha_pedido.slice(0, 10) : '') ||
+    localDireccion !== (pedido?.direccion_facturacion ?? '');
 
   const handleSave = () => {
     if (!pedido) return;
@@ -78,6 +81,7 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
           nro_oc_cliente: localOc.trim() || null,
           observaciones: localObs.trim() || null,
           fecha_pedido: localFecha || null,
+          direccion_facturacion: localDireccion.trim() || null,
         },
       },
       {
@@ -92,6 +96,7 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
     setLocalOc(pedido.nro_oc_cliente ?? '');
     setLocalObs(pedido.observaciones ?? '');
     setLocalFecha(pedido.fecha_pedido ? pedido.fecha_pedido.slice(0, 10) : '');
+    setLocalDireccion(pedido.direccion_facturacion ?? '');
   };
 
   const formatCurrency = (n: number) =>
@@ -191,6 +196,22 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                   />
                 ) : (
                   <span className="text-sm text-[#E2E8F0]">{pedido.nro_oc_cliente || '—'}</span>
+                )}
+              </div>
+
+              {/* Dirección de Facturación */}
+              <div className="flex items-start gap-3 px-4 py-3">
+                <span className="text-xs text-[#94A3B8] w-32 shrink-0 pt-0.5">Dirección fiscal</span>
+                {canEdit ? (
+                  <textarea
+                    value={localDireccion}
+                    onChange={(e) => setLocalDireccion(e.target.value)}
+                    rows={2}
+                    placeholder="Dirección fiscal para la factura..."
+                    className="flex-1 bg-[#181B21] border border-[#334155] rounded-md px-2 py-1 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] resize-none"
+                  />
+                ) : (
+                  <span className="text-sm text-[#E2E8F0]">{pedido.direccion_facturacion || '—'}</span>
                 )}
               </div>
 
