@@ -34,38 +34,29 @@ export type PedidoEstado =
 
 export interface Pedido {
   id: string;
-  cotizacion_id: string;
+  cotizacion_id: string | null;
   cliente_id: string;
   vendedor_id: string | null;
+  numero_pedido: number;
   nro_oc_cliente: string | null;
   sustento_url: string;
   sustento_nombre: string | null;
   observaciones: string | null;
   fecha_pedido: string | null;
   direccion_facturacion: string | null;
+  // Financial fields (stored directly on pedidos)
+  aplica_igv: boolean;
+  subtotal: number;
+  descuento_global_monto: number;
+  igv_monto: number;
+  total_final: number;
   estado: PedidoEstado;
   fecha_creacion: string;
   ultima_actualizacion: string;
   // Relations
   cotizaciones?: {
     numero_correlativo: number;
-    total_final: number;
-    aplica_igv: boolean;
-    subtotal: number;
-    igv_monto: number;
-    clientes?: {
-      id: string;
-      razon_social: string | null;
-      nombres_contacto: string;
-      apellidos_contacto: string;
-      numero_documento: string | null;
-      tipo_documento: string;
-      email: string;
-      direccion: string | null;
-      comprobante_preferido: string;
-      ubigueo: string;
-    };
-  };
+  } | null;
   clientes?: {
     id: string;
     razon_social: string | null;
@@ -73,12 +64,16 @@ export interface Pedido {
     apellidos_contacto: string;
     numero_documento: string | null;
     tipo_documento: string;
+    email: string;
+    direccion: string | null;
+    comprobante_preferido: string;
+    ubigueo: string;
   };
   perfiles_usuario?: { nombre: string };
 }
 
 export interface CreatePedidoPayload {
-  cotizacion_id: string;
+  cotizacion_id?: string;
   cliente_id: string;
   vendedor_id: string | null;
   nro_oc_cliente?: string;
@@ -86,6 +81,12 @@ export interface CreatePedidoPayload {
   sustento_nombre?: string;
   observaciones?: string;
   fecha_pedido?: string;
+  // Financial fields
+  aplica_igv: boolean;
+  subtotal: number;
+  descuento_global_monto: number;
+  igv_monto: number;
+  total_final: number;
 }
 
 export interface UpdatePedidoBasicPayload {
@@ -101,11 +102,8 @@ export const pedidosService = {
       .from('pedidos')
       .select(`
         *,
-        cotizaciones (
-          numero_correlativo, total_final, aplica_igv, subtotal, igv_monto,
-          clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo )
-        ),
-        clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento ),
+        cotizaciones ( numero_correlativo ),
+        clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ),
         perfiles_usuario ( nombre )
       `)
       .order('fecha_creacion', { ascending: false });
@@ -119,11 +117,8 @@ export const pedidosService = {
       .from('pedidos')
       .select(`
         *,
-        cotizaciones (
-          numero_correlativo, total_final, aplica_igv, subtotal, igv_monto,
-          clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo )
-        ),
-        clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento ),
+        cotizaciones ( numero_correlativo ),
+        clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ),
         perfiles_usuario ( nombre )
       `)
       .eq('id', id)

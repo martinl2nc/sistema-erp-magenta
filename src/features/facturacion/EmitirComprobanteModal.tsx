@@ -78,7 +78,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
   const [isLoadingSustento, setIsLoadingSustento] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const cliente = pedido?.cotizaciones?.clientes;
+  const cliente = pedido?.clientes;
 
   // Inicializar tipo y dirección según el cliente una vez que los catálogos están disponibles
   useEffect(() => {
@@ -95,7 +95,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
   // Cargar líneas del pedido
   useEffect(() => {
     if (!isOpen || !pedido) return;
-    const defaultAfectacion = pedido.cotizaciones?.aplica_igv ? DEFAULT_AFECTACION_GRAVADA : DEFAULT_AFECTACION_EXONERADA;
+    const defaultAfectacion = pedido.aplica_igv ? DEFAULT_AFECTACION_GRAVADA : DEFAULT_AFECTACION_EXONERADA;
     setLoadingLineas(true);
     pedidosService.getPedidoLineas(pedido.id).then((data) => {
       setLineas(data.map((l) => toLineaEditable(l, defaultAfectacion)));
@@ -250,7 +250,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
             <iconify-icon icon="solar:bill-list-linear" class="text-[#10B981] text-xl"></iconify-icon>
             <div>
               <p className="text-sm font-semibold text-[#E2E8F0]">Emitir Comprobante Electrónico</p>
-              <p className="text-xs text-[#94A3B8]">COT-{cot?.numero_correlativo}</p>
+              <p className="text-xs text-[#94A3B8]">PED-{pedido.numero_pedido}{cot ? ` • COT-${cot.numero_correlativo}` : ''}</p>
             </div>
           </div>
           <button
@@ -272,7 +272,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xs text-[#94A3B8]">Total pedido</p>
-                <p className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(cot?.total_final ?? 0)}</p>
+                <p className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(pedido.total_final ?? 0)}</p>
               </div>
             </div>
             <div className="flex gap-4 flex-wrap">

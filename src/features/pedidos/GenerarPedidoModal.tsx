@@ -30,6 +30,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
   const [nroOc, setNroOc] = useState('');
   const [fechaPedido, setFechaPedido] = useState('');
   const [observaciones, setObservaciones] = useState('');
+  const [descuentoGlobal, setDescuentoGlobal] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,7 +44,6 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     setLoadingLineas(true);
     quotesService.getQuoteById(quote.id).then((fullQuote) => {
       const cotLineas = fullQuote.cotizaciones_lineas || [];
-      const defaultIgv = fullQuote.aplica_igv ? '10' : '20';
       setLineas(
         cotLineas.map((l) => ({
           producto_id: l.producto_id ?? null,
@@ -53,6 +53,8 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
           fraccionable: l.productos?.fraccionable ?? false,
         }))
       );
+      // Precargar descuento de la cotización
+      setDescuentoGlobal(fullQuote.descuento_global_monto ?? 0);
     }).catch(() => {
       toast.error('No se pudieron cargar las líneas de la cotización');
     }).finally(() => setLoadingLineas(false));
@@ -100,7 +102,13 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
   const calcSubtotal = (l: LineaLocal) =>
     parseFloat((l.cantidad * l.precio_unitario).toFixed(2));
 
-  const totalLineas = lineas.reduce((sum, l) => sum + calcSubtotal(l), 0);
+  const sumaLineas = lineas.reduce((sum, l) => sum + calcSubtotal(l), 0);
+  const subtotalPedido = parseFloat((sumaLineas - descuentoGlobal).toFixed(2));
+  const aplicaIgv = quote?.aplica_igv ?? true;
+  const igvMonto = aplicaIgv
+    ? parseFloat((subtotalPedido * 0.18 / 1.18).toFixed(2))
+    : 0;
+  const totalFinal = subtotalPedido;
 
   const handleSubmit = async () => {
     if (!file) {
@@ -123,6 +131,12 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
         sustento_nombre: nombre,
         observaciones: observaciones.trim() || undefined,
         fecha_pedido: fechaPedido || undefined,
+        // Financial fields
+        aplica_igv: aplicaIgv,
+        subtotal: subtotalPedido,
+        descuento_global_monto: descuentoGlobal,
+        igv_monto: igvMonto,
+        total_final: totalFinal,
       });
 
       await pedidosService.createPedidoLineas(
@@ -151,6 +165,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     setNroOc('');
     setFechaPedido('');
     setObservaciones('');
+    setDescuentoGlobal(0);
     setFile(null);
     setLineas([]);
     onClose();
@@ -213,7 +228,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
               </p>
               {lineas.length > 0 && (
                 <p className="text-xs text-[#94A3B8]">
-                  Total: <span className="text-[#E2E8F0] font-medium">{formatCurrency(totalLineas)}</span>
+                  Suma líneas: <span className="text-[#E2E8F0] font-medium">{formatCurrency(sumaLineas)}</span>
                 </p>
               )}
             </div>
@@ -266,6 +281,44 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Resumen financiero del pedido */}
+            {!loadingLineas && lineas.length > 0 && (
+              <div className="mt-3 p-3 bg-[#0F1115] border border-[#334155] rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#94A3B8]">Suma de líneas</span>
+                  <span className="text-xs text-[#E2E8F0]">{formatCurrency(sumaLineas)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[#94A3B8]">Descuento global</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={descuentoGlobal}
+                      onChange={(e) => setDescuentoGlobal(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-24 bg-[#181B21] border border-[#334155] rounded px-2 py-0.5 text-xs text-[#E2E8F0] text-right focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6]"
+                    />
+                  </div>
+                  <span className="text-xs text-red-400">-{formatCurrency(descuentoGlobal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#94A3B8]">Subtotal</span>
+                  <span className="text-xs text-[#E2E8F0]">{formatCurrency(subtotalPedido)}</span>
+                </div>
+                {aplicaIgv && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-[#94A3B8]">IGV (18%)</span>
+                    <span className="text-xs text-[#E2E8F0]">{formatCurrency(igvMonto)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-1.5 border-t border-[#334155]">
+                  <span className="text-xs font-semibold text-[#E2E8F0]">Total del pedido</span>
+                  <span className="text-sm font-bold text-[#3B82F6]">{formatCurrency(totalFinal)}</span>
+                </div>
               </div>
             )}
           </div>

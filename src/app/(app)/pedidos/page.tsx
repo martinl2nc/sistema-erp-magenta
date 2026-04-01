@@ -37,10 +37,10 @@ export default function PedidosPage() {
     const search = searchTerm.trim().toLowerCase();
     if (search) {
       list = list.filter((p) => {
-        const cot = p.cotizaciones;
-        const cliente = cot?.clientes;
+        const cliente = p.clientes;
         const fields = [
-          String(cot?.numero_correlativo || ''),
+          String(p.numero_pedido || ''),
+          String(p.cotizaciones?.numero_correlativo || ''),
           cliente?.razon_social || '',
           cliente?.nombres_contacto || '',
           cliente?.apellidos_contacto || '',
@@ -65,7 +65,7 @@ export default function PedidosPage() {
   };
 
   const getClienteName = (p: Pedido) => {
-    const c = p.cotizaciones?.clientes;
+    const c = p.clientes;
     if (!c) return '—';
     if (c.razon_social?.trim()) return c.razon_social;
     return `${c.nombres_contacto || ''} ${c.apellidos_contacto || ''}`.trim() || '—';
@@ -141,7 +141,7 @@ export default function PedidosPage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-[#E2E8F0]">
-                      COT-{p.cotizaciones?.numero_correlativo}
+                      PED-{p.numero_pedido}
                     </span>
                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${ESTADO_STYLES[p.estado]}`}>
                       {ESTADO_LABELS[p.estado]}
@@ -150,7 +150,7 @@ export default function PedidosPage() {
                   <p className="text-sm text-[#E2E8F0]">{getClienteName(p)}</p>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-[#94A3B8]">{formatDate(p.fecha_creacion)}</span>
-                    <span className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(p.cotizaciones?.total_final ?? 0)}</span>
+                    <span className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(p.total_final ?? 0)}</span>
                   </div>
                   {p.nro_oc_cliente && (
                     <p className="text-xs text-[#94A3B8]">OC: {p.nro_oc_cliente}</p>
@@ -164,7 +164,7 @@ export default function PedidosPage() {
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="border-b border-[#334155] bg-[#0F1115]">
-                    <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[110px]">Cotización</th>
+                    <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[110px]">Pedido</th>
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase">Cliente</th>
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[90px]">OC Cliente</th>
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[120px]">Fecha</th>
@@ -180,13 +180,13 @@ export default function PedidosPage() {
                       className="hover:bg-[#334155]/20 transition-colors cursor-pointer"
                     >
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">
-                        COT-{p.cotizaciones?.numero_correlativo}
+                        PED-{p.numero_pedido}
                       </td>
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0]">{getClienteName(p)}</td>
                       <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{p.nro_oc_cliente || '—'}</td>
                       <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{formatDate(p.fecha_creacion)}</td>
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium text-right">
-                        {formatCurrency(p.cotizaciones?.total_final ?? 0)}
+                        {formatCurrency(p.total_final ?? 0)}
                       </td>
                       <td className="px-5 py-3.5">
                         <span className={`text-[10px] font-bold px-2 py-1 rounded-full inline-block w-fit ${ESTADO_STYLES[p.estado]}`}>

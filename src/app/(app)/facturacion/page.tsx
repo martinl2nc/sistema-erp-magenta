@@ -72,7 +72,7 @@ export default function FacturacionPage() {
     new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(d));
 
   const getClienteNamePedido = (p: Pedido) => {
-    const c = p.cotizaciones?.clientes;
+    const c = p.clientes;
     if (!c) return '—';
     return c.razon_social?.trim() || `${c.nombres_contacto} ${c.apellidos_contacto}`.trim() || '—';
   };
@@ -145,7 +145,7 @@ export default function FacturacionPage() {
                 {pendientes.map((p) => (
                   <div key={p.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-[#E2E8F0]">COT-{p.cotizaciones?.numero_correlativo}</span>
+                      <span className="text-sm font-semibold text-[#E2E8F0]">PED-{p.numero_pedido}</span>
                       <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${ESTADO_STYLES[p.estado]}`}>
                         {ESTADO_LABELS[p.estado]}
                       </span>
@@ -153,7 +153,7 @@ export default function FacturacionPage() {
                     <p className="text-sm text-[#E2E8F0]">{getClienteNamePedido(p)}</p>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-[#94A3B8]">{formatDate(p.fecha_creacion)}</span>
-                      <span className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(p.cotizaciones?.total_final ?? 0)}</span>
+                      <span className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(p.total_final ?? 0)}</span>
                     </div>
                     <button
                       onClick={() => setSelectedPedido(p)}
@@ -171,7 +171,7 @@ export default function FacturacionPage() {
                 <table className="w-full text-left border-collapse min-w-[900px]">
                   <thead>
                     <tr className="border-b border-[#334155] bg-[#0F1115]">
-                      <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[110px]">Cotización</th>
+                      <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[110px]">Pedido</th>
                       <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase">Cliente</th>
                       <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[90px]">OC</th>
                       <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[120px]">Fecha Pedido</th>
@@ -183,18 +183,18 @@ export default function FacturacionPage() {
                   <tbody className="divide-y divide-[#334155] bg-[#181B21]">
                     {pendientes.map((p) => (
                       <tr key={p.id} className="hover:bg-[#334155]/10 transition-colors">
-                        <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">COT-{p.cotizaciones?.numero_correlativo}</td>
+                        <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">PED-{p.numero_pedido}</td>
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0]">
                           <div>
                             <p>{getClienteNamePedido(p)}</p>
-                            {p.cotizaciones?.clientes?.numero_documento && (
-                              <p className="text-xs text-[#94A3B8]">{p.cotizaciones.clientes.tipo_documento?.toUpperCase()}: {p.cotizaciones.clientes.numero_documento}</p>
+                            {p.clientes?.numero_documento && (
+                              <p className="text-xs text-[#94A3B8]">{p.clientes.tipo_documento?.toUpperCase()}: {p.clientes.numero_documento}</p>
                             )}
                           </div>
                         </td>
                         <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{p.nro_oc_cliente || '—'}</td>
                         <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{formatDate(p.fecha_creacion)}</td>
-                        <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium text-right">{formatCurrency(p.cotizaciones?.total_final ?? 0)}</td>
+                        <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium text-right">{formatCurrency(p.total_final ?? 0)}</td>
                         <td className="px-5 py-3.5">
                           <span className={`text-[10px] font-bold px-2 py-1 rounded-full inline-block w-fit ${ESTADO_STYLES[p.estado]}`}>
                             {ESTADO_LABELS[p.estado]}

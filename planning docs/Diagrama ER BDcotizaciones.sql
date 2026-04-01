@@ -113,15 +113,21 @@ CREATE TABLE "cotizacion_envios" (
 
 CREATE TABLE "pedidos" (
   "id" uuid PRIMARY KEY,
-  "cotizacion_id" uuid UNIQUE NOT NULL,
+  "cotizacion_id" uuid UNIQUE,
   "cliente_id" uuid NOT NULL,
   "vendedor_id" uuid,
+  "numero_pedido" integer NOT NULL DEFAULT nextval('pedidos_numero_seq'),
   "nro_oc_cliente" varchar,
   "sustento_url" text NOT NULL,
   "sustento_nombre" varchar,
   "observaciones" text,
   "direccion_facturacion" text,
   "fecha_pedido" date,
+  "aplica_igv" boolean DEFAULT true,
+  "subtotal" numeric(10,2) DEFAULT 0,
+  "descuento_global_monto" numeric(10,2) DEFAULT 0,
+  "igv_monto" numeric(10,2) DEFAULT 0,
+  "total_final" numeric(10,2) DEFAULT 0,
   "estado" varchar DEFAULT 'pendiente_facturacion',
   "fecha_creacion" timestamp,
   "ultima_actualizacion" timestamp

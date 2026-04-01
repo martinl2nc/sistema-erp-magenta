@@ -107,7 +107,7 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
   };
 
   const getClienteName = (p: Pedido) => {
-    const c = p.cotizaciones?.clientes;
+    const c = p.clientes;
     if (!c) return '—';
     if (c.razon_social?.trim()) return c.razon_social;
     return `${c.nombres_contacto || ''} ${c.apellidos_contacto || ''}`.trim() || '—';
@@ -130,8 +130,13 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#334155]">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold tracking-tight text-[#E2E8F0]">
-              COT-{pedido.cotizaciones?.numero_correlativo}
+              PED-{pedido.numero_pedido}
             </h2>
+            {pedido.cotizaciones && (
+              <span className="text-xs text-[#94A3B8] bg-[#0F1115] px-2 py-0.5 rounded">
+                de COT-{pedido.cotizaciones.numero_correlativo}
+              </span>
+            )}
             <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${ESTADO_STYLES[pedido.estado]}`}>
               {ESTADO_LABELS[pedido.estado]}
             </span>
@@ -242,10 +247,26 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                     ))}
                   </tbody>
                   <tfoot>
+                    {pedido.descuento_global_monto > 0 && (
+                      <tr className="border-t border-[#334155] bg-[#181B21]">
+                        <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Descuento global</td>
+                        <td className="px-4 py-2 text-sm text-red-400 text-right">-{formatCurrency(pedido.descuento_global_monto)}</td>
+                      </tr>
+                    )}
+                    <tr className="border-t border-[#334155] bg-[#181B21]">
+                      <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Subtotal</td>
+                      <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(pedido.subtotal)}</td>
+                    </tr>
+                    {pedido.aplica_igv && (
+                      <tr className="bg-[#181B21]">
+                        <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">IGV (18%)</td>
+                        <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(pedido.igv_monto)}</td>
+                      </tr>
+                    )}
                     <tr className="border-t border-[#334155] bg-[#181B21]">
                       <td colSpan={3} className="px-4 py-3 text-xs font-medium text-[#94A3B8] text-right uppercase">Total</td>
                       <td className="px-4 py-3 text-sm font-semibold text-[#E2E8F0] text-right">
-                        {formatCurrency(pedido.cotizaciones?.total_final ?? 0)}
+                        {formatCurrency(pedido.total_final ?? 0)}
                       </td>
                     </tr>
                   </tfoot>
