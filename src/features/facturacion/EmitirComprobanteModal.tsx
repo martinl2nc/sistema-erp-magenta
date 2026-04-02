@@ -4,9 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import { pedidosService } from '@/services/pedidos.service';
 import { configuracionSeriesService } from '@/services/configuracionSeries.service';
-import { useEmitirComprobante } from '@/hooks/useFacturas';
+import { useEmitirComprobante, useEnviarASunat } from '@/hooks/useFacturas';
 import { useUnidadesMedida, useAfectacionesIgv, useTiposDocumento } from '@/hooks/useCatalogos';
-import { triggerFacturacionWebhook } from '@/services/webhook.service';
 import { numeroALetras } from '@/utils/numeroALetras';
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service';
 import type { ConfiguracionSerie } from '@/services/configuracionSeries.service';
@@ -59,6 +58,7 @@ function toLineaEditable(l: PedidoLinea, defaultAfectacion: string): LineaEditab
 
 export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Props) {
   const emitirComprobante = useEmitirComprobante();
+  const enviarASunatHook = useEnviarASunat();
 
   // ── Catálogos dinámicos desde BD ─────────────────────────────
   const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesMedida();
@@ -191,7 +191,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     try {
       const fechaHoy = new Date().toISOString().split('T')[0];
 
-      await emitirComprobante.mutateAsync({
+      const comprobanteId = await emitirComprobante.mutateAsync({
         pedido_id: pedido.id,
         tipo_doc_codigo: tipoDocCodigo,
         cliente_id: cliente.id,
@@ -214,12 +214,16 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
         direccion_facturacion: direccionFacturacion.trim() || undefined,
       });
 
-      // El webhook a n8n es no-fatal: el comprobante ya está creado en BD.
+      // Enviar a SUNAT via API Route interna (no-fatal: el comprobante ya está en BD)
       try {
-        await triggerFacturacionWebhook(pedido.id);
-        toast.success('Comprobante emitido y enviado a procesar');
+        const sunatResult = await enviarASunatHook.mutateAsync(comprobanteId);
+        if (sunatResult.success) {
+          toast.success(`Comprobante ${sunatResult.serie_numero} aceptado por SUNAT ✓`);
+        } else {
+          toast.warning(`Comprobante registrado pero SUNAT respondió: ${sunatResult.error || 'Error desconocido'}`);
+        }
       } catch {
-        toast.warning('Comprobante registrado. El envío automático a SUNAT falló — revisar configuración de n8n.');
+        toast.warning('Comprobante registrado. El envío a SUNAT falló — puede reintentar desde la bandeja.');
       }
 
       onClose();

@@ -68,7 +68,36 @@ export interface EmitirComprobantePayload {
   direccion_facturacion?: string;
 }
 
+export interface EnviarSunatResponse {
+  success: boolean;
+  serie_numero?: string;
+  enlace_pdf?: string | null;
+  enlace_xml?: string | null;
+  hash?: string;
+  sunatCode?: string;
+  sunatDescription?: string;
+  error?: string;
+  sunatResponse?: Record<string, unknown>;
+}
+
 export const facturasService = {
+  /**
+   * Envía un comprobante ya creado a SUNAT via el API route server-side.
+   * Esto descarga PDF/XML, actualiza Storage y cambia estados en BD.
+   */
+  async enviarASunat(comprobanteId: string): Promise<EnviarSunatResponse> {
+    const response = await fetch('/api/facturacion/emitir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comprobante_id: comprobanteId }),
+    });
+    const data: EnviarSunatResponse = await response.json();
+    if (!response.ok && !data.error) {
+      throw new Error(`Error del servidor: ${response.status}`);
+    }
+    return data;
+  },
+
   async getFacturas(): Promise<Comprobante[]> {
     const supabase = createClient();
     const { data, error } = await supabase

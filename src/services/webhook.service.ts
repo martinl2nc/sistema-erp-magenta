@@ -38,28 +38,6 @@ export const sendQuoteToWebhook = async (params: SendQuoteWebhookParams): Promis
  */
 export const isWebhookConfigured = (): boolean => !!WEBHOOK_URL;
 
-// ─── Facturación Webhook ─────────────────────────────────────
-
-const FACTURACION_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_FACTURACION_WEBHOOK_URL as string | undefined;
-
-/**
- * Triggers the n8n billing workflow for a given pedido.
- * If the webhook URL is not configured, logs a warning and resolves silently (dev mode).
- */
-export const triggerFacturacionWebhook = async (pedidoId: string): Promise<void> => {
-  if (!FACTURACION_WEBHOOK_URL) {
-    console.warn('[Facturación] NEXT_PUBLIC_N8N_FACTURACION_WEBHOOK_URL no configurada — omitiendo webhook.');
-    return;
-  }
-  const response = await fetch(FACTURACION_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pedido_id: pedidoId }),
-  });
-  if (!response.ok) {
-    throw new Error(`Webhook de facturación respondió con status ${response.status}`);
-  }
-};
 
 /**
  * Builds the webhook payload from quote context data.

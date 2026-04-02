@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { usePedidosList } from '@/hooks/usePedidos';
-import { useFacturasList } from '@/hooks/useFacturas';
+import { useFacturasList, useEnviarASunat } from '@/hooks/useFacturas';
 import { useTiposDocumento } from '@/hooks/useCatalogos';
 import { useAuth } from '@/context/AuthContext';
 import EmitirComprobanteModal from '@/features/facturacion/EmitirComprobanteModal';
@@ -33,7 +34,8 @@ const ESTADO_LABELS: Record<string, string> = {
 export default function FacturacionPage() {
   const { role } = useAuth();
   const { data: pedidos = [], isLoading: loadingPedidos } = usePedidosList();
-  const { data: comprobantes = [], isLoading: loadingComprobantes } = useFacturasList();
+  const { data: comprobantes = [], isLoading: loadingComprobantes, refetch: fetchComprobantes } = useFacturasList();
+  const { mutateAsync: enviarASunat } = useEnviarASunat();
   const { data: tiposDoc = [] } = useTiposDocumento();
 
   // Mapa dinámico: '01' → 'Factura', '03' → 'Boleta de Venta', etc.
@@ -253,7 +255,7 @@ export default function FacturacionPage() {
                       <span className="text-xs text-[#94A3B8]">{formatDate(f.fecha_emision)}</span>
                       <span className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(f.mto_imp_venta)}</span>
                     </div>
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex gap-2 pt-1 items-center">
                       {f.enlace_pdf && (
                         <a href={f.enlace_pdf} target="_blank" rel="noreferrer"
                           className="flex items-center gap-1 text-xs text-[#3B82F6] hover:text-blue-400">
@@ -267,6 +269,29 @@ export default function FacturacionPage() {
                           <iconify-icon icon="solar:file-download-linear" class="text-base"></iconify-icon>
                           XML
                         </a>
+                      )}
+                      {f.enlace_cdr && (
+                        <a href={f.enlace_cdr} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#E2E8F0]">
+                          <iconify-icon icon="solar:file-download-linear" class="text-base"></iconify-icon>
+                          CDR
+                        </a>
+                      )}
+                      {['aceptada_sunat', 'rechazada_sunat', 'emitida'].includes(f.estado_sunat) && (
+                        <button
+                          onClick={async () => {
+                            const res = await enviarASunat(f.id);
+                            if (res.success) {
+                              toast.success(`Comprobante ${f.serie_numero} procesado con éxito`);
+                            } else {
+                              toast.error(res.error || 'Error al procesar comprobante');
+                            }
+                          }}
+                          className="flex items-center justify-center p-1.5 rounded-lg bg-[#10B981]/10 text-[#10B981] hover:bg-[#10B981]/20 transition-colors"
+                          title="Reparar / Re-enviar"
+                        >
+                          <iconify-icon icon="solar:restart-linear" class="text-lg"></iconify-icon>
+                        </button>
                       )}
                       {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
                         <button onClick={() => setSelectedComprobante(f)}
@@ -322,6 +347,29 @@ export default function FacturacionPage() {
                                 title="Descargar XML">
                                 XML
                               </a>
+                            )}
+                            {f.enlace_cdr && (
+                              <a href={f.enlace_cdr} target="_blank" rel="noreferrer"
+                                className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors"
+                                title="Descargar CDR (SUNAT)">
+                                CDR
+                              </a>
+                            )}
+                            {['aceptada_sunat', 'rechazada_sunat', 'emitida'].includes(f.estado_sunat) && (
+                              <button
+                                onClick={async () => {
+                                  const res = await enviarASunat(f.id);
+                                  if (res.success) {
+                                    toast.success(`Comprobante ${f.serie_numero} procesado con éxito`);
+                                  } else {
+                                    toast.error(res.error || 'Error al procesar comprobante');
+                                  }
+                                }}
+                                className="flex items-center justify-center p-1.5 rounded-lg bg-[#10B981]/10 text-[#10B981] hover:bg-[#10B981]/20 transition-colors"
+                                title="Reparar / Re-enviar"
+                              >
+                                <iconify-icon icon="solar:restart-linear" class="text-sm"></iconify-icon>
+                              </button>
                             )}
                             {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
                               <button
