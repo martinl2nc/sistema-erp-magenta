@@ -7,6 +7,7 @@ import { useSellersList } from '@/hooks/useSellers';
 import type { Quote, QuoteStatus } from '@/services/quotes.service';
 import EmailHistoryModal from '@/features/quotes/EmailHistoryModal';
 import GenerarPedidoModal from '@/features/pedidos/GenerarPedidoModal';
+import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
 
 export default function QuotesList() {
   const router = useRouter();
@@ -64,22 +65,17 @@ export default function QuotesList() {
     });
   }, [quotes, searchTerm, selectedSeller, selectedStatus]);
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(amount || 0);
-
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return 'N/A';
-    return new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+    return formatDateUtil(date);
   };
 
   const getClientName = (cliente: Quote['clientes']) => {
     if (!cliente) return 'Desconocido';
-    if (cliente.razon_social?.trim()) return `${cliente.razon_social} (Doc: ${cliente.numero_documento || 'N/A'})`;
-    const fullName = `${cliente.nombres_contacto || ''} ${cliente.apellidos_contacto || ''}`.trim();
-    if (fullName) return `${fullName} (Doc: ${cliente.numero_documento || 'N/A'})`;
-    return 'Sin Nombre';
+    const displayName = getClientDisplayName(cliente);
+    return `${displayName} (Doc: ${cliente.numero_documento || 'N/A'})`;
   };
 
   const getSellerName = (vendedor: Quote['perfiles_usuario']) =>

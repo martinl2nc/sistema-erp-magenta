@@ -7,6 +7,7 @@ import { useTiposNotaCredito } from '@/hooks/useCatalogos';
 import { useQueryClient } from '@tanstack/react-query';
 import { pedidosKeys } from '@/hooks/usePedidos';
 import type { Comprobante } from '@/services/facturas.service';
+import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
 
 interface Props {
   isOpen: boolean;
@@ -33,12 +34,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
 
   if (!isOpen || !factura) return null;
 
-  const clienteName = factura.clientes?.razon_social?.trim()
-    || `${factura.clientes?.nombres_contacto || ''} ${factura.clientes?.apellidos_contacto || ''}`.trim()
-    || 'Cliente desconocido';
-
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
+  const clienteName = factura.clientes ? getClientDisplayName(factura.clientes) : 'Cliente desconocido';
 
   const handleClose = () => {
     setTipoNota(tiposNota[0]?.codigo ?? '');

@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { useAuth } from '@/context/AuthContext';
+import { formatCurrency } from '@/utils/formatters';
 
 const ESTADO_COLORS: Record<string, string> = {
   'Borrador':  '#94A3B8',
@@ -13,9 +14,6 @@ const ESTADO_COLORS: Record<string, string> = {
   'Enviada':   '#A855F7',
   'Cancelada': '#EF4444',
 };
-
-const formatCurrency = (value: number) =>
-  `S/ ${value.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-[#334155]/40 rounded-md ${className}`} />;

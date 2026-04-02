@@ -6,6 +6,7 @@ import { usePedidosList } from '@/hooks/usePedidos';
 import { useAuth } from '@/context/AuthContext';
 import type { Pedido, PedidoEstado } from '@/services/pedidos.service';
 import PedidoDetailDrawer from '@/features/pedidos/PedidoDetailDrawer';
+import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
 
 const ESTADO_LABELS: Record<PedidoEstado, string> = {
   pendiente_facturacion: 'Pendiente',
@@ -58,19 +59,15 @@ export default function PedidosPage() {
     return list;
   }, [allPedidos, role, user?.id, searchTerm, selectedEstado]);
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
-
   const formatDate = (d: string | null) => {
     if (!d) return '—';
-    return new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(d));
+    return formatDateUtil(new Date(d));
   };
 
   const getClienteName = (p: Pedido) => {
     const c = p.clientes;
     if (!c) return '—';
-    if (c.razon_social?.trim()) return c.razon_social;
-    return `${c.nombres_contacto || ''} ${c.apellidos_contacto || ''}`.trim() || '—';
+    return getClientDisplayName(c) || '—';
   };
 
   return (

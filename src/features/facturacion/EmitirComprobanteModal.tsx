@@ -9,6 +9,8 @@ import { useUnidadesMedida, useAfectacionesIgv, useTiposDocumento } from '@/hook
 import { numeroALetras } from '@/utils/numeroALetras';
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service';
 import type { ConfiguracionSerie } from '@/services/configuracionSeries.service';
+import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
+import { TAX_RATES } from '@/constants';
 
 // ─── Tipos ─────────────────────────────────────────────────────
 
@@ -37,9 +39,9 @@ const DEFAULT_AFECTACION_EXONERADA = '20';
 function calcularSunat(precioUnitario: number, cantidad: number, afectacionIgv: string) {
   const subtotal = parseFloat((cantidad * precioUnitario).toFixed(2));
   if (afectacionIgv === '10') {
-    const mto_valor_unitario = precioUnitario / 1.18;
+    const mto_valor_unitario = precioUnitario / (1 + TAX_RATES.IGV);
     const mto_base_igv = parseFloat((cantidad * mto_valor_unitario).toFixed(2));
-    const mto_igv = parseFloat((mto_base_igv * 0.18).toFixed(2));
+    const mto_igv = parseFloat((mto_base_igv * TAX_RATES.IGV).toFixed(2));
     return { subtotal, mto_valor_unitario, mto_base_igv, mto_igv };
   }
   return { subtotal, mto_valor_unitario: precioUnitario, mto_base_igv: 0, mto_igv: 0 };
@@ -78,11 +80,10 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
   const [isLoadingSustento, setIsLoadingSustento] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const cliente = pedido?.clientes;
-
   // Inicializar tipo y dirección según el cliente una vez que los catálogos están disponibles
   useEffect(() => {
-    if (!pedido || !cliente || tiposComprobante.length === 0) return;
+    if (!pedido || !pedido.clientes || tiposComprobante.length === 0) return;
+    const cliente = pedido.clientes;
     const preferido = cliente.comprobante_preferido?.toLowerCase();
     // Buscar el código SUNAT según preferencia del cliente
     const match = tiposComprobante.find((t) =>
@@ -90,7 +91,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     );
     setTipoDocCodigo(match?.codigo ?? tiposComprobante[0]?.codigo ?? '01');
     setDireccionFacturacion(cliente.direccion || '');
-  }, [pedido?.id, cliente, tiposComprobante.length]);
+  }, [pedido?.id, pedido?.clientes, tiposComprobante.length]);
 
   // Cargar líneas del pedido
   useEffect(() => {
@@ -134,13 +135,8 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
   if (!isOpen || !pedido) return null;
 
   const cot = pedido.cotizaciones;
-  const clienteName =
-    cliente?.razon_social?.trim() ||
-    `${cliente?.nombres_contacto || ''} ${cliente?.apellidos_contacto || ''}`.trim() ||
-    'Cliente desconocido';
-
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
+  const cliente = pedido?.clientes;
+  const clienteName = cliente ? getClientDisplayName(cliente) : 'Cliente desconocido';
 
   const proximo = serie ? serie.correlativo_actual + 1 : null;
   const previewSerie = serie && proximo

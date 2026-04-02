@@ -9,14 +9,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { quotesKeys } from '@/hooks/useQuotes';
 import { useProductsList } from '@/hooks/useProducts';
 import type { Quote } from '@/services/quotes.service';
-
-interface LineaLocal {
-  producto_id: string | null;
-  nombre_producto_historico: string;
-  cantidad: number;
-  precio_unitario: number;
-  fraccionable: boolean;
-}
+import type { LineaLocal } from '@/types/common.types';
+import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
+import { calculateFinancials } from '@/utils/calculations';
 
 interface Props {
   isOpen: boolean;
@@ -67,13 +62,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
   if (!isOpen || !quote) return null;
 
   const cliente = quote.clientes;
-  const clienteName =
-    cliente?.razon_social?.trim() ||
-    `${cliente?.nombres_contacto || ''} ${cliente?.apellidos_contacto || ''}`.trim() ||
-    'Cliente desconocido';
-
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
+  const clienteName = cliente ? getClientDisplayName(cliente) : 'Cliente desconocido';
 
   const handleFile = (f: File) => {
     const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -127,17 +116,15 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     setLineas(prev => prev.filter((_, i) => i !== index));
   };
 
-  const calcSubtotal = (l: LineaLocal) =>
-    parseFloat((l.cantidad * l.precio_unitario).toFixed(2));
-
-  const sumaLineas = lineas.reduce((sum, l) => sum + calcSubtotal(l), 0);
-  const baseParaIgv = Math.max(0, sumaLineas - descuentoGlobal);
-  const subtotalPedido = parseFloat(sumaLineas.toFixed(2));
   const aplicaIgv = quote?.aplica_igv ?? true;
-  const igvMonto = aplicaIgv
-    ? parseFloat((baseParaIgv * 0.18).toFixed(2))
-    : 0;
-  const totalFinal = parseFloat((baseParaIgv + igvMonto).toFixed(2));
+
+  // Cálculos financieros usando la utility centralizada
+  const { subtotal: subtotalPedido, baseImponible: baseParaIgv, igv: igvMonto, total: totalFinal } = 
+    calculateFinancials(lineas, descuentoGlobal, aplicaIgv);
+  
+  // Helper para calcular subtotal de una línea individual
+  const calcSubtotal = (l: LineaLocal) => l.cantidad * l.precio_unitario;
+  const sumaLineas = subtotalPedido; // Ya está calculado por calculateFinancials
 
   const handleSubmit = async () => {
     if (!direccionFacturacion.trim()) {

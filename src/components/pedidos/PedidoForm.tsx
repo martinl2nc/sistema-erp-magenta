@@ -14,14 +14,9 @@ import { useAuth } from '@/context/AuthContext';
 
 import ClientFormModal from '@/features/clients/ClientFormModal';
 import type { Client } from '@/services/clients.service';
-
-interface LineaLocal {
-  producto_id: string | null;
-  nombre_producto_historico: string;
-  cantidad: number;
-  precio_unitario: number;
-  fraccionable: boolean;
-}
+import type { LineaLocal } from '@/types/common.types';
+import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
+import { calculateFinancials } from '@/utils/calculations';
 
 export default function PedidoForm({ id }: { id?: string }) {
   const router = useRouter();
@@ -60,20 +55,13 @@ export default function PedidoForm({ id }: { id?: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Financial calculations
-  const calcSubtotal = (l: LineaLocal) => parseFloat((l.cantidad * l.precio_unitario).toFixed(2));
-  const sumaLineas = lineas.reduce((sum, l) => sum + calcSubtotal(l), 0);
-  const baseParaIgv = Math.max(0, sumaLineas - descuentoGlobal);
-  const subtotalPedido = parseFloat(sumaLineas.toFixed(2));
-  const igvMonto = aplicaIgv ? parseFloat((baseParaIgv * 0.18).toFixed(2)) : 0;
-  const totalFinal = parseFloat((baseParaIgv + igvMonto).toFixed(2));
+  // Financial calculations usando la utility centralizada
+  const { subtotal: subtotalPedido, baseImponible: baseParaIgv, igv: igvMonto, total: totalFinal } = 
+    calculateFinancials(lineas, descuentoGlobal, aplicaIgv);
 
-  const formatCurrency = (n: number) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
-
-  const getClientDisplayName = (c: Client) => {
-    if (c.razon_social?.trim()) return c.razon_social;
-    return `${c.nombres_contacto} ${c.apellidos_contacto}`.trim();
-  };
+  // Helper para calcular subtotal de una línea individual (reutiliza la lógica de calculations)
+  const calcSubtotal = (l: LineaLocal) => l.cantidad * l.precio_unitario;
+  const sumaLineas = subtotalPedido; // Ya está calculado por calculateFinancials
 
   const handleClientCreated = (newClient: Client) => {
     queryClient.invalidateQueries({ queryKey: clientsKeys.all() });

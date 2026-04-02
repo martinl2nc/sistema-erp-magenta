@@ -10,6 +10,7 @@ import EmitirComprobanteModal from '@/features/facturacion/EmitirComprobanteModa
 import NotaCreditoModal from '@/features/facturacion/NotaCreditoModal';
 import type { Pedido } from '@/services/pedidos.service';
 import type { Comprobante } from '@/services/facturas.service';
+import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
 
 type Tab = 'pendientes' | 'emitidas';
 
@@ -67,16 +68,12 @@ export default function FacturacionPage() {
     );
   }
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
-
-  const formatDate = (d: string) =>
-    new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(d));
+  const formatDate = (d: string) => formatDateUtil(new Date(d));
 
   const getClienteNamePedido = (p: Pedido) => {
     const c = p.clientes;
     if (!c) return '—';
-    return c.razon_social?.trim() || `${c.nombres_contacto} ${c.apellidos_contacto}`.trim() || '—';
+    return getClientDisplayName(c) || '—';
   };
 
   const getClienteNameComprobante = (f: Comprobante) => {
