@@ -207,4 +207,29 @@ export const pedidosService = {
       .eq('id', id);
     if (error) throw new Error(error.message);
   },
+
+  async updatePedidoCompleto(id: string, payload: CreatePedidoPayload, lineas: CreatePedidoLineaPayload[]): Promise<void> {
+    const supabase = createClient();
+    
+    // 1. Update cabecera
+    const { error: cabeceraError } = await supabase
+      .from('pedidos')
+      .update(payload)
+      .eq('id', id);
+    if (cabeceraError) throw cabeceraError;
+
+    // 2. Clear old lines
+    const { error: deleteError } = await supabase
+      .from('pedidos_lineas')
+      .delete()
+      .eq('pedido_id', id);
+    if (deleteError) throw deleteError;
+
+    // 3. Insert new lines
+    const lineasToInsert = lineas.map(l => ({ ...l, pedido_id: id }));
+    const { error: lineasError } = await supabase
+      .from('pedidos_lineas')
+      .insert(lineasToInsert);
+    if (lineasError) throw lineasError;
+  },
 };

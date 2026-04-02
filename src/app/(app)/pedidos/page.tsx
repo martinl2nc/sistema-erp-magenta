@@ -171,6 +171,20 @@ export default function PedidosPage() {
                   {p.nro_oc_cliente && (
                     <p className="text-xs text-[#94A3B8]">OC: {p.nro_oc_cliente}</p>
                   )}
+                  {p.estado === 'pendiente_facturacion' && (
+                    <div className="pt-2 mt-2 border-t border-[#334155] flex justify-end">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/pedidos/editar/${p.id}`);
+                        }}
+                        className="text-[#3B82F6] hover:bg-[#3B82F6]/10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-transparent hover:border-[#3B82F6]/20 flex items-center gap-1.5"
+                      >
+                        <iconify-icon icon="solar:pen-linear" class="text-sm"></iconify-icon>
+                        Editar
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -187,6 +201,7 @@ export default function PedidosPage() {
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[120px]">Fecha</th>
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[120px] text-right">Total</th>
                     <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[140px]">Estado</th>
+                    <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[80px] text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#334155] bg-[#181B21]">
@@ -212,6 +227,19 @@ export default function PedidosPage() {
                         <span className={`text-[10px] font-bold px-2 py-1 rounded-full inline-block w-fit ${ESTADO_STYLES[p.estado]}`}>
                           {ESTADO_LABELS[p.estado]}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        {p.estado === 'pendiente_facturacion' && (
+                          <div className="flex items-center justify-center">
+                            <button
+                              onClick={() => router.push(`/pedidos/editar/${p.id}`)}
+                              title="Editar pedido"
+                              className="text-[#94A3B8] hover:text-[#3B82F6] hover:bg-[#3B82F6]/10 p-1.5 rounded transition-colors"
+                            >
+                              <iconify-icon icon="solar:pen-linear" class="text-[1.2rem]"></iconify-icon>
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

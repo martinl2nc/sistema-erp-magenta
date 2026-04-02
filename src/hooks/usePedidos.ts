@@ -59,3 +59,28 @@ export function useUpdatePedidoBasic() {
     },
   });
 }
+
+export function usePedido(id?: string) {
+  return useQuery({
+    queryKey: pedidosKeys.detail(id!),
+    queryFn: async () => {
+      if (!id) return null;
+      const pedido = await pedidosService.getPedidoById(id);
+      const lineas = await pedidosService.getPedidoLineas(id);
+      return { ...pedido, lineas };
+    },
+    enabled: !!id,
+  });
+}
+
+export function useUpdatePedidoCompleto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload, lineas }: { id: string; payload: CreatePedidoPayload; lineas: any[] }) =>
+      pedidosService.updatePedidoCompleto(id, payload, lineas),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
+    },
+  });
+}

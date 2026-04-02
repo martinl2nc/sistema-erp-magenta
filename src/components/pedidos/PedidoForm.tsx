@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { pedidosService } from '@/services/pedidos.service';
-import { useCreatePedido } from '@/hooks/usePedidos';
+import { useCreatePedido, usePedido, useUpdatePedidoCompleto } from '@/hooks/usePedidos';
 import { useClientsList, useActiveClientsList, clientsKeys } from '@/hooks/useClients';
 import { useSellersList } from '@/hooks/useSellers';
 import { useProductsList } from '@/hooks/useProducts';
 import { useAuth } from '@/context/AuthContext';
-import { quotesKeys } from '@/hooks/useQuotes';
 
 import ClientFormModal from '@/features/clients/ClientFormModal';
 import type { Client } from '@/services/clients.service';
@@ -24,7 +23,7 @@ interface LineaLocal {
   fraccionable: boolean;
 }
 
-export default function PedidoForm() {
+export default function PedidoForm({ id }: { id?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const createPedido = useCreatePedido();
@@ -35,8 +34,12 @@ export default function PedidoForm() {
   const { data: sellers = [], isLoading: loadingSellers } = useSellersList();
   const { data: products = [], isLoading: loadingProducts } = useProductsList();
 
+  const isEditing = !!id;
+  const { data: existingPedido, isLoading: loadingPedido } = usePedido(id);
+  const updatePedido = useUpdatePedidoCompleto();
+
   const loadingClients = loadingActiveClients || loadingAllClients;
-  const loading = loadingClients || loadingSellers || loadingProducts;
+  const loading = loadingClients || loadingSellers || loadingProducts || loadingPedido;
 
   const selectableClients = activeClients;
   const isVendorLocked = role === 'vendedor';
@@ -77,6 +80,36 @@ export default function PedidoForm() {
     setClienteId(String(newClient.id));
     setDireccionFacturacion(newClient.direccion || '');
   };
+
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (initialized || loadingActiveClients || loadingSellers || loadingProducts || loadingPedido) return;
+
+    if (isEditing && existingPedido) {
+      setClienteId(existingPedido.cliente_id || '');
+      setVendedorId(existingPedido.vendedor_id || '');
+      setNroOc(existingPedido.nro_oc_cliente || '');
+      setDireccionFacturacion(existingPedido.direccion_facturacion || '');
+      setFechaPedido(existingPedido.fecha_pedido ? existingPedido.fecha_pedido.slice(0, 10) : '');
+      setObservaciones(existingPedido.observaciones || '');
+      setAplicaIgv(existingPedido.aplica_igv ?? true);
+      setDescuentoGlobal(existingPedido.descuento_global_monto || 0);
+
+      const loadedLines = existingPedido.lineas?.map((l: any) => ({
+        producto_id: l.producto_id,
+        nombre_producto_historico: l.nombre_producto_historico,
+        cantidad: l.cantidad,
+        precio_unitario: l.precio_unitario,
+        fraccionable: products.find(p => String(p.id) === String(l.producto_id))?.fraccionable || false,
+      })) || [];
+      if (loadedLines.length > 0) setLineas(loadedLines);
+      
+      setInitialized(true);
+    } else if (!isEditing) {
+      setInitialized(true);
+    }
+  }, [initialized, isEditing, existingPedido, loadingActiveClients, loadingSellers, loadingProducts, loadingPedido, products]);
 
   // Line item handlers
   const updateLineItem = <K extends keyof LineaLocal>(index: number, field: K, value: LineaLocal[K]) => {
@@ -135,7 +168,7 @@ export default function PedidoForm() {
   const handleSave = async () => {
     if (!clienteId) { toast.error('Debes seleccionar un cliente registrado'); return; }
     if (!direccionFacturacion.trim()) { toast.error('La dirección de facturación es obligatoria'); return; }
-    if (!file) { toast.error('El sustento de aprobación es obligatorio para crear un pedido directo'); return; }
+    if (!file && !isEditing) { toast.error('El sustento de aprobación es obligatorio para crear un pedido directo'); return; }
     if (lineas.length === 0) { toast.error('Debes añadir al menos un producto'); return; }
     if (lineas.some(l => !l.nombre_producto_historico.trim() || l.precio_unitario < 0 || l.cantidad <= 0)) {
       toast.error('Verifica que todos los productos tengan descripción y valores válidos');
@@ -144,15 +177,25 @@ export default function PedidoForm() {
 
     setIsSubmitting(true);
     try {
-      const { path, nombre } = await pedidosService.uploadSustento(file, null);
-      
-      const nuevoPedido = await createPedido.mutateAsync({
+      let pathToSave = '';
+      let nombreToSave = '';
+
+      if (file) {
+        const res = await pedidosService.uploadSustento(file, isEditing && existingPedido?.cotizacion_id ? String(existingPedido.cotizacion_id) : null);
+        pathToSave = res.path;
+        nombreToSave = res.nombre;
+      } else if (isEditing && existingPedido) {
+        pathToSave = existingPedido.sustento_url;
+        nombreToSave = existingPedido.sustento_nombre || '';
+      }
+
+      const payload = {
         cliente_id: clienteId,
         vendedor_id: vendedorId || null,
         nro_oc_cliente: nroOc.trim() || undefined,
         direccion_facturacion: direccionFacturacion.trim() || undefined,
-        sustento_url: path,
-        sustento_nombre: nombre,
+        sustento_url: pathToSave,
+        sustento_nombre: nombreToSave,
         observaciones: observaciones.trim() || undefined,
         fecha_pedido: fechaPedido || undefined,
         aplica_igv: aplicaIgv,
@@ -160,23 +203,30 @@ export default function PedidoForm() {
         descuento_global_monto: descuentoGlobal,
         igv_monto: igvMonto,
         total_final: totalFinal,
-      });
+      };
 
-      await pedidosService.createPedidoLineas(
-        lineas.map((l) => ({
-          pedido_id: nuevoPedido.id,
-          producto_id: l.producto_id,
-          nombre_producto_historico: l.nombre_producto_historico,
-          cantidad: l.cantidad,
-          precio_unitario: l.precio_unitario,
-          subtotal_linea: calcSubtotal(l),
-        }))
-      );
+      const lineasPayload = lineas.map((l) => ({
+        producto_id: l.producto_id,
+        nombre_producto_historico: l.nombre_producto_historico,
+        cantidad: l.cantidad,
+        precio_unitario: l.precio_unitario,
+        subtotal_linea: calcSubtotal(l),
+      }));
 
-      toast.success('Pedido creado correctamente');
+      if (isEditing && id) {
+        await updatePedido.mutateAsync({ id, payload: payload as any, lineas: lineasPayload });
+        toast.success('Pedido actualizado correctamente');
+      } else {
+        const nuevoPedido = await createPedido.mutateAsync(payload as any);
+        await pedidosService.createPedidoLineas(
+          lineasPayload.map(l => ({ ...l, pedido_id: nuevoPedido.id }))
+        );
+        toast.success('Pedido creado correctamente');
+      }
+
       router.push('/pedidos');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al generar el pedido');
+      toast.error(err instanceof Error ? err.message : 'Error al guardar el pedido');
     } finally {
       setIsSubmitting(false);
     }
@@ -388,7 +438,7 @@ export default function PedidoForm() {
         {/* Sustento Section */}
         <div className="bg-[#181B21] border border-[#334155] rounded-xl p-6 shadow-sm">
           <label className="block text-sm font-medium text-[#E2E8F0] mb-2">
-            Sustento de Aprobación <span className="text-red-400">*</span>
+            Sustento de Aprobación {!isEditing && <span className="text-red-400">*</span>}
             <span className="text-[#94A3B8] font-normal ml-1">(PDF, JPG o PNG — máx. 10 MB)</span>
           </label>
           <div
@@ -397,6 +447,8 @@ export default function PedidoForm() {
                 ? 'border-[#3B82F6] bg-[#3B82F6]/5'
                 : file
                 ? 'border-[#10B981] bg-[#10B981]/5'
+                : isEditing && existingPedido?.sustento_url
+                ? 'border-[#3B82F6]/50 bg-[#3B82F6]/5'
                 : 'border-[#334155] hover:border-[#3B82F6]/50 hover:bg-[#0F1115]'
             }`}
              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -422,8 +474,14 @@ export default function PedidoForm() {
                   onClick={(e) => { e.stopPropagation(); setFile(null); }}
                   className="px-3 py-1 text-xs font-medium text-[#EF4444] border border-[#EF4444]/30 rounded hover:bg-[#EF4444]/10 transition-colors"
                 >
-                  Quitar archivo
+                  Quitar archivo nuevo
                 </button>
+              </div>
+            ) : isEditing && existingPedido?.sustento_url ? (
+              <div className="flex flex-col items-center gap-2">
+                <iconify-icon icon="solar:document-text-linear" class="text-[#3B82F6] text-4xl"></iconify-icon>
+                <p className="text-sm font-medium text-[#3B82F6]">{existingPedido.sustento_nombre || 'Sustento existente cargado'}</p>
+                <p className="text-sm text-[#94A3B8]">Haz clic o arrastra para reemplazar este archivo</p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2">
