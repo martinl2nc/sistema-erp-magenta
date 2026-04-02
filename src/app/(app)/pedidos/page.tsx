@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { usePedidosList } from '@/hooks/usePedidos';
 import { useAuth } from '@/context/AuthContext';
 import type { Pedido, PedidoEstado } from '@/services/pedidos.service';
@@ -24,6 +25,7 @@ const ESTADO_STYLES: Record<PedidoEstado, string> = {
 
 export default function PedidosPage() {
   const { role, user } = useAuth();
+  const router = useRouter();
   const { data: allPedidos = [], isLoading, isError, error } = usePedidosList();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEstado, setSelectedEstado] = useState('');
@@ -75,6 +77,13 @@ export default function PedidosPage() {
     <div className="max-w-7xl w-full mx-auto flex flex-col md:h-full">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-[#E2E8F0]">Pedidos</h1>
+        <button
+          onClick={() => router.push('/pedidos/nuevo')}
+          className="bg-[#3B82F6] hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 focus:ring-offset-[#0F1115] flex items-center justify-center gap-2"
+        >
+          <iconify-icon icon="solar:add-circle-linear" class="text-lg"></iconify-icon>
+          Nuevo Pedido
+        </button>
       </div>
 
       {/* Filters */}

@@ -128,10 +128,11 @@ export const pedidosService = {
     return data;
   },
 
-  async uploadSustento(file: File, cotizacionId: string): Promise<{ path: string; nombre: string }> {
+  async uploadSustento(file: File, cotizacionId?: string | null): Promise<{ path: string; nombre: string }> {
     const supabase = createClient();
     const ext = file.name.split('.').pop() || 'pdf';
-    const path = `${cotizacionId}/${Date.now()}.${ext}`;
+    const folder = cotizacionId || 'directos';
+    const path = `${folder}/${Date.now()}.${ext}`;
     const { error } = await supabase.storage
       .from('sustentos_aprobacion')
       .upload(path, file);
