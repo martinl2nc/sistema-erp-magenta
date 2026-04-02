@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { pedidosService } from '@/services/pedidos.service';
 import { quotesService } from '@/services/quotes.service';
@@ -8,8 +8,9 @@ import { useCreatePedido } from '@/hooks/usePedidos';
 import { useQueryClient } from '@tanstack/react-query';
 import { quotesKeys } from '@/hooks/useQuotes';
 import { useProductsList } from '@/hooks/useProducts';
+import { useFileUpload } from '@/hooks/useFileUpload';
+import { usePedidoLineItems } from '@/hooks/usePedidoLineItems';
 import type { Quote } from '@/services/quotes.service';
-import type { LineaLocal } from '@/types/common.types';
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
 import { calculateFinancials } from '@/utils/calculations';
 
@@ -29,12 +30,32 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
   const [fechaPedido, setFechaPedido] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [descuentoGlobal, setDescuentoGlobal] = useState(0);
-  const [file, setFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const {
+    file,
+    isDragging,
+    fileInputRef,
+    handleFileChange,
+    handleDrop,
+    handleDragOver,
+    handleDragLeave,
+    clearFile,
+    openFileDialog,
+  } = useFileUpload();
+
+  const {
+    lineas,
+    setAllLines,
+    clearLines,
+    updateLineItem,
+    addLineItem,
+    removeLineItem,
+    getLineSubtotal,
+  } = usePedidoLineItems({
+    products,
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [lineas, setLineas] = useState<LineaLocal[]>([]);
   const [loadingLineas, setLoadingLineas] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Cargar líneas de la cotización cuando abre el modal
   useEffect(() => {
@@ -42,7 +63,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     setLoadingLineas(true);
     quotesService.getQuoteById(quote.id).then((fullQuote) => {
       const cotLineas = fullQuote.cotizaciones_lineas || [];
-      setLineas(
+      setAllLines(
         cotLineas.map((l) => ({
           producto_id: l.producto_id ?? null,
           nombre_producto_historico: l.nombre_producto_historico,
@@ -57,64 +78,12 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     }).catch(() => {
       toast.error('No se pudieron cargar las líneas de la cotización');
     }).finally(() => setLoadingLineas(false));
-  }, [isOpen, quote?.id]);
+  }, [isOpen, quote?.id, setAllLines]);
 
   if (!isOpen || !quote) return null;
 
   const cliente = quote.clientes;
   const clienteName = cliente ? getClientDisplayName(cliente) : 'Cliente desconocido';
-
-  const handleFile = (f: File) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-    if (!allowed.includes(f.type)) {
-      toast.error('Solo se permiten archivos PDF, JPG o PNG');
-      return;
-    }
-    if (f.size > 10 * 1024 * 1024) {
-      toast.error('El archivo no puede superar los 10 MB');
-      return;
-    }
-    setFile(f);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const f = e.dataTransfer.files[0];
-    if (f) handleFile(f);
-  };
-
-  const updateLineItem = <K extends keyof LineaLocal>(index: number, field: K, value: LineaLocal[K]) => {
-    setLineas(prev => prev.map((item, i) => {
-      if (i !== index) return item;
-      const updated = { ...item, [field]: value };
-      
-      // Auto-completar datos si selecciona un producto del catálogo
-      if (field === 'producto_id' && value) {
-        const p = products.find(prod => prod.id === value);
-        if (p) {
-          updated.nombre_producto_historico = p.nombre;
-          updated.precio_unitario = Number(p.precio_base) || 0;
-          updated.fraccionable = p.fraccionable || false;
-        }
-      }
-      return updated;
-    }));
-  };
-
-  const addLineItem = () => {
-    setLineas(prev => [...prev, {
-      producto_id: null,
-      nombre_producto_historico: '',
-      cantidad: 1,
-      precio_unitario: 0,
-      fraccionable: false
-    }]);
-  };
-
-  const removeLineItem = (index: number) => {
-    setLineas(prev => prev.filter((_, i) => i !== index));
-  };
 
   const aplicaIgv = quote?.aplica_igv ?? true;
 
@@ -123,7 +92,6 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     calculateFinancials(lineas, descuentoGlobal, aplicaIgv);
   
   // Helper para calcular subtotal de una línea individual
-  const calcSubtotal = (l: LineaLocal) => l.cantidad * l.precio_unitario;
   const sumaLineas = subtotalPedido; // Ya está calculado por calculateFinancials
 
   const handleSubmit = async () => {
@@ -161,13 +129,13 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
       });
 
       await pedidosService.createPedidoLineas(
-        lineas.map((l) => ({
+        lineas.map((l, index) => ({
           pedido_id: nuevoPedido.id,
           producto_id: l.producto_id,
           nombre_producto_historico: l.nombre_producto_historico,
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,
-          subtotal_linea: calcSubtotal(l),
+          subtotal_linea: getLineSubtotal(index),
         }))
       );
 
@@ -188,8 +156,8 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     setFechaPedido('');
     setObservaciones('');
     setDescuentoGlobal(0);
-    setFile(null);
-    setLineas([]);
+    clearFile();
+    clearLines();
     onClose();
   };
 
@@ -295,7 +263,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                     </div>
                     <div className="flex justify-end pt-1">
                       <span className="text-[10px] text-[#94A3B8] mr-1">Subtotal:</span>
-                      <span className="text-xs font-semibold text-[#E2E8F0]">{formatCurrency(calcSubtotal(l))}</span>
+                      <span className="text-xs font-semibold text-[#E2E8F0]">{formatCurrency(getLineSubtotal(idx))}</span>
                     </div>
                   </div>
                 ))}
@@ -335,7 +303,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                           <input type="number" min="0" step="0.01" value={l.precio_unitario} onChange={(e) => updateLineItem(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="w-[80px] bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] text-right focus:outline-none focus:border-[#3B82F6]" />
                         </td>
                         <td className="px-3 py-2.5 text-xs font-medium text-[#E2E8F0] text-right">
-                          {formatCurrency(calcSubtotal(l))}
+                          {formatCurrency(getLineSubtotal(idx))}
                         </td>
                         <td className="px-3 py-2.5 text-center">
                           <button onClick={() => removeLineItem(idx)} className="text-[#EF4444]/80 hover:text-[#EF4444] p-1 rounded hover:bg-[#EF4444]/10 transition-colors">
@@ -410,17 +378,17 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                   ? 'border-[#10B981] bg-[#10B981]/5'
                   : 'border-[#334155] hover:border-[#3B82F6]/50 hover:bg-[#0F1115]'
               }`}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={openFileDialog}
             >
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
                 className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                onChange={handleFileChange}
               />
               {file ? (
                 <div className="flex items-center justify-center gap-2">
@@ -430,7 +398,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                     <p className="text-xs text-[#94A3B8]">{(file.size / 1024).toFixed(0)} KB</p>
                   </div>
                   <button
-                    onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                    onClick={(e) => { e.stopPropagation(); clearFile(); }}
                     className="ml-auto p-1 text-[#94A3B8] hover:text-red-400 transition-colors"
                   >
                     <iconify-icon icon="solar:close-circle-linear" class="text-lg"></iconify-icon>
