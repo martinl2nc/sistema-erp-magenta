@@ -30,6 +30,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
   const { data: products = [] } = useProductsList();
 
   const [nroOc, setNroOc] = useState('');
+  const [direccionFacturacion, setDireccionFacturacion] = useState('');
   const [fechaPedido, setFechaPedido] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [descuentoGlobal, setDescuentoGlobal] = useState(0);
@@ -55,8 +56,9 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
           fraccionable: l.productos?.fraccionable ?? false,
         }))
       );
-      // Precargar descuento de la cotización
+      // Precargar descuento y dirección
       setDescuentoGlobal(fullQuote.descuento_global_monto ?? 0);
+      setDireccionFacturacion(fullQuote.clientes?.direccion || '');
     }).catch(() => {
       toast.error('No se pudieron cargar las líneas de la cotización');
     }).finally(() => setLoadingLineas(false));
@@ -129,14 +131,19 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
     parseFloat((l.cantidad * l.precio_unitario).toFixed(2));
 
   const sumaLineas = lineas.reduce((sum, l) => sum + calcSubtotal(l), 0);
-  const subtotalPedido = parseFloat((sumaLineas - descuentoGlobal).toFixed(2));
+  const baseParaIgv = Math.max(0, sumaLineas - descuentoGlobal);
+  const subtotalPedido = parseFloat(sumaLineas.toFixed(2));
   const aplicaIgv = quote?.aplica_igv ?? true;
   const igvMonto = aplicaIgv
-    ? parseFloat((subtotalPedido * 0.18 / 1.18).toFixed(2))
+    ? parseFloat((baseParaIgv * 0.18).toFixed(2))
     : 0;
-  const totalFinal = subtotalPedido;
+  const totalFinal = parseFloat((baseParaIgv + igvMonto).toFixed(2));
 
   const handleSubmit = async () => {
+    if (!direccionFacturacion.trim()) {
+      toast.error('La dirección de facturación es obligatoria');
+      return;
+    }
     if (!file) {
       toast.error('El sustento de aprobación es obligatorio');
       return;
@@ -153,6 +160,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
         cliente_id: quote.cliente_id,
         vendedor_id: quote.vendedor_id ?? null,
         nro_oc_cliente: nroOc.trim() || undefined,
+        direccion_facturacion: direccionFacturacion.trim() || undefined,
         sustento_url: path,
         sustento_nombre: nombre,
         observaciones: observaciones.trim() || undefined,
@@ -189,6 +197,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
 
   const handleClose = () => {
     setNroOc('');
+    setDireccionFacturacion('');
     setFechaPedido('');
     setObservaciones('');
     setDescuentoGlobal(0);
@@ -451,18 +460,32 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
             </div>
           </div>
 
-          {/* Nro OC */}
-          <div>
-            <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-              Nro. de OC del Cliente <span className="text-[#94A3B8] font-normal">(opcional)</span>
-            </label>
-            <input
-              type="text"
-              value={nroOc}
-              onChange={(e) => setNroOc(e.target.value)}
-              placeholder="Ej: OC-45091"
-              className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
-            />
+          {/* Nro OC y Dirección en grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                Nro. de OC del Cliente <span className="text-[#94A3B8] font-normal">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={nroOc}
+                onChange={(e) => setNroOc(e.target.value)}
+                placeholder="Ej: OC-45091"
+                className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                Dirección de Facturación <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={direccionFacturacion}
+                onChange={(e) => setDireccionFacturacion(e.target.value)}
+                placeholder="Ingrese dirección"
+                className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
+              />
+            </div>
           </div>
 
           {/* Fecha pedido + observaciones en grid */}

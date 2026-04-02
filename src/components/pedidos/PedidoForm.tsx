@@ -44,6 +44,7 @@ export default function PedidoForm() {
   const [clienteId, setClienteId] = useState('');
   const [vendedorId, setVendedorId] = useState(isVendorLocked && user ? user.id : '');
   const [nroOc, setNroOc] = useState('');
+  const [direccionFacturacion, setDireccionFacturacion] = useState('');
   const [fechaPedido, setFechaPedido] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [aplicaIgv, setAplicaIgv] = useState(true);
@@ -59,9 +60,10 @@ export default function PedidoForm() {
   // Financial calculations
   const calcSubtotal = (l: LineaLocal) => parseFloat((l.cantidad * l.precio_unitario).toFixed(2));
   const sumaLineas = lineas.reduce((sum, l) => sum + calcSubtotal(l), 0);
-  const subtotalPedido = parseFloat((sumaLineas - descuentoGlobal).toFixed(2));
-  const igvMonto = aplicaIgv ? parseFloat((subtotalPedido * 0.18 / 1.18).toFixed(2)) : 0;
-  const totalFinal = subtotalPedido;
+  const baseParaIgv = Math.max(0, sumaLineas - descuentoGlobal);
+  const subtotalPedido = parseFloat(sumaLineas.toFixed(2));
+  const igvMonto = aplicaIgv ? parseFloat((baseParaIgv * 0.18).toFixed(2)) : 0;
+  const totalFinal = parseFloat((baseParaIgv + igvMonto).toFixed(2));
 
   const formatCurrency = (n: number) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n);
 
@@ -73,6 +75,7 @@ export default function PedidoForm() {
   const handleClientCreated = (newClient: Client) => {
     queryClient.invalidateQueries({ queryKey: clientsKeys.all() });
     setClienteId(String(newClient.id));
+    setDireccionFacturacion(newClient.direccion || '');
   };
 
   // Line item handlers
@@ -131,6 +134,7 @@ export default function PedidoForm() {
   // Submit
   const handleSave = async () => {
     if (!clienteId) { toast.error('Debes seleccionar un cliente registrado'); return; }
+    if (!direccionFacturacion.trim()) { toast.error('La dirección de facturación es obligatoria'); return; }
     if (!file) { toast.error('El sustento de aprobación es obligatorio para crear un pedido directo'); return; }
     if (lineas.length === 0) { toast.error('Debes añadir al menos un producto'); return; }
     if (lineas.some(l => !l.nombre_producto_historico.trim() || l.precio_unitario < 0 || l.cantidad <= 0)) {
@@ -146,6 +150,7 @@ export default function PedidoForm() {
         cliente_id: clienteId,
         vendedor_id: vendedorId || null,
         nro_oc_cliente: nroOc.trim() || undefined,
+        direccion_facturacion: direccionFacturacion.trim() || undefined,
         sustento_url: path,
         sustento_nombre: nombre,
         observaciones: observaciones.trim() || undefined,
@@ -219,7 +224,12 @@ export default function PedidoForm() {
                     Nuevo
                   </button>
                 </div>
-                <select className="w-full bg-[#0F1115] border border-[#334155] rounded-lg text-sm text-[#E2E8F0] px-3 py-2.5 focus:outline-none focus:border-[#3B82F6]" value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
+                <select className="w-full bg-[#0F1115] border border-[#334155] rounded-lg text-sm text-[#E2E8F0] px-3 py-2.5 focus:outline-none focus:border-[#3B82F6]" value={clienteId} onChange={(e) => {
+                  setClienteId(e.target.value);
+                  const selectedClient = selectableClients.find(c => String(c.id) === e.target.value);
+                  if (selectedClient) setDireccionFacturacion(selectedClient.direccion || '');
+                  else setDireccionFacturacion('');
+                }}>
                   <option value="">Seleccionar Cliente...</option>
                   {selectableClients.map(c => <option key={c.id} value={c.id}>{getClientDisplayName(c)}</option>)}
                 </select>
@@ -268,6 +278,10 @@ export default function PedidoForm() {
                   <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Fecha Pedido <span className="font-normal">(opcional)</span></label>
                   <input type="date" value={fechaPedido} onChange={(e) => setFechaPedido(e.target.value)} className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] focus:outline-none focus:border-[#3B82F6]" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Dirección de Facturación <span className="text-red-400">*</span></label>
+                <input type="text" value={direccionFacturacion} onChange={(e) => setDireccionFacturacion(e.target.value)} placeholder="Dirección predeterminada del cliente..." className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] focus:outline-none focus:border-[#3B82F6]" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Observaciones</label>

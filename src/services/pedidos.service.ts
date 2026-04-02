@@ -81,6 +81,7 @@ export interface CreatePedidoPayload {
   sustento_nombre?: string;
   observaciones?: string;
   fecha_pedido?: string;
+  direccion_facturacion?: string;
   // Financial fields
   aplica_igv: boolean;
   subtotal: number;
