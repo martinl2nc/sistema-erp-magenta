@@ -36,6 +36,12 @@ export interface ApisPeruInvoicePayload {
   valorVenta: number;
   subTotal: number;
   mtoImpVenta: number;
+  descuentos?: {
+    codTipo: string;
+    factor: number;
+    monto: number;
+    base: number;
+  }[];
 }
 
 export interface ApisPeruDetail {
@@ -94,6 +100,8 @@ export interface ComprobanteData {
   subtotal: number;
   mto_imp_venta: number;
   leyendas: { code: string; value: string }[] | null;
+  descuento_global_monto?: number;
+  descuento_global_codigo?: string;
 }
 
 export interface ComprobanteDetalle {
@@ -204,14 +212,22 @@ export function buildInvoicePayload(
       mtoPrecioUnitario: d.mto_precio_unitario,
     })),
     legends: legends,
-    mtoOperGravadas: comprobante.mto_oper_gravadas,
-    mtoOperExoneradas: comprobante.mto_oper_exoneradas,
-    mtoOperInafectas: comprobante.mto_oper_inafectas,
-    mtoIGV: comprobante.mto_igv,
-    totalImpuestos: comprobante.total_impuestos,
-    valorVenta: comprobante.valor_venta,
-    subTotal: comprobante.subtotal,
-    mtoImpVenta: comprobante.mto_imp_venta,
+    mtoOperGravadas: Number(comprobante.mto_oper_gravadas.toFixed(2)),
+    mtoOperExoneradas: Number(comprobante.mto_oper_exoneradas.toFixed(2)),
+    mtoOperInafectas: Number(comprobante.mto_oper_inafectas.toFixed(2)),
+    mtoIGV: Number(comprobante.mto_igv.toFixed(2)),
+    totalImpuestos: Number(comprobante.total_impuestos.toFixed(2)),
+    valorVenta: Number(comprobante.valor_venta.toFixed(2)),
+    subTotal: Number(comprobante.subtotal.toFixed(2)),
+    mtoImpVenta: Number(comprobante.mto_imp_venta.toFixed(2)),
+    descuentos: (comprobante.descuento_global_monto && comprobante.descuento_global_monto > 0) 
+      ? [{
+          codTipo: comprobante.descuento_global_codigo || '00',
+          factor: Number((comprobante.descuento_global_monto / comprobante.subtotal).toFixed(5)),
+          monto: Number(comprobante.descuento_global_monto.toFixed(2)),
+          base: Number(comprobante.subtotal.toFixed(2)),
+        }]
+      : undefined,
   } as ApisPeruInvoicePayload;
 }
 

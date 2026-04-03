@@ -66,6 +66,8 @@ export interface EmitirComprobantePayload {
     afectacion_igv: string;
   }[];
   direccion_facturacion?: string;
+  descuento_global_monto?: number;
+  descuento_global_codigo?: string;
 }
 
 export interface EnviarSunatResponse {
@@ -125,6 +127,7 @@ export const facturasService = {
 
   async emitirComprobante(payload: EmitirComprobantePayload): Promise<string> {
     const supabase = createClient();
+
     const { data, error } = await supabase.rpc('emitir_comprobante', {
       p_pedido_id:             payload.pedido_id,
       p_tipo_doc_codigo:       payload.tipo_doc_codigo,
@@ -135,6 +138,8 @@ export const facturasService = {
       p_total:                 payload.total,
       p_lineas:                payload.lineas,
       p_direccion_facturacion: payload.direccion_facturacion ?? null,
+      p_descuento_global_monto:  payload.descuento_global_monto ?? 0,
+      p_descuento_global_codigo: payload.descuento_global_codigo ?? null,
     });
     if (error) throw error;
     return data as string; // returns comprobante_id (UUID)

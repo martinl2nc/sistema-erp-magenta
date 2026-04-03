@@ -26,6 +26,13 @@ export interface CatTipoNotaCredito {
   activo: boolean;
 }
 
+export interface CatCargoDescuento {
+  codigo: string;
+  descripcion: string;
+  tipo: 'cargo' | 'descuento';
+  active: boolean;
+}
+
 // ─── Service ─────────────────────────────────────────────────
 
 export const catalogosService = {
@@ -66,6 +73,17 @@ export const catalogosService = {
       .from('cat_tipo_nota_credito')
       .select('codigo, descripcion, activo')
       .eq('activo', true)
+      .order('codigo');
+    if (error) throw error;
+    return data || [];
+  },
+
+  async getCargosDescuentos(): Promise<CatCargoDescuento[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('cat_cargos_descuentos')
+      .select('codigo, descripcion, tipo, active')
+      .eq('active', true)
       .order('codigo');
     if (error) throw error;
     return data || [];

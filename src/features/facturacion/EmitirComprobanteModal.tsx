@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { pedidosService } from '@/services/pedidos.service';
 import { configuracionSeriesService } from '@/services/configuracionSeries.service';
 import { useEmitirComprobante, useEnviarASunat } from '@/hooks/useFacturas';
-import { useUnidadesMedida, useAfectacionesIgv, useTiposDocumento } from '@/hooks/useCatalogos';
+import { useUnidadesMedida, useAfectacionesIgv, useTiposDocumento, useCargosDescuentos } from '@/hooks/useCatalogos';
 import { numeroALetras } from '@/utils/numeroALetras';
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service';
 import type { ConfiguracionSerie } from '@/services/configuracionSeries.service';
@@ -37,14 +37,18 @@ const DEFAULT_AFECTACION_GRAVADA = '10';
 const DEFAULT_AFECTACION_EXONERADA = '20';
 
 function calcularSunat(precioUnitario: number, cantidad: number, afectacionIgv: string) {
-  const subtotal = parseFloat((cantidad * precioUnitario).toFixed(2));
+  // Como el precio ingresado en pedidos es BASE (sin IGV):
+  const mto_valor_unitario = precioUnitario;
+  const mto_base_igv = parseFloat((cantidad * mto_valor_unitario).toFixed(2));
+
   if (afectacionIgv === '10') {
-    const mto_valor_unitario = precioUnitario / (1 + TAX_RATES.IGV);
-    const mto_base_igv = parseFloat((cantidad * mto_valor_unitario).toFixed(2));
     const mto_igv = parseFloat((mto_base_igv * TAX_RATES.IGV).toFixed(2));
+    const subtotal = parseFloat((mto_base_igv + mto_igv).toFixed(2));
     return { subtotal, mto_valor_unitario, mto_base_igv, mto_igv };
   }
-  return { subtotal, mto_valor_unitario: precioUnitario, mto_base_igv: 0, mto_igv: 0 };
+
+  // Para exonerado/inafecto el subtotal es igual a la base
+  return { subtotal: mto_base_igv, mto_valor_unitario, mto_base_igv: mto_base_igv, mto_igv: 0 };
 }
 
 function toLineaEditable(l: PedidoLinea, defaultAfectacion: string): LineaEditable {
@@ -66,10 +70,12 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
   const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesMedida();
   const { data: afectaciones = [], isLoading: loadingAfectaciones } = useAfectacionesIgv();
   const { data: tiposDoc = [], isLoading: loadingTiposDoc } = useTiposDocumento();
+  const { data: cargosDescuentos = [], isLoading: loadingCatalog53 } = useCargosDescuentos();
 
   // Solo comprobantes activos (01=Factura, 03=Boleta)
   const tiposComprobante = tiposDoc.filter((t) => t.categoria === 'comprobante');
-  const loadingCatalogos = loadingUnidades || loadingAfectaciones || loadingTiposDoc;
+  const descuentosSunat = cargosDescuentos.filter((c) => c.tipo === 'descuento');
+  const loadingCatalogos = loadingUnidades || loadingAfectaciones || loadingTiposDoc || loadingCatalog53;
 
   const [tipoDocCodigo, setTipoDocCodigo] = useState('01'); // default Factura
   const [direccionFacturacion, setDireccionFacturacion]= useState('');
@@ -79,6 +85,10 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
   const [loadingSerie, setLoadingSerie] = useState(false);
   const [isLoadingSustento, setIsLoadingSustento] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Descuento global
+  const [descuentoMonto, setDescuentoMonto] = useState(0);
+  const [descuentoCodigo, setDescuentoCodigo] = useState('00'); // Otros descuentos
 
   // Inicializar tipo y dirección según el cliente una vez que los catálogos están disponibles
   useEffect(() => {
@@ -105,6 +115,13 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     }).finally(() => setLoadingLineas(false));
   }, [isOpen, pedido?.id]);
 
+  // Inicializar descuento desde el pedido
+  useEffect(() => {
+    if (pedido) {
+      setDescuentoMonto(pedido.descuento_global_monto || 0);
+    }
+  }, [pedido?.id]);
+
   // Cargar serie activa cuando cambia tipo de documento
   useEffect(() => {
     if (!isOpen || !tipoDocCodigo) return;
@@ -126,11 +143,19 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
         baseExonerada += l.subtotal;
       }
     }
-    const subtotal = parseFloat((baseGravada + baseExonerada).toFixed(2));
-    const igv = parseFloat(totalIgv.toFixed(2));
-    const total = parseFloat((subtotal + igv).toFixed(2));
-    return { subtotal, igv, total };
-  }, [lineas]);
+    const baseSumaItems = parseFloat((baseGravada + baseExonerada).toFixed(2));
+    const mtoOperGravadas = parseFloat((baseSumaItems - descuentoMonto).toFixed(2));
+    const mtoIgv = parseFloat((mtoOperGravadas * 0.18).toFixed(2));
+    const total = parseFloat((mtoOperGravadas + mtoIgv).toFixed(2));
+
+    return { 
+      subtotal: baseSumaItems, // Base suma de items
+      mtoOperGravadas,        // Nueva base imponible
+      igv: mtoIgv,            // Nuevo IGV
+      total,                  // Total final
+      descuentoMonto 
+    };
+  }, [lineas, descuentoMonto]);
 
   if (!isOpen || !pedido) return null;
 
@@ -208,6 +233,8 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
           afectacion_igv: l.afectacion_igv,
         })),
         direccion_facturacion: direccionFacturacion.trim() || undefined,
+        descuento_global_monto: totales.descuentoMonto,
+        descuento_global_codigo: descuentoCodigo,
       });
 
       // Enviar a SUNAT via API Route interna (no-fatal: el comprobante ya está en BD)
@@ -400,7 +427,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
                     <tr>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Producto</th>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-16 text-center">Cant.</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-28 text-right">P. Unit (c/IGV)</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-28 text-right">P. Unit (Base)</th>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-32">Unidad</th>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-36">Afect. IGV</th>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-24 text-right">IGV</th>
@@ -457,19 +484,50 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
             )}
           </div>
 
+          {/* Descuento Global Selector */}
+          {lineas.length > 0 && pedido.descuento_global_monto > 0 && (
+            <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-blue-400">Tipo de Descuento (SUNAT Cat. 53)</label>
+                <span className="text-xs font-semibold text-[#E2E8F0]">{formatCurrency(descuentoMonto)}</span>
+              </div>
+              <select
+                value={descuentoCodigo}
+                onChange={(e) => setDescuentoCodigo(e.target.value)}
+                className="w-full bg-[#0F1115] border border-blue-500/30 rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+              >
+                {descuentosSunat.map((d) => (
+                  <option key={d.codigo} value={d.codigo}>
+                    {d.codigo} – {d.descripcion}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Totales + leyenda */}
           {lineas.length > 0 && (
             <div className="p-3 bg-[#0F1115] border border-[#334155] rounded-lg space-y-2">
               <div className="flex justify-between text-xs">
-                <span className="text-[#94A3B8]">Base imponible</span>
+                <span className="text-[#94A3B8]">Suma de Ítems</span>
                 <span className="text-[#E2E8F0]">{formatCurrency(totales.subtotal)}</span>
               </div>
+              {totales.descuentoMonto > 0 && (
+                <div className="flex justify-between text-xs text-red-400">
+                  <span>Descuento Aplicado</span>
+                  <span>- {formatCurrency(totales.descuentoMonto)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs font-medium pt-1 border-t border-[#334155]/50">
+                <span className="text-[#94A3B8]">Subtotal (Base Imponible)</span>
+                <span className="text-[#E2E8F0]">{formatCurrency(totales.mtoOperGravadas)}</span>
+              </div>
               <div className="flex justify-between text-xs">
-                <span className="text-[#94A3B8]">IGV (18%)</span>
+                <span className="text-[#94A3B8]">Nuevo IGV (18%)</span>
                 <span className="text-[#E2E8F0]">{formatCurrency(totales.igv)}</span>
               </div>
               <div className="flex justify-between text-sm font-semibold border-t border-[#334155] pt-2">
-                <span className="text-[#E2E8F0]">Total</span>
+                <span className="text-[#E2E8F0]">Total Final</span>
                 <span className="text-[#10B981]">{formatCurrency(totales.total)}</span>
               </div>
               <p className="text-[10px] text-[#94A3B8] pt-1 italic">

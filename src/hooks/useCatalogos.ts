@@ -16,6 +16,7 @@ export const catalogosKeys = {
   afectaciones: () => [...catalogosKeys.all, 'afectacion_igv'] as const,
   tiposDocumento: () => [...catalogosKeys.all, 'tipo_documento'] as const,
   tiposNotaCredito: () => [...catalogosKeys.all, 'tipo_nota_credito'] as const,
+  cargosDescuentos: () => [...catalogosKeys.all, 'cargos_descuentos'] as const,
 };
 
 export function useUnidadesMedida() {
@@ -46,6 +47,14 @@ export function useTiposNotaCredito() {
   return useQuery({
     queryKey: catalogosKeys.tiposNotaCredito(),
     queryFn: catalogosService.getTiposNotaCredito,
+    ...CATALOG_OPTIONS,
+  });
+}
+
+export function useCargosDescuentos() {
+  return useQuery({
+    queryKey: catalogosKeys.cargosDescuentos(),
+    queryFn: catalogosService.getCargosDescuentos,
     ...CATALOG_OPTIONS,
   });
 }
