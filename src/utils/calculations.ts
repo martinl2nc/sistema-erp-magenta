@@ -95,25 +95,24 @@ export const calculateFinancials = (
   descuentoGlobal: number,
   aplicaIgv: boolean
 ): FinancialCalculation => {
-  // 1. Calcular subtotal de todas las líneas
+  // 1. Calcular subtotal de todas las líneas (Base Imponible)
   const subtotal = calculateLinesTotal(lineas);
   
-  // 2. Aplicar descuento global y calcular base imponible
-  // Asegurar que no sea negativo
-  const baseImponible = Math.max(0, subtotal - descuentoGlobal);
-  
-  // 3. Calcular IGV si aplica (18% de la base imponible)
+  // 2. Calcular IGV (18% sobre la base imponible completa)
   const igv = aplicaIgv 
-    ? roundToDecimal(baseImponible * TAX_RATES.IGV) 
+    ? roundToDecimal(subtotal * TAX_RATES.IGV) 
     : 0;
   
-  // 4. Calcular total final
-  const total = roundToDecimal(baseImponible + igv);
+  // 3. Calcular total provisional (Base + IGV)
+  const totalProvisional = subtotal + igv;
+  
+  // 4. Aplicar descuento global sobre el total con IGV
+  const total = roundToDecimal(Math.max(0, totalProvisional - descuentoGlobal));
 
   return {
     subtotal: roundToDecimal(subtotal),
     descuento: descuentoGlobal,
-    baseImponible: roundToDecimal(baseImponible),
+    baseImponible: roundToDecimal(subtotal), // La base imponible es el subtotal antes de impuestos
     igv,
     total,
   };

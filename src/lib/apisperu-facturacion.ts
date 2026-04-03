@@ -36,10 +36,15 @@ export interface ApisPeruInvoicePayload {
   valorVenta: number;
   subTotal: number;
   mtoImpVenta: number;
+  mtoDescuentoGlobal?: number;
+  totalDescuentos?: number;
+  sumDsctoGlobal?: number;
+  sumOtrosDescuentos?: number;
   descuentos?: {
     codTipo: string;
     factor: number;
     monto: number;
+    montoBase: number;
     base: number;
   }[];
 }
@@ -197,37 +202,95 @@ export function buildInvoicePayload(
         ubigueo: '150101', // Lima default — puede ajustarse en empresa_configuracion
       },
     },
-    details: detalles.map((d) => ({
-      codProducto: d.cod_producto || '-',
-      unidad: d.unidad_codigo || 'NIU',
-      descripcion: d.descripcion,
-      cantidad: d.cantidad,
-      mtoValorUnitario: d.mto_valor_unitario,
-      mtoValorVenta: d.mto_base_igv, // SUNAT espera LineExtensionAmount == Base IGV (sin IGV)
-      mtoBaseIgv: d.mto_base_igv,
-      porcentajeIgv: Number(d.porcentaje_igv ?? 18),
-      igv: d.igv,
-      tipAfeIgv: d.tip_afe_igv_codigo ? String(d.tip_afe_igv_codigo) : '10',
-      totalImpuestos: d.total_impuestos,
-      mtoPrecioUnitario: d.mto_precio_unitario,
-    })),
-    legends: legends,
-    mtoOperGravadas: Number(comprobante.mto_oper_gravadas.toFixed(2)),
-    mtoOperExoneradas: Number(comprobante.mto_oper_exoneradas.toFixed(2)),
-    mtoOperInafectas: Number(comprobante.mto_oper_inafectas.toFixed(2)),
-    mtoIGV: Number(comprobante.mto_igv.toFixed(2)),
-    totalImpuestos: Number(comprobante.total_impuestos.toFixed(2)),
-    valorVenta: Number(comprobante.valor_venta.toFixed(2)),
-    subTotal: Number(comprobante.subtotal.toFixed(2)),
-    mtoImpVenta: Number(comprobante.mto_imp_venta.toFixed(2)),
-    descuentos: (comprobante.descuento_global_monto && comprobante.descuento_global_monto > 0) 
-      ? [{
-          codTipo: comprobante.descuento_global_codigo || '00',
-          factor: Number((comprobante.descuento_global_monto / comprobante.subtotal).toFixed(5)),
-          monto: Number(comprobante.descuento_global_monto.toFixed(2)),
-          base: Number(comprobante.subtotal.toFixed(2)),
-        }]
-      : undefined,
+    // ─── RECALCULACIÓN DEFENSIVA PARA EVITAR ERROR SUNAT 3277 ─────
+    // Sumamos los totales directamente desde el detalle para garantizar consistencia.
+    ...(() => {
+      let mtoOperGravadas = 0;
+      let mtoOperExoneradas = 0;
+      let mtoOperInafectas = 0;
+      let mtoIGV = 0;
+      let totalImpuestos = 0;
+      let valorVentaTotal = 0;
+
+      const items = detalles.map((d) => {
+        const itemIgv = Number(d.igv.toFixed(2));
+        const itemBase = Number(d.mto_base_igv.toFixed(2));
+        const itemTotalImpuestos = Number(d.total_impuestos.toFixed(2));
+
+        // Acumular según afectación (Catálogo 07)
+        const tipAfe = d.tip_afe_igv_codigo ? String(d.tip_afe_igv_codigo) : '10';
+        if (tipAfe === '10' || tipAfe === '11' || tipAfe === '12' || tipAfe === '17') {
+          mtoOperGravadas = Number((mtoOperGravadas + itemBase).toFixed(2));
+        } else if (tipAfe === '20' || tipAfe === '21') {
+          mtoOperExoneradas = Number((mtoOperExoneradas + itemBase).toFixed(2));
+        } else {
+          mtoOperInafectas = Number((mtoOperInafectas + itemBase).toFixed(2));
+        }
+
+        mtoIGV = Number((mtoIGV + itemIgv).toFixed(2));
+        totalImpuestos = Number((totalImpuestos + itemTotalImpuestos).toFixed(2));
+        valorVentaTotal = Number((valorVentaTotal + itemBase).toFixed(2)); // SUNAT: LineExtensionAmount sum
+
+        const porcentajeIgv = Number(d.porcentaje_igv ?? 18);
+        const factorImpuesto = (porcentajeIgv / 100) + 1;
+
+        return {
+          codProducto: d.cod_producto || '-',
+          unidad: d.unidad_codigo || 'NIU',
+          descripcion: d.descripcion,
+          cantidad: d.cantidad,
+          mtoValorUnitario: d.mto_valor_unitario,
+          mtoValorVenta: itemBase, // SUNAT espera Base en valorVenta de línea
+          mtoBaseIgv: itemBase,
+          porcentajeIgv: porcentajeIgv,
+          igv: itemIgv,
+          tipAfeIgv: tipAfe,
+          totalImpuestos: itemTotalImpuestos,
+          mtoPrecioUnitario: Number((d.mto_valor_unitario * factorImpuesto).toFixed(10)),
+        };
+      });
+
+      const subtotalConImpuestos = Number((valorVentaTotal + mtoIGV).toFixed(2));
+      const discountAmount = Number((comprobante.descuento_global_monto || 0).toFixed(2));
+      const descuentoGlobalCodigo = comprobante.descuento_global_codigo || '03';
+      const totalFinal = Number((subtotalConImpuestos - discountAmount).toFixed(2));
+
+      return {
+        details: items,
+        mtoOperGravadas,
+        mtoOperExoneradas,
+        mtoOperInafectas,
+        mtoIGV,
+        totalImpuestos,
+        valorVenta: valorVentaTotal,
+        subTotal: subtotalConImpuestos,
+        mtoImpVenta: totalFinal,
+        mtoDescuentoGlobal: discountAmount > 0 ? discountAmount : undefined,
+        totalDescuentos: discountAmount > 0 ? discountAmount : undefined,
+        sumDsctoGlobal: discountAmount > 0 ? discountAmount : undefined,
+        sumOtrosDescuentos: discountAmount > 0 ? discountAmount : undefined, // Suma de todos los descuentos (ítem + global)
+        descuentos: discountAmount > 0 
+          ? [{
+              codTipo: descuentoGlobalCodigo, // '02' o '03' según la BD
+              factor: Number((discountAmount / subtotalConImpuestos).toFixed(10)),
+              monto: discountAmount,
+              montoBase: subtotalConImpuestos,
+              base: subtotalConImpuestos,
+            }]
+          : undefined,
+      };
+    })(),
+    legends: [
+      {
+        code: '1000',
+        value: numeroALetras((() => {
+          const mtoIGV = detalles.reduce((acc, d) => acc + d.igv, 0);
+          const valorVentaTotal = detalles.reduce((acc, d) => acc + d.mto_base_igv, 0);
+          const subtotalConImpuestos = Number((valorVentaTotal + mtoIGV).toFixed(2));
+          return Number((subtotalConImpuestos - (comprobante.descuento_global_monto || 0)).toFixed(2));
+        })())
+      },
+    ],
   } as ApisPeruInvoicePayload;
 }
 

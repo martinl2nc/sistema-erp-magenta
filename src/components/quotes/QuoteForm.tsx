@@ -452,14 +452,14 @@ export default function QuoteForm({ id }: QuoteFormProps) {
               <div className="flex justify-between text-xs text-[#94A3B8]">
                 <span>Subtotal</span><span className="text-[#E2E8F0]">{formatCurrency(totals.subtotal)}</span>
               </div>
-              {quoteData.descuento_global_monto > 0 && (
-                <div className="flex justify-between text-xs text-[#94A3B8]">
-                  <span>Descuento Global</span><span className="text-[#EF4444]">- {formatCurrency(quoteData.descuento_global_monto)}</span>
-                </div>
-              )}
               {quoteData.aplica_igv && (
                 <div className="flex justify-between text-xs text-[#94A3B8]">
                   <span>IGV (18%)</span><span className="text-[#E2E8F0]">{formatCurrency(totals.igv_monto)}</span>
+                </div>
+              )}
+              {quoteData.descuento_global_monto > 0 && (
+                <div className="flex justify-between text-xs text-[#94A3B8]">
+                  <span>Descuento Global</span><span className="text-[#EF4444]">- {formatCurrency(quoteData.descuento_global_monto)}</span>
                 </div>
               )}
             </div>
@@ -498,14 +498,14 @@ export default function QuoteForm({ id }: QuoteFormProps) {
               <div className="flex justify-between items-center text-sm text-[#94A3B8]">
                 <span>Subtotal</span><span className="font-medium text-[#E2E8F0]">{formatCurrency(totals.subtotal)}</span>
               </div>
-              {quoteData.descuento_global_monto > 0 && (
-                <div className="flex justify-between items-center text-sm text-[#94A3B8]">
-                  <span>Descuento Global</span><span className="font-medium text-[#EF4444]">- {formatCurrency(quoteData.descuento_global_monto)}</span>
-                </div>
-              )}
               {quoteData.aplica_igv && (
                 <div className="flex justify-between items-center text-sm text-[#94A3B8]">
                   <span>IGV (18%)</span><span className="font-medium text-[#E2E8F0]">{formatCurrency(totals.igv_monto)}</span>
+                </div>
+              )}
+              {quoteData.descuento_global_monto > 0 && (
+                <div className="flex justify-between items-center text-sm text-[#94A3B8]">
+                  <span>Descuento Global</span><span className="font-medium text-[#EF4444]">- {formatCurrency(quoteData.descuento_global_monto)}</span>
                 </div>
               )}
               <div className="h-px bg-[#334155] w-full my-3"></div>

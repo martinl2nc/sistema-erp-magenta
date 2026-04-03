@@ -275,7 +275,8 @@ export default function PedidoForm({ id }: { id?: string }) {
         igvMontoFmt={formatCurrency(igvMonto)}
         totalFinalFmt={formatCurrency(totalFinal)}
         isSubmitting={isSubmitting}
-        canSubmit={!(isSubmitting || !file || lineas.length === 0 || !clienteId)}
+        isEditing={isEditing}
+        canSubmit={!isSubmitting && !!clienteId && !!direccionFacturacion.trim() && lineas.length > 0 && (!!file || (isEditing && !!existingPedido?.sustento_url))}
         onCancel={() => router.push('/pedidos')}
         onSave={handleSave}
       />

@@ -39,7 +39,9 @@ const DEFAULT_AFECTACION_EXONERADA = '20';
 function calcularSunat(precioUnitario: number, cantidad: number, afectacionIgv: string) {
   // Como el precio ingresado en pedidos es BASE (sin IGV):
   const mto_valor_unitario = precioUnitario;
-  const mto_base_igv = parseFloat((cantidad * mto_valor_unitario).toFixed(2));
+  // Calculamos la base sin redondear prematuramente para mantener precisión en el cálculo del IGV
+  const base_calculo = cantidad * mto_valor_unitario;
+  const mto_base_igv = parseFloat(base_calculo.toFixed(2));
 
   if (afectacionIgv === '10') {
     const mto_igv = parseFloat((mto_base_igv * TAX_RATES.IGV).toFixed(2));
@@ -88,7 +90,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
 
   // Descuento global
   const [descuentoMonto, setDescuentoMonto] = useState(0);
-  const [descuentoCodigo, setDescuentoCodigo] = useState('00'); // Otros descuentos
+  const [descuentoCodigo, setDescuentoCodigo] = useState('03'); // Descuento que NO afecta la base imponible (Cat. 53 Greenter)
 
   // Inicializar tipo y dirección según el cliente una vez que los catálogos están disponibles
   useEffect(() => {
@@ -130,30 +132,38 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     configuracionSeriesService.getSerieByTipoDoc(tipoDocCodigo).then(setSerie).catch(() => setSerie(null)).finally(() => setLoadingSerie(false));
   }, [isOpen, tipoDocCodigo]);
 
-  // Totales calculados
+  // Totales calculados según modelo del usuario
   const totales = useMemo(() => {
     let baseGravada = 0;
-    let totalIgv = 0;
     let baseExonerada = 0;
+    let baseInafecta = 0;
+    let totalIgvOriginal = 0;
+
     for (const l of lineas) {
       if (l.afectacion_igv === '10') {
         baseGravada += l.mto_base_igv;
-        totalIgv += l.mto_igv;
-      } else {
+        totalIgvOriginal += l.mto_igv;
+      } else if (l.afectacion_igv === '20') {
         baseExonerada += l.subtotal;
+      } else {
+        baseInafecta += l.subtotal;
       }
     }
-    const baseSumaItems = parseFloat((baseGravada + baseExonerada).toFixed(2));
-    const mtoOperGravadas = parseFloat((baseSumaItems - descuentoMonto).toFixed(2));
-    const mtoIgv = parseFloat((mtoOperGravadas * 0.18).toFixed(2));
-    const total = parseFloat((mtoOperGravadas + mtoIgv).toFixed(2));
+
+    // El Subtotal es la suma de bases + IGV original (tal cual el Excel del usuario)
+    const subtotalConIgv = parseFloat((baseGravada + baseExonerada + baseInafecta + totalIgvOriginal).toFixed(2));
+    
+    // El Total Final es Subtotal - Descuento Global (Cód. 03 - no afecta base)
+    const totalFinal = parseFloat((subtotalConIgv - descuentoMonto).toFixed(2));
 
     return { 
-      subtotal: baseSumaItems, // Base suma de items
-      mtoOperGravadas,        // Nueva base imponible
-      igv: mtoIgv,            // Nuevo IGV
-      total,                  // Total final
-      descuentoMonto 
+      subtotal: subtotalConIgv,
+      mto_oper_gravadas: parseFloat(baseGravada.toFixed(2)),
+      mto_oper_exoneradas: parseFloat(baseExonerada.toFixed(2)),
+      mto_oper_inafectas: parseFloat(baseInafecta.toFixed(2)),
+      igv: parseFloat(totalIgvOriginal.toFixed(2)),
+      total: totalFinal,
+      descuentoMonto: parseFloat(descuentoMonto.toFixed(2)) 
     };
   }, [lineas, descuentoMonto]);
 
@@ -218,6 +228,8 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
         cliente_id: cliente.id,
         fecha_emision: fechaHoy,
         subtotal: totales.subtotal,
+        mto_oper_gravadas: totales.mto_oper_gravadas,
+        mto_oper_exoneradas: totales.mto_oper_exoneradas,
         igv_monto: totales.igv,
         total: totales.total,
         lineas: lineas.map((l) => ({
@@ -520,7 +532,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
               )}
               <div className="flex justify-between text-xs font-medium pt-1 border-t border-[#334155]/50">
                 <span className="text-[#94A3B8]">Subtotal (Base Imponible)</span>
-                <span className="text-[#E2E8F0]">{formatCurrency(totales.mtoOperGravadas)}</span>
+                <span className="text-[#E2E8F0]">{formatCurrency(totales.mto_oper_gravadas)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-[#94A3B8]">Nuevo IGV (18%)</span>

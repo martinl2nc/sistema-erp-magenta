@@ -329,9 +329,15 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
             {!loadingLineas && lineas.length > 0 && (
               <div className="mt-3 p-3 bg-[#0F1115] border border-[#334155] rounded-lg space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#94A3B8]">Suma de líneas</span>
+                  <span className="text-xs text-[#94A3B8]">Suma de líneas (Base)</span>
                   <span className="text-xs text-[#E2E8F0]">{formatCurrency(sumaLineas)}</span>
                 </div>
+                {aplicaIgv && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-[#94A3B8]">IGV (18%)</span>
+                    <span className="text-xs text-[#E2E8F0]">{formatCurrency(igvMonto)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-[#94A3B8]">Descuento global</span>
@@ -346,16 +352,6 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                   </div>
                   <span className="text-xs text-red-400">-{formatCurrency(descuentoGlobal)}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#94A3B8]">Subtotal</span>
-                  <span className="text-xs text-[#E2E8F0]">{formatCurrency(subtotalPedido)}</span>
-                </div>
-                {aplicaIgv && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-[#94A3B8]">IGV (18%)</span>
-                    <span className="text-xs text-[#E2E8F0]">{formatCurrency(igvMonto)}</span>
-                  </div>
-                )}
                 <div className="flex items-center justify-between pt-1.5 border-t border-[#334155]">
                   <span className="text-xs font-semibold text-[#E2E8F0]">Total del pedido</span>
                   <span className="text-sm font-bold text-[#3B82F6]">{formatCurrency(totalFinal)}</span>

@@ -7,6 +7,7 @@ interface PedidoFormFooterProps {
   totalFinalFmt: string;
   isSubmitting: boolean;
   canSubmit: boolean;
+  isEditing?: boolean;
   onCancel: () => void;
   onSave: () => void;
 }
@@ -20,6 +21,7 @@ export default function PedidoFormFooter({
   totalFinalFmt,
   isSubmitting,
   canSubmit,
+  isEditing,
   onCancel,
   onSave,
 }: PedidoFormFooterProps) {
@@ -28,9 +30,9 @@ export default function PedidoFormFooter({
       <div className="p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="w-full sm:w-auto flex items-center justify-between gap-6 px-2">
           <div className="space-y-1">
-            <span className="text-xs text-[#94A3B8] block">Suma líneas: {sumaLineas}</span>
-            {descuentoGlobal > 0 && <span className="text-xs text-[#EF4444] block">Descuento: -{descuentoGlobalFmt}</span>}
+            <span className="text-xs text-[#94A3B8] block">Subtotal (Base): {sumaLineas}</span>
             {aplicaIgv && <span className="text-xs text-[#94A3B8] block">IGV (18%): {igvMontoFmt}</span>}
+            {descuentoGlobal > 0 && <span className="text-xs text-[#EF4444] block">Descuento Global: -{descuentoGlobalFmt}</span>}
           </div>
           <div className="text-right">
             <span className="block text-xs text-[#94A3B8] uppercase tracking-wider mb-1">Total del Pedido</span>
@@ -58,12 +60,13 @@ export default function PedidoFormFooter({
               </>
             ) : (
               <>
-                <iconify-icon icon="solar:box-linear" class="text-lg"></iconify-icon>
-                Crear Pedido Directo
+                <iconify-icon icon={isEditing ? "solar:disk-linear" : "solar:box-linear"} class="text-lg"></iconify-icon>
+                {isEditing ? 'Guardar Cambios' : 'Crear Pedido Directo'}
               </>
             )}
           </button>
         </div>
+
       </div>
     </footer>
   );

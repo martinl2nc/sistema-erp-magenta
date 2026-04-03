@@ -29,19 +29,19 @@ export interface LineaLocal {
  * Contiene todos los valores calculados para un pedido/cotización
  */
 export interface FinancialCalculation {
-  /** Suma de todas las líneas sin descuento */
+  /** Suma de todas las líneas (Base Imponible) */
   subtotal: number;
   
-  /** Monto del descuento global aplicado */
+  /** Monto del descuento global aplicado (se resta del total con IGV) */
   descuento: number;
   
-  /** Base imponible (subtotal - descuento) */
+  /** Base imponible (se mantiene igual al subtotal) */
   baseImponible: number;
   
-  /** Monto del IGV calculado (18% de base imponible si aplica) */
+  /** Monto del IGV calculado (18% sobre el subtotal) */
   igv: number;
   
-  /** Total final a pagar (base imponible + IGV) */
+  /** Total final a pagar (Subtotal + IGV - Descuento) */
   total: number;
 }
 

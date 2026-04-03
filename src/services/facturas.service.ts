@@ -51,8 +51,13 @@ export interface EmitirComprobantePayload {
   cliente_id: string;
   fecha_emision: string; // 'YYYY-MM-DD'
   subtotal: number;
+  mto_oper_gravadas: number;
+  mto_oper_exoneradas: number;
   igv_monto: number;
   total: number;
+  descuento_global_monto?: number;
+  descuento_global_codigo?: string;
+  direccion_facturacion?: string;
   lineas: {
     producto_id: string | null;
     nombre_producto: string;
@@ -62,12 +67,10 @@ export interface EmitirComprobantePayload {
     mto_base_igv: number;
     mto_igv: number;
     subtotal: number;
+    unit_sunat?: string; // unit_sunat instead of unidad_sunat to match RPC if needed
     unidad_sunat: string;
     afectacion_igv: string;
   }[];
-  direccion_facturacion?: string;
-  descuento_global_monto?: number;
-  descuento_global_codigo?: string;
 }
 
 export interface EnviarSunatResponse {

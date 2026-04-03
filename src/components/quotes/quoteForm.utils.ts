@@ -42,15 +42,22 @@ export const getInitialQuoteData = (): QuoteFormData => {
 };
 
 export const calculateQuoteTotals = (lineItems: QuoteLineItem[], descuentoGlobalInput: number, aplicaIgv: boolean): QuoteTotals => {
-  const subtotal = lineItems.reduce((acc, item) => acc + (item.subtotal_linea || 0), 0);
+  const subtotalBase = lineItems.reduce((acc, item) => acc + (item.subtotal_linea || 0), 0);
   const descuentoGlobal = Number(descuentoGlobalInput) || 0;
-  const baseParaIgv = Math.max(0, subtotal - descuentoGlobal);
-  const igv = aplicaIgv ? baseParaIgv * TAX_RATES.IGV : 0;
+  
+  // IGV se calcula sobre la base completa (sin descontar el descuento global aún)
+  const igv = aplicaIgv ? subtotalBase * TAX_RATES.IGV : 0;
+  
+  // Subtotal con IGV = Base + IGV
+  const subtotalConIgv = subtotalBase + igv;
+  
+  // Total Final = (Base + IGV) - Descuento Global
+  const total_final = Math.max(0, subtotalConIgv - descuentoGlobal);
 
   return {
-    subtotal,
+    subtotal: subtotalBase,
     igv_monto: igv,
-    total_final: baseParaIgv + igv,
+    total_final: total_final,
   };
 };
 

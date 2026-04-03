@@ -260,36 +260,39 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot>
-                    <tr className="border-t border-[#334155] bg-[#181B21]">
-                      <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Suma de Ítems</td>
-                      <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(pedido.subtotal)}</td>
-                    </tr>
-                    {pedido.descuento_global_monto > 0 && (
-                      <tr className="bg-[#181B21]">
-                        <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Descuento global</td>
-                        <td className="px-4 py-2 text-sm text-red-400 text-right">-{formatCurrency(pedido.descuento_global_monto)}</td>
-                      </tr>
-                    )}
-                    <tr className="border-t border-[#334155] bg-[#181B21]">
-                      <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8]/80 text-right font-medium">Subtotal (Base Imponible)</td>
-                      <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right font-medium">
-                        {formatCurrency(pedido.subtotal - (pedido.descuento_global_monto || 0))}
-                      </td>
-                    </tr>
-                    {pedido.aplica_igv && (
-                      <tr className="bg-[#181B21]">
-                        <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">IGV (18%)</td>
-                        <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(pedido.igv_monto)}</td>
-                      </tr>
-                    )}
-                    <tr className="border-t border-[#334155] bg-[#181B21]">
-                      <td colSpan={3} className="px-4 py-3 text-xs font-medium text-[#94A3B8] text-right uppercase">Total</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-[#E2E8F0] text-right">
-                        {formatCurrency(pedido.total_final ?? 0)}
-                      </td>
-                    </tr>
-                  </tfoot>
+                  {(() => {
+                    const baseTotal = lineas.reduce((acc, l) => acc + (l.cantidad * l.precio_unitario), 0);
+                    const igvTotal = pedido.aplica_igv ? Number((baseTotal * 0.18).toFixed(2)) : 0;
+                    const subtotalConIgv = baseTotal + igvTotal;
+                    const totalFinal = subtotalConIgv - (pedido.descuento_global_monto || 0);
+
+                    return (
+                      <tfoot>
+                        <tr className="border-t border-[#334155] bg-[#181B21]">
+                          <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Subtotal (Base)</td>
+                          <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(baseTotal)}</td>
+                        </tr>
+                        {pedido.aplica_igv && (
+                          <tr className="bg-[#181B21]">
+                            <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">IGV (18%)</td>
+                            <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(igvTotal)}</td>
+                          </tr>
+                        )}
+                        {pedido.descuento_global_monto > 0 && (
+                          <tr className="bg-[#181B21]">
+                            <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Descuento global</td>
+                            <td className="px-4 py-2 text-sm text-red-400 text-right">-{formatCurrency(pedido.descuento_global_monto)}</td>
+                          </tr>
+                        )}
+                        <tr className="border-t border-[#334155] bg-[#181B21]">
+                          <td colSpan={3} className="px-4 py-3 text-xs font-medium text-[#94A3B8] text-right uppercase">Total del Pedido</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-[#E2E8F0] text-right">
+                            {formatCurrency(totalFinal)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    );
+                  })()}
                 </table>
               )}
             </div>
