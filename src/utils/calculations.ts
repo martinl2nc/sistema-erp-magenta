@@ -36,7 +36,9 @@ export const roundToDecimal = (
  * calculateLineSubtotal({ cantidad: 10, precio_unitario: 50.5, ... }) // 505.00
  */
 export const calculateLineSubtotal = (linea: LineaLocal): number => {
-  return roundToDecimal(linea.cantidad * linea.precio_unitario);
+  const bruto = linea.cantidad * linea.precio_unitario;
+  const descuento = linea.descuento_linea_monto || 0;
+  return roundToDecimal(Math.max(0, bruto - descuento));
 };
 
 /**

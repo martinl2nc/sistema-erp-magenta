@@ -4,6 +4,7 @@ import type { LineaLocal } from '@/types/common.types';
 interface PedidoFormLineItemsProps {
   lineas: LineaLocal[];
   products: Product[];
+  aplicaIgv: boolean;
   formatCurrency: (value: number) => string;
   getLineSubtotal: (index: number) => number;
   onUpdateLineItem: <K extends keyof LineaLocal>(index: number, field: K, value: LineaLocal[K]) => void;
@@ -14,6 +15,7 @@ interface PedidoFormLineItemsProps {
 export default function PedidoFormLineItems({
   lineas,
   products,
+  aplicaIgv,
   formatCurrency,
   getLineSubtotal,
   onUpdateLineItem,
@@ -28,6 +30,7 @@ export default function PedidoFormLineItems({
         </div>
       ) : (
         <>
+          {/* Mobile view */}
           <div className="md:hidden divide-y divide-[#334155]">
             {lineas.map((item, index) => (
               <div key={index} className="p-4 space-y-3">
@@ -41,7 +44,7 @@ export default function PedidoFormLineItems({
                   </button>
                 </div>
                 <input type="text" value={item.nombre_producto_historico} onChange={(e) => onUpdateLineItem(index, 'nombre_producto_historico', e.target.value)} placeholder="Descripción del producto..." className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-2 text-sm text-[#E2E8F0] focus:border-[#3B82F6] focus:outline-none placeholder-[#334155]" />
-                <div className="grid grid-cols-2 gap-2">
+                <div className={`grid gap-2 ${aplicaIgv ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   <div className="space-y-1">
                     <label className="text-[10px] text-[#94A3B8] uppercase tracking-wide">Cant.</label>
                     <input type="number" min={item.fraccionable ? '0.001' : '1'} step={item.fraccionable ? '0.001' : '1'} value={item.cantidad} onChange={(e) => onUpdateLineItem(index, 'cantidad', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-2 text-sm text-[#E2E8F0] text-center focus:border-[#3B82F6] focus:outline-none" />
@@ -50,6 +53,12 @@ export default function PedidoFormLineItems({
                     <label className="text-[10px] text-[#94A3B8] uppercase tracking-wide">Precio U.</label>
                     <input type="number" min="0" step="0.01" value={item.precio_unitario} onChange={(e) => onUpdateLineItem(index, 'precio_unitario', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-2 text-sm text-[#E2E8F0] text-right focus:border-[#3B82F6] focus:outline-none" />
                   </div>
+                  {aplicaIgv && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-[#94A3B8] uppercase tracking-wide">Desc.</label>
+                      <input type="number" min="0" step="0.01" value={item.descuento_linea_monto} onChange={(e) => onUpdateLineItem(index, 'descuento_linea_monto', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-2 text-sm text-[#E2E8F0] text-right focus:border-[#3B82F6] focus:outline-none" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex justify-end">
                   <span className="text-xs text-[#94A3B8]">Sub:&nbsp;</span>
@@ -59,6 +68,7 @@ export default function PedidoFormLineItems({
             ))}
           </div>
 
+          {/* Desktop view */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
@@ -67,6 +77,9 @@ export default function PedidoFormLineItems({
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase min-w-[250px]">Producto personalizado</th>
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[100px]">Cant.</th>
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[140px]">Precio U. (S/)</th>
+                  {aplicaIgv && (
+                    <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[120px]">Desc (S/)</th>
+                  )}
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[120px] text-right">Subtotal</th>
                   <th className="py-3 px-4 w-[50px]"></th>
                 </tr>
@@ -89,6 +102,11 @@ export default function PedidoFormLineItems({
                     <td className="py-3 px-4">
                       <input type="number" min="0" step="0.01" value={item.precio_unitario} onChange={(e) => onUpdateLineItem(index, 'precio_unitario', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-sm text-[#E2E8F0] text-right focus:border-[#3B82F6] focus:outline-none" />
                     </td>
+                    {aplicaIgv && (
+                      <td className="py-3 px-4">
+                        <input type="number" min="0" step="0.01" value={item.descuento_linea_monto} onChange={(e) => onUpdateLineItem(index, 'descuento_linea_monto', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-sm text-[#E2E8F0] text-right focus:border-[#3B82F6] focus:outline-none" />
+                      </td>
+                    )}
                     <td className="py-3 px-4">
                       <div className="text-sm font-medium text-[#94A3B8] text-right pt-1.5">{formatCurrency(getLineSubtotal(index))}</div>
                     </td>

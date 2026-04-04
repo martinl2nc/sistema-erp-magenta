@@ -111,6 +111,7 @@ export default function PedidoForm({ id }: { id?: string }) {
         nombre_producto_historico: l.nombre_producto_historico,
         cantidad: l.cantidad,
         precio_unitario: l.precio_unitario,
+        descuento_linea_monto: l.descuento_linea_monto || 0,
         fraccionable: products.find(p => String(p.id) === String(l.producto_id))?.fraccionable || false,
       })) || [];
       if (loadedLines.length > 0) setAllLines(loadedLines);
@@ -167,6 +168,7 @@ export default function PedidoForm({ id }: { id?: string }) {
         nombre_producto_historico: l.nombre_producto_historico,
         cantidad: l.cantidad,
         precio_unitario: l.precio_unitario,
+        descuento_linea_monto: l.descuento_linea_monto || 0,
         subtotal_linea: getLineSubtotal(index),
       }));
 
@@ -242,6 +244,7 @@ export default function PedidoForm({ id }: { id?: string }) {
         <PedidoFormLineItems
           lineas={lineas}
           products={products}
+          aplicaIgv={aplicaIgv}
           formatCurrency={formatCurrency}
           getLineSubtotal={getLineSubtotal}
           onUpdateLineItem={updateLineItem}

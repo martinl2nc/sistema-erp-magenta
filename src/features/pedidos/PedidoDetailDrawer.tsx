@@ -246,8 +246,9 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                     <tr className="border-b border-[#334155]">
                       <th className="px-4 py-2.5 text-xs font-medium text-[#94A3B8] uppercase">Producto</th>
                       <th className="px-4 py-2.5 text-xs font-medium text-[#94A3B8] uppercase text-right w-16">Cant.</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-[#94A3B8] uppercase text-right w-28">P. Unit.</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-[#94A3B8] uppercase text-right w-28">Subtotal</th>
+                      <th className="px-4 py-2.5 text-xs font-medium text-[#94A3B8] uppercase text-right w-24">P. Unit.</th>
+                      <th className="px-4 py-2.5 text-xs font-medium text-[#94A3B8] uppercase text-right w-20">Desc.</th>
+                      <th className="px-4 py-2.5 text-xs font-medium text-[#94A3B8] uppercase text-right w-24">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#334155]">
@@ -256,12 +257,14 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                         <td className="px-4 py-3 text-sm text-[#E2E8F0]">{l.nombre_producto_historico}</td>
                         <td className="px-4 py-3 text-sm text-[#94A3B8] text-right">{l.cantidad}</td>
                         <td className="px-4 py-3 text-sm text-[#94A3B8] text-right">{formatCurrency(l.precio_unitario)}</td>
+                        <td className="px-4 py-3 text-sm text-red-400 text-right">-{formatCurrency(l.descuento_linea_monto)}</td>
                         <td className="px-4 py-3 text-sm text-[#E2E8F0] font-medium text-right">{formatCurrency(l.subtotal_linea)}</td>
                       </tr>
                     ))}
                   </tbody>
                   {(() => {
-                    const baseTotal = lineas.reduce((acc, l) => acc + (l.cantidad * l.precio_unitario), 0);
+                    // Sum subtotal_linea directly as it already has the line discount applied
+                    const baseTotal = lineas.reduce((acc, l) => acc + Number(l.subtotal_linea), 0);
                     const igvTotal = pedido.aplica_igv ? Number((baseTotal * 0.18).toFixed(2)) : 0;
                     const subtotalConIgv = baseTotal + igvTotal;
                     const totalFinal = subtotalConIgv - (pedido.descuento_global_monto || 0);
@@ -269,23 +272,23 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                     return (
                       <tfoot>
                         <tr className="border-t border-[#334155] bg-[#181B21]">
-                          <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Subtotal (Base)</td>
+                          <td colSpan={4} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Subtotal (Base con desc. líneas)</td>
                           <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(baseTotal)}</td>
                         </tr>
                         {pedido.aplica_igv && (
                           <tr className="bg-[#181B21]">
-                            <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">IGV (18%)</td>
+                            <td colSpan={4} className="px-4 py-2 text-xs text-[#94A3B8] text-right">IGV (18%)</td>
                             <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(igvTotal)}</td>
                           </tr>
                         )}
                         {pedido.descuento_global_monto > 0 && (
                           <tr className="bg-[#181B21]">
-                            <td colSpan={3} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Descuento global</td>
+                            <td colSpan={4} className="px-4 py-2 text-xs text-[#94A3B8] text-right">Descuento global</td>
                             <td className="px-4 py-2 text-sm text-red-400 text-right">-{formatCurrency(pedido.descuento_global_monto)}</td>
                           </tr>
                         )}
                         <tr className="border-t border-[#334155] bg-[#181B21]">
-                          <td colSpan={3} className="px-4 py-3 text-xs font-medium text-[#94A3B8] text-right uppercase">Total del Pedido</td>
+                          <td colSpan={4} className="px-4 py-3 text-xs font-medium text-[#94A3B8] text-right uppercase">Total del Pedido</td>
                           <td className="px-4 py-3 text-sm font-semibold text-[#E2E8F0] text-right">
                             {formatCurrency(totalFinal)}
                           </td>

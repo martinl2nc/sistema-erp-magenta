@@ -69,6 +69,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
           nombre_producto_historico: l.nombre_producto_historico,
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,
+          descuento_linea_monto: l.descuento_linea_monto || 0,
           fraccionable: l.productos?.fraccionable ?? false,
         }))
       );
@@ -135,6 +136,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
           nombre_producto_historico: l.nombre_producto_historico,
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,
+          descuento_linea_monto: l.descuento_linea_monto || 0,
           subtotal_linea: getLineSubtotal(index),
         }))
       );
@@ -260,6 +262,12 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                         <label className="text-[10px] text-[#94A3B8] block mb-1">P. Unit (S/)</label>
                         <input type="number" min="0" step="0.01" value={l.precio_unitario} onChange={(e) => updateLineItem(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] text-right focus:outline-none focus:border-[#3B82F6]" />
                       </div>
+                      {aplicaIgv && (
+                        <div className="flex-1">
+                          <label className="text-[10px] text-[#94A3B8] block mb-1">Desc.</label>
+                          <input type="number" min="0" step="0.01" value={l.descuento_linea_monto} onChange={(e) => updateLineItem(idx, 'descuento_linea_monto', parseFloat(e.target.value) || 0)} className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] text-right focus:outline-none focus:border-[#3B82F6]" />
+                        </div>
+                      )}
                     </div>
                     <div className="flex justify-end pt-1">
                       <span className="text-[10px] text-[#94A3B8] mr-1">Subtotal:</span>
@@ -280,6 +288,9 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Producto personalizado</th>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[80px] text-center">Cant.</th>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[100px] text-right">P. Unit</th>
+                      {aplicaIgv && (
+                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[90px] text-right">Desc</th>
+                      )}
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[100px] text-right">Subtotal</th>
                       <th className="px-3 py-2 w-[40px]"></th>
                     </tr>
@@ -302,6 +313,11 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
                         <td className="px-3 py-2.5 text-right">
                           <input type="number" min="0" step="0.01" value={l.precio_unitario} onChange={(e) => updateLineItem(idx, 'precio_unitario', parseFloat(e.target.value) || 0)} className="w-[80px] bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] text-right focus:outline-none focus:border-[#3B82F6]" />
                         </td>
+                        {aplicaIgv && (
+                          <td className="px-3 py-2.5 text-right">
+                            <input type="number" min="0" step="0.01" value={l.descuento_linea_monto} onChange={(e) => updateLineItem(idx, 'descuento_linea_monto', parseFloat(e.target.value) || 0)} className="w-[70px] bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] text-right focus:outline-none focus:border-[#3B82F6]" />
+                          </td>
+                        )}
                         <td className="px-3 py-2.5 text-xs font-medium text-[#E2E8F0] text-right">
                           {formatCurrency(getLineSubtotal(idx))}
                         </td>

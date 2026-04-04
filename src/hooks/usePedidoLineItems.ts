@@ -153,6 +153,14 @@ export function usePedidoLineItems(options: UsePedidoLineItemsOptions = {}): Use
           }
         }
         
+        // Validación: No permitir descuentos negativos
+        if (field === 'descuento_linea_monto') {
+          const descuento = value as number;
+          if (descuento < 0) {
+            updatedItem.descuento_linea_monto = 0;
+          }
+        }
+        
         return updatedItem;
       });
       
@@ -170,6 +178,7 @@ export function usePedidoLineItems(options: UsePedidoLineItemsOptions = {}): Use
       nombre_producto_historico: '',
       cantidad: 1,
       precio_unitario: 0,
+      descuento_linea_monto: 0,
       fraccionable: false,
     };
     

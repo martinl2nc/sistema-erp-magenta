@@ -19,6 +19,9 @@ export interface LineaLocal {
   
   /** Precio unitario del producto */
   precio_unitario: number;
+
+  /** Descuento aplicado a esta línea (monto en soles) */
+  descuento_linea_monto: number;
   
   /** Indica si el producto permite cantidades fraccionarias (ej: 1.5) */
   fraccionable: boolean;
