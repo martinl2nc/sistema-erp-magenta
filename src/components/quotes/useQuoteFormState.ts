@@ -9,7 +9,6 @@ import { useAuth } from '@/context/AuthContext';
 
 interface UseQuoteFormStateParams {
   isEditing: boolean;
-  loading: boolean;
   existingQuote?: Quote;
   activeClients: Client[];
   allClients: Client[];
@@ -18,7 +17,6 @@ interface UseQuoteFormStateParams {
 
 export const useQuoteFormState = ({
   isEditing,
-  loading,
   existingQuote,
   activeClients,
   allClients,
@@ -32,7 +30,7 @@ export const useQuoteFormState = ({
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    if (initialized || loading) return;
+    if (initialized) return;
 
     if (isEditing && existingQuote) {
       const { cotizaciones_lineas, ...headData } = existingQuote;
@@ -56,7 +54,7 @@ export const useQuoteFormState = ({
     }
 
     setInitialized(true);
-  }, [initialized, loading, isEditing, existingQuote, isVendorLocked, user?.id]);
+  }, [initialized, isEditing, existingQuote, isVendorLocked, user?.id]);
 
   const selectableClients = useMemo(() => {
     if (!quoteData.cliente_id) return activeClients;

@@ -6,17 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { pdf } from '@react-pdf/renderer';
 
-import { useQuoteDetail, useSaveQuote, useDeleteQuote, useSendQuoteWebhook } from '@/hooks/useQuotes';
+import { useSaveQuote, useDeleteQuote, useSendQuoteWebhook } from '@/hooks/useQuotes';
 import { useLogEmailSend } from '@/hooks/useEmailHistory';
-import { useClientsList, useActiveClientsList, clientsKeys } from '@/hooks/useClients';
-import { useSellersList } from '@/hooks/useSellers';
-import { useProductsList } from '@/hooks/useProducts';
-import { useCompanyConfig } from '@/hooks/useCompanyConfig';
+import { clientsKeys } from '@/hooks/useClients';
 
 import ClientFormModal from '@/features/clients/ClientFormModal';
 import QuotePDFPreviewModal from './QuotePDFPreviewModal';
 import type { Client } from '@/services/clients.service';
-import type { QuoteFormData, QuoteStatus } from '@/services/quotes.service';
+import type { Product } from '@/services/products.service';
+import type { Seller } from '@/services/sellers.service';
+import type { CompanyConfig } from '@/services/companyConfig.service';
+import type { Quote, QuoteFormData, QuoteStatus } from '@/services/quotes.service';
 import { isWebhookConfigured, buildWebhookPayload } from '@/services/webhook.service';
 import { useQuoteFormState } from './useQuoteFormState';
 import { formatCurrency, getClientDisplayName, validateQuoteForm, blobToBase64, downloadBlob } from './quoteForm.utils';
@@ -24,28 +24,39 @@ import { QuotePDFDocument } from './QuotePDFTemplate';
 
 interface QuoteFormProps {
   id?: string;
+  initialQuote?: Quote;
+  initialAllClients: Client[];
+  initialActiveClients: Client[];
+  initialProducts: Product[];
+  initialSellers: Seller[];
+  companyConfig: CompanyConfig | null;
 }
 
-export default function QuoteForm({ id }: QuoteFormProps) {
+export default function QuoteForm({
+  id,
+  initialQuote,
+  initialAllClients,
+  initialActiveClients,
+  initialProducts,
+  initialSellers,
+  companyConfig,
+}: QuoteFormProps) {
   const router = useRouter();
   const isEditing = Boolean(id);
 
-  const { data: activeClients = [], isLoading: loadingActiveClients } = useActiveClientsList();
-  const { data: allClients = [], isLoading: loadingAllClients } = useClientsList();
-  const { data: sellers = [], isLoading: loadingSellers } = useSellersList();
-  const { data: products = [], isLoading: loadingProducts } = useProductsList();
-  const { data: existingQuote, isLoading: loadingQuote } = useQuoteDetail(id || null);
-  const { data: companyConfig = null } = useCompanyConfig();
+  // Catalog data now comes from server-side props
+  const allClients = initialAllClients;
+  const activeClients = initialActiveClients;
+  const sellers = initialSellers;
+  const products = initialProducts;
+  const existingQuote = initialQuote;
 
+  // Only mutation hooks remain client-side
   const saveQuoteMutation = useSaveQuote();
   const deleteQuoteMutation = useDeleteQuote();
   const webhookMutation = useSendQuoteWebhook();
   const logEmailSendMutation = useLogEmailSend();
   const queryClient = useQueryClient();
-
-  const loadingClients = loadingActiveClients || loadingAllClients;
-  const loadingDropdowns = loadingClients || loadingSellers || loadingProducts;
-  const loading = loadingDropdowns || (isEditing && loadingQuote);
 
   const [error, setError] = useState<string | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -70,7 +81,6 @@ export default function QuoteForm({ id }: QuoteFormProps) {
     updateLineItem,
   } = useQuoteFormState({
     isEditing,
-    loading,
     existingQuote,
     activeClients,
     allClients,
@@ -243,17 +253,6 @@ export default function QuoteForm({ id }: QuoteFormProps) {
   };
 
   const isSaving = saveQuoteMutation.isPending || deleteQuoteMutation.isPending || isPreviewLoading;
-
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="text-[#94A3B8] flex items-center gap-2">
-          <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>
-          Cargando motor de cotizaciones...
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#0F1115]">
