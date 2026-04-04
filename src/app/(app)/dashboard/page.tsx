@@ -1,5 +1,8 @@
 'use client';
 
+import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { startOfMonth, endOfMonth, subMonths, differenceInDays, format } from 'date-fns';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -7,6 +10,15 @@ import {
 import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
+import { FunnelChart } from '@/components/dashboard/FunnelChart';
+import { FinancialMetrics } from '@/components/dashboard/FinancialMetrics';
+import { AlertsSection } from '@/components/dashboard/AlertsSection';
+import { DateRangeFilter, DateRange } from '@/components/dashboard/DateRangeFilter';
+import { ComparisonBadge } from '@/components/dashboard/ComparisonBadge';
+import { ExportButton } from '@/components/dashboard/ExportButton';
+import { Tooltip as CustomTooltip } from '@/components/dashboard/Tooltip';
+import { useQuery } from '@tanstack/react-query';
+import { dashboardService } from '@/services/dashboard.service';
 
 const ESTADO_COLORS: Record<string, string> = {
   'Borrador':  '#94A3B8',
@@ -26,9 +38,10 @@ interface KpiCardProps {
   icon: string;
   accentColor: string;
   loading?: boolean;
+  comparison?: number; // Percentage change
 }
 
-function KpiCard({ title, value, subtitle, icon, accentColor, loading }: KpiCardProps) {
+function KpiCard({ title, value, subtitle, icon, accentColor, loading, comparison }: KpiCardProps) {
   return (
     <div className="bg-[#181B21] border border-[#334155] rounded-xl p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -47,7 +60,10 @@ function KpiCard({ title, value, subtitle, icon, accentColor, loading }: KpiCard
         </>
       ) : (
         <>
-          <p className="text-3xl font-bold text-[#E2E8F0]">{value}</p>
+          <div className="flex items-end justify-between">
+            <p className="text-3xl font-bold text-[#E2E8F0]">{value}</p>
+            {comparison !== undefined && <ComparisonBadge percentageChange={comparison} size="sm" />}
+          </div>
           <p className="text-xs text-[#64748B]">{subtitle}</p>
         </>
       )}
@@ -87,11 +103,52 @@ function CustomPieTooltip({ active, payload }: any) {
 }
 
 export default function DashboardPage() {
-  const { role } = useAuth();
-  const { kpis, porMes, porEstado, topClientes, topProductos } = useDashboardStats();
+  const router = useRouter();
+  const dashboardRef = useRef<HTMLDivElement>(null);
+  const { role, user } = useAuth();
+  const vendedorId = role === 'vendedor' ? user?.id : null;
+
+  // State para el rango de fechas
+  const [dateRange, setDateRange] = useState<DateRange>({
+    start: startOfMonth(new Date()),
+    end: endOfMonth(new Date()),
+    preset: 'thisMonth',
+  });
+
+  // Calcular el rango anterior para comparación
+  const getPreviousRange = (current: DateRange) => {
+    const duration = differenceInDays(current.end, current.start) + 1;
+    const previousEnd = new Date(current.start);
+    previousEnd.setDate(previousEnd.getDate() - 1);
+    const previousStart = new Date(previousEnd);
+    previousStart.setDate(previousStart.getDate() - duration + 1);
+    
+    return {
+      start: format(previousStart, 'yyyy-MM-dd'),
+      end: format(previousEnd, 'yyyy-MM-dd'),
+    };
+  };
+
+  const currentRangeParams = {
+    start: format(dateRange.start, 'yyyy-MM-dd'),
+    end: format(dateRange.end, 'yyyy-MM-dd'),
+  };
+
+  const previousRangeParams = getPreviousRange(dateRange);
+
+  // Query para comparación de KPIs
+  const kpisComparison = useQuery({
+    queryKey: ['dashboard', 'kpisComparison', currentRangeParams, previousRangeParams, vendedorId],
+    queryFn: () => dashboardService.getKpisComparison(currentRangeParams, previousRangeParams, vendedorId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Queries originales (sin cambios para los componentes que no usan fechas)
+  const { porMes, porEstado, topClientes, topProductos, funnel, financial, alerts } = useDashboardStats();
 
   const isAdmin = role === 'admin';
-  const kpiData = kpis.data;
+  const kpiData = kpisComparison.data?.current;
+  const kpiChanges = kpisComparison.data?.changes;
   const porMesData = porMes.data ?? [];
   const porEstadoData = (porEstado.data ?? []).map(d => ({
     ...d,
@@ -99,19 +156,78 @@ export default function DashboardPage() {
   }));
 
   return (
-    <div className="p-6 space-y-6 max-w-screen-xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-[#E2E8F0]">Dashboard</h1>
-        <p className="text-sm text-[#64748B] mt-1">
-          {isAdmin ? 'Resumen general de todas las cotizaciones' : 'Resumen de tus cotizaciones'}
-        </p>
+    <div ref={dashboardRef} className="p-6 space-y-6 max-w-screen-xl mx-auto">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[#E2E8F0]">Dashboard</h1>
+          <p className="text-sm text-[#64748B] mt-1">
+            {isAdmin ? 'Resumen general de todas las cotizaciones' : 'Resumen de tus cotizaciones'}
+          </p>
+        </div>
+        <ExportButton dashboardRef={dashboardRef} filename="dashboard-cotizaciones" />
+      </div>
+
+      {/* Filtro de rango de fechas */}
+      <div className="bg-[#181B21] border border-[#334155] rounded-xl p-5">
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard title="Cotizaciones este mes" value={kpiData?.totalMes ?? 0} subtitle="Creadas en el mes actual" icon="solar:document-text-bold" accentColor="#3B82F6" loading={kpis.isLoading} />
-        <KpiCard title="Monto cotizado este mes" value={kpiData ? formatCurrency(kpiData.montoMes) : 'S/ 0'} subtitle="Total en cotizaciones del mes" icon="solar:money-bag-bold" accentColor="#22C55E" loading={kpis.isLoading} />
-        <KpiCard title="Tasa de conversión" value={kpiData ? `${kpiData.tasaConversion}%` : '0%'} subtitle="Aprobadas + enviadas / total" icon="solar:chart-bold" accentColor="#A855F7" loading={kpis.isLoading} />
-        <KpiCard title="Por vencer (3 días)" value={kpiData?.porVencer ?? 0} subtitle="Cotizaciones próximas a vencer" icon="solar:clock-circle-bold" accentColor={kpiData && kpiData.porVencer > 0 ? '#F59E0B' : '#64748B'} loading={kpis.isLoading} />
+        <CustomTooltip content="Total de cotizaciones creadas en el periodo seleccionado">
+          <div className="w-full">
+            <KpiCard 
+              title="Cotizaciones en periodo" 
+              value={kpiData?.totalMes ?? 0} 
+              subtitle="Creadas en el periodo seleccionado" 
+              icon="solar:document-text-bold" 
+              accentColor="#3B82F6" 
+              loading={kpisComparison.isLoading}
+              comparison={kpiChanges?.totalMes}
+            />
+          </div>
+        </CustomTooltip>
+        <CustomTooltip content="Monto total cotizado (suma de todas las cotizaciones del periodo)">
+          <div className="w-full">
+            <KpiCard 
+              title="Monto cotizado" 
+              value={kpiData ? formatCurrency(kpiData.montoMes) : 'S/ 0'} 
+              subtitle="Total en cotizaciones del periodo" 
+              icon="solar:money-bag-bold" 
+              accentColor="#22C55E" 
+              loading={kpisComparison.isLoading}
+              comparison={kpiChanges?.montoMes}
+            />
+          </div>
+        </CustomTooltip>
+        <CustomTooltip content="Porcentaje de cotizaciones aprobadas o enviadas sobre el total histórico">
+          <div className="w-full">
+            <KpiCard 
+              title="Tasa de conversión" 
+              value={kpiData ? `${kpiData.tasaConversion}%` : '0%'} 
+              subtitle="Aprobadas + enviadas / total" 
+              icon="solar:chart-bold" 
+              accentColor="#A855F7" 
+              loading={kpisComparison.isLoading}
+              comparison={kpiChanges?.tasaConversion}
+            />
+          </div>
+        </CustomTooltip>
+        <CustomTooltip content="Cotizaciones que vencen en los próximos 3 días y requieren atención">
+          <div 
+            className="w-full cursor-pointer"
+            onClick={() => router.push('/cotizaciones?filter=expiring')}
+          >
+            <KpiCard 
+              title="Por vencer (3 días)" 
+              value={kpiData?.porVencer ?? 0} 
+              subtitle="Cotizaciones próximas a vencer" 
+              icon="solar:clock-circle-bold" 
+              accentColor={kpiData && kpiData.porVencer > 0 ? '#F59E0B' : '#64748B'} 
+              loading={kpisComparison.isLoading}
+              comparison={kpiChanges?.porVencer}
+            />
+          </div>
+        </CustomTooltip>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -184,7 +300,7 @@ export default function DashboardPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="Top 5 productos más cotizados">
+        <SectionCard title="Top 5 productos por revenue">
           {topProductos.isLoading ? (
             <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
           ) : !topProductos.data?.length ? (
@@ -195,21 +311,49 @@ export default function DashboardPage() {
                 <tr className="text-xs text-[#64748B] border-b border-[#334155]">
                   <th className="text-left pb-2 font-medium">#</th>
                   <th className="text-left pb-2 font-medium">Producto</th>
-                  <th className="text-right pb-2 font-medium">Uds. cotizadas</th>
+                  <th className="text-right pb-2 font-medium">Uds.</th>
+                  <th className="text-right pb-2 font-medium">Revenue</th>
                 </tr>
               </thead>
               <tbody>
                 {topProductos.data.map((p, i) => (
                   <tr key={i} className="border-b border-[#334155]/40 last:border-0">
                     <td className="py-2.5 pr-3 text-[#64748B] font-mono text-xs">{i + 1}</td>
-                    <td className="py-2.5 text-[#E2E8F0] truncate max-w-[220px]" title={p.nombre}>{p.nombre}</td>
-                    <td className="py-2.5 text-right text-[#3B82F6] font-medium">{p.cantidad}</td>
+                    <td className="py-2.5 text-[#E2E8F0] truncate max-w-[180px]" title={p.nombre}>{p.nombre}</td>
+                    <td className="py-2.5 text-right text-[#94A3B8]">{p.cantidad}</td>
+                    <td className="py-2.5 text-right text-[#22C55E] font-medium">{formatCurrency(p.revenue)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
         </SectionCard>
+      </div>
+
+      {/* Nueva sección: Funnel de Conversión */}
+      <SectionCard title="Funnel de Conversión">
+        <FunnelChart 
+          data={funnel.data ?? { cotizaciones: 0, pedidos: 0, facturas: 0, conversionAPedido: 0, conversionAFactura: 0 }}
+          isLoading={funnel.isLoading}
+        />
+      </SectionCard>
+
+      {/* Nueva sección: Métricas Financieras */}
+      <div>
+        <h3 className="text-sm font-semibold text-[#94A3B8] uppercase tracking-wider mb-4">Métricas Financieras</h3>
+        <FinancialMetrics 
+          data={financial.data ?? { valorPromedio: 0, totalDescuentos: 0, cotizacionesConDescuento: 0, porcentajeConDescuento: 0 }}
+          isLoading={financial.isLoading}
+        />
+      </div>
+
+      {/* Nueva sección: Alertas y Oportunidades */}
+      <div>
+        <h3 className="text-sm font-semibold text-[#94A3B8] uppercase tracking-wider mb-4">Alertas y Oportunidades</h3>
+        <AlertsSection 
+          data={alerts.data ?? { cotizacionesExpiradas: 0, borradoresAntiguos: 0, nuevosClientes: 0 }}
+          isLoading={alerts.isLoading}
+        />
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ export default function ResetPasswordPage() {
     // Supabase redirects here with the recovery token in the URL hash.
     // onAuthStateChange picks it up and establishes a session automatically.
     const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any) => {
       if (event === 'PASSWORD_RECOVERY') {
         setSessionReady(true);
       }
