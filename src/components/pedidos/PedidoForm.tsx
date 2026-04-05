@@ -6,10 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { pedidosService } from '@/services/pedidos.service';
-import { useCreatePedido, usePedido, useUpdatePedidoCompleto } from '@/hooks/usePedidos';
-import { useClientsList, useActiveClientsList, clientsKeys } from '@/hooks/useClients';
-import { useSellersList } from '@/hooks/useSellers';
-import { useProductsList } from '@/hooks/useProducts';
+import { useCreatePedido, useUpdatePedidoCompleto } from '@/hooks/usePedidos';
+import { clientsKeys } from '@/hooks/useClients';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { usePedidoLineItems } from '@/hooks/usePedidoLineItems';
 import { useAuth } from '@/context/AuthContext';
@@ -21,26 +19,43 @@ import PedidoFormLineItems from '@/components/pedidos/PedidoFormLineItems';
 import PedidoFormSustento from '@/components/pedidos/PedidoFormSustento';
 import PedidoFormFooter from '@/components/pedidos/PedidoFormFooter';
 import type { Client } from '@/services/clients.service';
+import type { Product } from '@/services/products.service';
+import type { Seller } from '@/services/sellers.service';
+import type { Pedido, PedidoLinea } from '@/services/pedidos.service';
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
 import { calculateFinancials } from '@/utils/calculations';
 
-export default function PedidoForm({ id }: { id?: string }) {
+interface PedidoFormProps {
+  id?: string;
+  initialPedido?: Pedido & { lineas: PedidoLinea[] };
+  initialAllClients: Client[];
+  initialActiveClients: Client[];
+  initialProducts: Product[];
+  initialSellers: Seller[];
+}
+
+export default function PedidoForm({
+  id,
+  initialPedido,
+  initialAllClients,
+  initialActiveClients,
+  initialProducts,
+  initialSellers,
+}: PedidoFormProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const createPedido = useCreatePedido();
   const { user, role } = useAuth();
 
-  const { data: activeClients = [], isLoading: loadingActiveClients } = useActiveClientsList();
-  const { data: allClients = [], isLoading: loadingAllClients } = useClientsList();
-  const { data: sellers = [], isLoading: loadingSellers } = useSellersList();
-  const { data: products = [], isLoading: loadingProducts } = useProductsList();
+  // Catalog data from server-side props
+  const activeClients = initialActiveClients;
+  const allClients = initialAllClients;
+  const sellers = initialSellers;
+  const products = initialProducts;
 
   const isEditing = !!id;
-  const { data: existingPedido, isLoading: loadingPedido } = usePedido(id);
+  const existingPedido = initialPedido;
   const updatePedido = useUpdatePedidoCompleto();
-
-  const loadingClients = loadingActiveClients || loadingAllClients;
-  const loading = loadingClients || loadingSellers || loadingProducts || loadingPedido;
 
   const selectableClients = activeClients;
   const isVendorLocked = role === 'vendedor';
@@ -94,7 +109,7 @@ export default function PedidoForm({ id }: { id?: string }) {
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    if (initialized || loadingActiveClients || loadingSellers || loadingProducts || loadingPedido) return;
+    if (initialized) return;
 
     if (isEditing && existingPedido) {
       setClienteId(existingPedido.cliente_id || '');
@@ -120,7 +135,7 @@ export default function PedidoForm({ id }: { id?: string }) {
     } else if (!isEditing) {
       setInitialized(true);
     }
-  }, [initialized, isEditing, existingPedido, loadingActiveClients, loadingSellers, loadingProducts, loadingPedido, products, setAllLines]);
+  }, [initialized, isEditing, existingPedido, products, setAllLines]);
 
   // Submit
   const handleSave = async () => {
@@ -191,16 +206,7 @@ export default function PedidoForm({ id }: { id?: string }) {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="text-[#94A3B8] flex items-center gap-2">
-          <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>
-          Cargando datos...
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#0F1115]">
