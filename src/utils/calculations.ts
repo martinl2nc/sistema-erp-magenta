@@ -83,7 +83,7 @@ export const calculateLinesTotal = (lineas: LineaLocal[]): number => {
  *   { cantidad: 5, precio_unitario: 30.50, ... },   // 152.50
  * ];
  * 
- * const result = calculateFinancials(lineas, 50.00, true);
+ * const result = calculateQuoteTotals(lineas, 50.00, true);
  * // {
  * //   subtotal: 652.50,
  * //   descuento: 50.00,
@@ -92,7 +92,7 @@ export const calculateLinesTotal = (lineas: LineaLocal[]): number => {
  * //   total: 710.95
  * // }
  */
-export const calculateFinancials = (
+export const calculateQuoteTotals = (
   lineas: LineaLocal[],
   descuentoGlobal: number,
   aplicaIgv: boolean
@@ -156,7 +156,7 @@ export interface LineaSunatCalc {
 
 /**
  * Calcula los valores SUNAT de una línea de comprobante.
- * Separado de calculateFinancials porque la afectación IGV (Cat. 07) cambia el comportamiento.
+ * Separado de calculateQuoteTotals porque la afectación IGV (Cat. 07) cambia el comportamiento.
  *
  * @param precioUnitario - Precio unitario base (sin IGV)
  * @param cantidad - Cantidad
@@ -227,6 +227,66 @@ export const calcularTotalesSunat = (
   };
 };
 
+// ─── Totales para payload ApisPeru (recalculación defensiva SUNAT 3277) ─────
+
+export interface SunatPayloadTotals {
+  mtoOperGravadas: number;
+  mtoOperExoneradas: number;
+  mtoOperInafectas: number;
+  mtoIGV: number;
+  totalImpuestos: number;
+  valorVenta: number;
+  subTotal: number;
+  mtoImpVenta: number;
+}
+
+/**
+ * Recalcula totales del comprobante directamente desde los detalles (evita error SUNAT 3277).
+ * Separado de calcularTotalesSunat porque opera sobre detalles ya persistidos en BD,
+ * no sobre el estado del modal.
+ */
+export const buildSunatPayloadTotals = (
+  detalles: Array<{
+    mto_base_igv: number;
+    igv: number;
+    total_impuestos: number;
+    tip_afe_igv_codigo: string | null;
+  }>,
+  descuentoGlobalMonto: number,
+): SunatPayloadTotals => {
+  let mtoOperGravadas = 0;
+  let mtoOperExoneradas = 0;
+  let mtoOperInafectas = 0;
+  let mtoIGV = 0;
+  let totalImpuestos = 0;
+  let valorVenta = 0;
+
+  for (const d of detalles) {
+    const itemBase = roundToDecimal(d.mto_base_igv);
+    const itemIgv = roundToDecimal(d.igv);
+    const itemTotalImpuestos = roundToDecimal(d.total_impuestos);
+    const tipAfe = d.tip_afe_igv_codigo ? String(d.tip_afe_igv_codigo) : '10';
+
+    if (['10', '11', '12', '17'].includes(tipAfe)) {
+      mtoOperGravadas = roundToDecimal(mtoOperGravadas + itemBase);
+    } else if (['20', '21'].includes(tipAfe)) {
+      mtoOperExoneradas = roundToDecimal(mtoOperExoneradas + itemBase);
+    } else {
+      mtoOperInafectas = roundToDecimal(mtoOperInafectas + itemBase);
+    }
+
+    mtoIGV = roundToDecimal(mtoIGV + itemIgv);
+    totalImpuestos = roundToDecimal(totalImpuestos + itemTotalImpuestos);
+    valorVenta = roundToDecimal(valorVenta + itemBase);
+  }
+
+  const subTotal = roundToDecimal(valorVenta + mtoIGV);
+  const discount = roundToDecimal(descuentoGlobalMonto);
+  const mtoImpVenta = roundToDecimal(subTotal - discount);
+
+  return { mtoOperGravadas, mtoOperExoneradas, mtoOperInafectas, mtoIGV, totalImpuestos, valorVenta, subTotal, mtoImpVenta };
+};
+
 // ─── Descuentos ──────────────────────────────────────────────────────────────
 
 /**
@@ -263,3 +323,6 @@ export const calculateDiscountAmount = (
 ): number => {
   return roundToDecimal((subtotal * porcentaje) / 100);
 };
+
+/** @deprecated Use calculateQuoteTotals */
+export const calculateFinancials = calculateQuoteTotals;

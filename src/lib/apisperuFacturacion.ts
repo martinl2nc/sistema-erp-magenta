@@ -4,6 +4,9 @@
  * ⚠️  Este archivo solo se importa en API Routes (server-side).
  */
 
+import { numeroALetras } from '../utils/numeroALetras';
+import { buildSunatPayloadTotals } from '../utils/calculations';
+
 // ─── Types ───────────────────────────────────────────────────
 
 export interface ApisPeruInvoicePayload {
@@ -62,11 +65,17 @@ export interface ApisPeruDetail {
   tipAfeIgv: string;
   totalImpuestos: number;
   mtoPrecioUnitario: number;
+  descuentos?: {
+    codTipo: string;
+    montoBase: number;
+    factor: number;
+    monto: number;
+  }[];
 }
 
 export interface ApisPeruResponse {
   success?: boolean;
-  error?: string | any;
+  error?: string | unknown;
   xml?: string;
   hash?: string;
   sunatResponse?: {
@@ -122,6 +131,7 @@ export interface ComprobanteDetalle {
   tip_afe_igv_codigo: string;
   total_impuestos: number;
   mto_precio_unitario: number;
+  descuento?: number | null;
 }
 
 export interface ClienteData {
@@ -155,8 +165,6 @@ function mapTipoDocCliente(tipo: string | null): string {
 
 // ─── Build payload ───────────────────────────────────────────
 
-import { numeroALetras } from '../utils/numeroALetras';
-
 export function buildInvoicePayload(
   comprobante: ComprobanteData,
   detalles: ComprobanteDetalle[],
@@ -166,12 +174,6 @@ export function buildInvoicePayload(
   const clientName = cliente.razon_social?.trim()
     || `${cliente.nombres_contacto || ''} ${cliente.apellidos_contacto || ''}`.trim()
     || 'CLIENTE GENÉRICO';
-
-  // Usar leyendas configuradas o generar la leyenda 1000 por defecto
-  const amountInWords = numeroALetras(comprobante.mto_imp_venta);
-  const legends = comprobante.leyendas || [
-    { code: "1000", value: amountInWords }
-  ];
 
   return {
     ublVersion: '2.1',
@@ -202,37 +204,30 @@ export function buildInvoicePayload(
         ubigueo: '150101', // Lima default — puede ajustarse en empresa_configuracion
       },
     },
-    // ─── RECALCULACIÓN DEFENSIVA PARA EVITAR ERROR SUNAT 3277 ─────
-    // Sumamos los totales directamente desde el detalle para garantizar consistencia.
+    // ─── Line items (data mapping) ────────────────────────────
     ...(() => {
-      let mtoOperGravadas = 0;
-      let mtoOperExoneradas = 0;
-      let mtoOperInafectas = 0;
-      let mtoIGV = 0;
-      let totalImpuestos = 0;
-      let valorVentaTotal = 0;
+      const discountAmount = Number((comprobante.descuento_global_monto || 0).toFixed(2));
+      const descuentoGlobalCodigo = comprobante.descuento_global_codigo || '03';
 
-      const items = detalles.map((d) => {
-        const itemIgv = Number(d.igv.toFixed(2));
+      // Map items — data transformation only, no financial accumulation
+      const details = detalles.map((d) => {
         const itemBase = Number(d.mto_base_igv.toFixed(2));
+        const itemIgv = Number(d.igv.toFixed(2));
         const itemTotalImpuestos = Number(d.total_impuestos.toFixed(2));
-
-        // Acumular según afectación (Catálogo 07)
         const tipAfe = d.tip_afe_igv_codigo ? String(d.tip_afe_igv_codigo) : '10';
-        if (tipAfe === '10' || tipAfe === '11' || tipAfe === '12' || tipAfe === '17') {
-          mtoOperGravadas = Number((mtoOperGravadas + itemBase).toFixed(2));
-        } else if (tipAfe === '20' || tipAfe === '21') {
-          mtoOperExoneradas = Number((mtoOperExoneradas + itemBase).toFixed(2));
-        } else {
-          mtoOperInafectas = Number((mtoOperInafectas + itemBase).toFixed(2));
-        }
-
-        mtoIGV = Number((mtoIGV + itemIgv).toFixed(2));
-        totalImpuestos = Number((totalImpuestos + itemTotalImpuestos).toFixed(2));
-        valorVentaTotal = Number((valorVentaTotal + itemBase).toFixed(2)); // SUNAT: LineExtensionAmount sum
-
         const porcentajeIgv = Number(d.porcentaje_igv ?? 18);
         const factorImpuesto = (porcentajeIgv / 100) + 1;
+
+        // Detectar descuento de línea: explícito o implícito
+        // cuando mtoValorUnitario × cantidad > itemBase (genera cac:AllowanceCharge, evita error 3271)
+        const grossValue = Number((d.mto_valor_unitario * d.cantidad).toFixed(2));
+        const explicitDiscount = d.descuento && d.descuento > 0 ? Number(d.descuento.toFixed(2)) : 0;
+        const impliedDiscount = Number((grossValue - itemBase).toFixed(2));
+        const descuentoLinea = explicitDiscount > 0 ? explicitDiscount : (impliedDiscount > 0.005 ? impliedDiscount : null);
+        const montoBaseDescuento = descuentoLinea ? grossValue : null;
+
+        // AlternativeConditionPrice = LineExtensionAmount / Quantity × (1 + tasa) — evita error 3270
+        const mtoPrecioUnitario = Number(((itemBase / d.cantidad) * factorImpuesto).toFixed(10));
 
         return {
           codProducto: d.cod_producto || '-',
@@ -240,57 +235,53 @@ export function buildInvoicePayload(
           descripcion: d.descripcion,
           cantidad: d.cantidad,
           mtoValorUnitario: d.mto_valor_unitario,
-          mtoValorVenta: itemBase, // SUNAT espera Base en valorVenta de línea
+          mtoValorVenta: itemBase,
           mtoBaseIgv: itemBase,
-          porcentajeIgv: porcentajeIgv,
+          porcentajeIgv,
           igv: itemIgv,
           tipAfeIgv: tipAfe,
           totalImpuestos: itemTotalImpuestos,
-          mtoPrecioUnitario: Number((d.mto_valor_unitario * factorImpuesto).toFixed(10)),
+          mtoPrecioUnitario,
+          ...(descuentoLinea ? {
+            descuentos: [{
+              codTipo: '00',
+              montoBase: montoBaseDescuento!,
+              factor: Number((descuentoLinea / montoBaseDescuento!).toFixed(10)),
+              monto: descuentoLinea,
+            }],
+          } : {}),
         };
       });
 
-      const subtotalConImpuestos = Number((valorVentaTotal + mtoIGV).toFixed(2));
-      const discountAmount = Number((comprobante.descuento_global_monto || 0).toFixed(2));
-      const descuentoGlobalCodigo = comprobante.descuento_global_codigo || '03';
-      const totalFinal = Number((subtotalConImpuestos - discountAmount).toFixed(2));
+      // Totales acumulados desde calculations.ts (recalculación defensiva SUNAT 3277)
+      const totals = buildSunatPayloadTotals(detalles, discountAmount);
 
       return {
-        details: items,
-        mtoOperGravadas,
-        mtoOperExoneradas,
-        mtoOperInafectas,
-        mtoIGV,
-        totalImpuestos,
-        valorVenta: valorVentaTotal,
-        subTotal: subtotalConImpuestos,
-        mtoImpVenta: totalFinal,
+        details,
+        mtoOperGravadas: totals.mtoOperGravadas,
+        mtoOperExoneradas: totals.mtoOperExoneradas,
+        mtoOperInafectas: totals.mtoOperInafectas,
+        mtoIGV: totals.mtoIGV,
+        totalImpuestos: totals.totalImpuestos,
+        valorVenta: totals.valorVenta,
+        subTotal: totals.subTotal,
+        mtoImpVenta: totals.mtoImpVenta,
         mtoDescuentoGlobal: discountAmount > 0 ? discountAmount : undefined,
         totalDescuentos: discountAmount > 0 ? discountAmount : undefined,
         sumDsctoGlobal: discountAmount > 0 ? discountAmount : undefined,
-        sumOtrosDescuentos: discountAmount > 0 ? discountAmount : undefined, // Suma de todos los descuentos (ítem + global)
-        descuentos: discountAmount > 0 
+        sumOtrosDescuentos: discountAmount > 0 ? discountAmount : undefined,
+        descuentos: discountAmount > 0
           ? [{
-              codTipo: descuentoGlobalCodigo, // '02' o '03' según la BD
-              factor: Number((discountAmount / subtotalConImpuestos).toFixed(10)),
+              codTipo: descuentoGlobalCodigo,
+              factor: Number((discountAmount / totals.subTotal).toFixed(10)),
               monto: discountAmount,
-              montoBase: subtotalConImpuestos,
-              base: subtotalConImpuestos,
+              montoBase: totals.subTotal,
+              base: totals.subTotal,
             }]
           : undefined,
+        legends: [{ code: '1000', value: numeroALetras(totals.mtoImpVenta) }],
       };
     })(),
-    legends: [
-      {
-        code: '1000',
-        value: numeroALetras((() => {
-          const mtoIGV = detalles.reduce((acc, d) => acc + d.igv, 0);
-          const valorVentaTotal = detalles.reduce((acc, d) => acc + d.mto_base_igv, 0);
-          const subtotalConImpuestos = Number((valorVentaTotal + mtoIGV).toFixed(2));
-          return Number((subtotalConImpuestos - (comprobante.descuento_global_monto || 0)).toFixed(2));
-        })())
-      },
-    ],
   } as ApisPeruInvoicePayload;
 }
 

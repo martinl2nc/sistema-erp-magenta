@@ -5,11 +5,12 @@ import {
   buildInvoicePayload,
   sendInvoiceToApisPeru,
   getPdfFromApisPeru,
+  type ApisPeruResponse,
   type ComprobanteData,
   type ComprobanteDetalle,
   type ClienteData,
   type EmpresaData,
-} from '@/lib/apisperu-facturacion';
+} from '@/lib/apisperuFacturacion';
 
 // ─── POST /api/facturacion/emitir ────────────────────────────
 export async function POST(request: Request) {
@@ -25,6 +26,15 @@ export async function POST(request: Request) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 });
+    }
+
+    const { data: perfil } = await supabase
+      .from('perfiles_usuario')
+      .select('rol')
+      .eq('id', user.id)
+      .single();
+    if (!perfil || perfil.rol !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Acceso denegado' }, { status: 403 });
     }
 
     const { data: comprobante, error: compErr } = await supabase
@@ -56,7 +66,7 @@ export async function POST(request: Request) {
     );
 
     const supabaseAdmin = createAdminClient();
-    let apisPeruResponse = comprobante.apisperu_response as any;
+    let apisPeruResponse: ApisPeruResponse = (comprobante.apisperu_response ?? {}) as ApisPeruResponse;
 
     // 1. Enviar a SUNAT (solo si no está aceptado)
     if (!yaAceptado) {
@@ -66,15 +76,16 @@ export async function POST(request: Request) {
         const isAccepted = sunatRes?.success === true || sunatRes?.cdrResponse?.code === '0';
 
         if (!isAccepted) {
-          const errorMsg = sunatRes?.error?.message || sunatRes?.cdrResponse?.description || 'Error de SUNAT';
+          const errorMsg = sunatRes?.error?.message ?? sunatRes?.cdrResponse?.description ?? 'Error de SUNAT';
           await supabaseAdmin.from('comprobantes').update({ 
             estado_sunat: 'rechazada_sunat', 
             apisperu_response: apisPeruResponse 
           }).eq('id', comprobante_id);
           return NextResponse.json({ success: false, error: `SUNAT rechazó: ${errorMsg}`, apisPeruResponse }, { status: 400 });
         }
-      } catch (apiError: any) {
-        return NextResponse.json({ success: false, error: `Error de API: ${apiError.message}` }, { status: 502 });
+      } catch (apiError: unknown) {
+        const msg = apiError instanceof Error ? apiError.message : String(apiError);
+        return NextResponse.json({ success: false, error: `Error de API: ${msg}` }, { status: 502 });
       }
     }
 
@@ -117,7 +128,7 @@ export async function POST(request: Request) {
         } else {
           console.error('Error subiendo PDF:', upErr.message);
         }
-      } catch (e: any) { console.error('Error proceso PDF:', e.message); }
+      } catch (e: unknown) { console.error('Error proceso PDF:', e); }
     }
 
     // XML
@@ -128,13 +139,13 @@ export async function POST(request: Request) {
         const { error: upErr } = await supabaseAdmin.storage
           .from('facturas_emitidas')
           .upload(xmlPath, xmlBuffer, { upsert: true, contentType: 'application/xml' });
-        
+
         if (!upErr) {
           enlaceXml = await getFileUrl(xmlPath);
         } else {
           console.error('Error subiendo XML:', upErr.message);
         }
-      } catch (e: any) { console.error('Error proceso XML:', e.message); }
+      } catch (e: unknown) { console.error('Error proceso XML:', e); }
     }
 
     // CDR (Constancia de Recepción de SUNAT)
@@ -146,17 +157,16 @@ export async function POST(request: Request) {
         const { error: upErr } = await supabaseAdmin.storage
           .from('facturas_emitidas')
           .upload(cdrPath, cdrBuffer, { upsert: true, contentType: 'application/zip' });
-        
+
         if (!upErr) {
           enlaceCdr = await getFileUrl(cdrPath);
         } else {
           console.error('Error subiendo CDR:', upErr.message);
         }
-      } catch (e: any) { console.error('Error proceso CDR:', e.message); }
+      } catch (e: unknown) { console.error('Error proceso CDR:', e); }
     }
 
     // 3. Actualizar registro final
-    console.log('Intentando actualizar comprobante:', comprobante_id);
     const { data: updateData, error: dbErr } = await supabaseAdmin
       .from('comprobantes')
       .update({
@@ -170,16 +180,12 @@ export async function POST(request: Request) {
       .select();
 
     if (dbErr) {
-      console.error('Error final DB:', dbErr.message);
       return NextResponse.json({ success: false, error: `Error al guardar en BD: ${dbErr.message}` }, { status: 500 });
     }
 
     if (!updateData || updateData.length === 0) {
-      console.error('No se actualizó ninguna fila para id:', comprobante_id);
       return NextResponse.json({ success: false, error: 'No se encontró el registro para actualizar en la fase final' }, { status: 404 });
     }
-
-    console.log('Actualización exitosa:', updateData[0].serie_numero);
 
     if (comprobante.pedido_id) {
       await supabaseAdmin.from('pedidos').update({ estado: 'facturado' }).eq('id', comprobante.pedido_id);
@@ -195,8 +201,8 @@ export async function POST(request: Request) {
       comprobante: updateData[0]
     });
 
-  } catch (error: any) {
-    console.error('Fatal error emitir:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
