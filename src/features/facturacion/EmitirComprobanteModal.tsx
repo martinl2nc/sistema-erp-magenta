@@ -2,15 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
-import { pedidosService } from '@/services/pedidos.service';
-import { configuracionSeriesService } from '@/services/configuracionSeries.service';
-import { useEmitirComprobante, useEnviarASunat } from '@/hooks/useFacturas';
+import { usePedidoLineas, useSustentoSignedUrl } from '@/hooks/usePedidos';
+import { useEmitirComprobante, useEnviarASunat, useSerieByTipoDoc } from '@/hooks/useFacturas';
 import { useUnidadesMedida, useAfectacionesIgv, useTiposDocumento, useCargosDescuentos } from '@/hooks/useCatalogos';
 import { numeroALetras } from '@/utils/numeroALetras';
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service';
-import type { ConfiguracionSerie } from '@/services/configuracionSeries.service';
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
-import { TAX_RATES } from '@/constants';
+import { calcularLineaSunat, calcularTotalesSunat } from '@/utils/calculations';
 
 // ─── Tipos ─────────────────────────────────────────────────────
 
@@ -27,46 +25,29 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   pedido: Pedido | null;
+  onSuccess?: () => void;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────
 
-// Defaults until catalog loads
-const DEFAULT_UNIDAD = 'NIU';
 const DEFAULT_AFECTACION_GRAVADA = '10';
 const DEFAULT_AFECTACION_EXONERADA = '20';
-
-function calcularSunat(precioUnitario: number, cantidad: number, afectacionIgv: string) {
-  // Como el precio ingresado en pedidos es BASE (sin IGV):
-  const mto_valor_unitario = precioUnitario;
-  // Calculamos la base sin redondear prematuramente para mantener precisión en el cálculo del IGV
-  const base_calculo = cantidad * mto_valor_unitario;
-  const mto_base_igv = parseFloat(base_calculo.toFixed(2));
-
-  if (afectacionIgv === '10') {
-    const mto_igv = parseFloat((mto_base_igv * TAX_RATES.IGV).toFixed(2));
-    const subtotal = parseFloat((mto_base_igv + mto_igv).toFixed(2));
-    return { subtotal, mto_valor_unitario, mto_base_igv, mto_igv };
-  }
-
-  // Para exonerado/inafecto el subtotal es igual a la base
-  return { subtotal: mto_base_igv, mto_valor_unitario, mto_base_igv: mto_base_igv, mto_igv: 0 };
-}
 
 function toLineaEditable(l: PedidoLinea, defaultAfectacion: string): LineaEditable {
   return {
     ...l,
     unidad_sunat: 'NIU',
     afectacion_igv: defaultAfectacion,
-    ...calcularSunat(l.precio_unitario, l.cantidad, defaultAfectacion),
+    ...calcularLineaSunat(l.precio_unitario, l.cantidad, defaultAfectacion, l.descuento_linea_monto ?? 0),
   };
 }
 
 // ─── Componente ────────────────────────────────────────────────
 
-export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Props) {
+export default function EmitirComprobanteModal({ isOpen, onClose, pedido, onSuccess }: Props) {
   const emitirComprobante = useEmitirComprobante();
   const enviarASunatHook = useEnviarASunat();
+  const sustentoMutation = useSustentoSignedUrl();
 
   // ── Catálogos dinámicos desde BD ─────────────────────────────
   const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesMedida();
@@ -80,92 +61,48 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
   const loadingCatalogos = loadingUnidades || loadingAfectaciones || loadingTiposDoc || loadingCatalog53;
 
   const [tipoDocCodigo, setTipoDocCodigo] = useState('01'); // default Factura
-  const [direccionFacturacion, setDireccionFacturacion]= useState('');
+  const [direccionFacturacion, setDireccionFacturacion] = useState('');
   const [lineas, setLineas] = useState<LineaEditable[]>([]);
-  const [serie, setSerie] = useState<ConfiguracionSerie | null>(null);
-  const [loadingLineas, setLoadingLineas] = useState(false);
-  const [loadingSerie, setLoadingSerie] = useState(false);
-  const [isLoadingSustento, setIsLoadingSustento] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Descuento global
   const [descuentoMonto, setDescuentoMonto] = useState(0);
-  const [descuentoCodigo, setDescuentoCodigo] = useState('03'); // Descuento que NO afecta la base imponible (Cat. 53 Greenter)
+  const [descuentoCodigo, setDescuentoCodigo] = useState('03');
+
+  // ── Queries TanStack ─────────────────���────────────────────────
+  const { data: pedidoLineasData, isLoading: loadingLineas } = usePedidoLineas(pedido?.id, isOpen);
+  const { data: serie, isLoading: loadingSerie } = useSerieByTipoDoc(tipoDocCodigo, isOpen);
 
   // Inicializar tipo y dirección según el cliente una vez que los catálogos están disponibles
   useEffect(() => {
     if (!pedido || !pedido.clientes || tiposComprobante.length === 0) return;
     const cliente = pedido.clientes;
     const preferido = cliente.comprobante_preferido?.toLowerCase();
-    // Buscar el código SUNAT según preferencia del cliente
     const match = tiposComprobante.find((t) =>
       t.descripcion.toLowerCase().includes(preferido ?? 'factura')
     );
     setTipoDocCodigo(match?.codigo ?? tiposComprobante[0]?.codigo ?? '01');
     setDireccionFacturacion(cliente.direccion || '');
-  }, [pedido?.id, pedido?.clientes, tiposComprobante.length]);
+  }, [isOpen, pedido?.id, pedido?.clientes, tiposComprobante.length]);
 
-  // Cargar líneas del pedido
+  // Sincronizar líneas cuando llegan del servidor
   useEffect(() => {
-    if (!isOpen || !pedido) return;
-    const defaultAfectacion = pedido.aplica_igv ? DEFAULT_AFECTACION_GRAVADA : DEFAULT_AFECTACION_EXONERADA;
-    setLoadingLineas(true);
-    pedidosService.getPedidoLineas(pedido.id).then((data) => {
-      setLineas(data.map((l) => toLineaEditable(l, defaultAfectacion)));
-    }).catch(() => {
-      toast.error('No se pudieron cargar las líneas del pedido');
-    }).finally(() => setLoadingLineas(false));
-  }, [isOpen, pedido?.id]);
+    if (!pedidoLineasData) return;
+    const defaultAfectacion = pedido?.aplica_igv ? DEFAULT_AFECTACION_GRAVADA : DEFAULT_AFECTACION_EXONERADA;
+    setLineas(pedidoLineasData.map((l) => toLineaEditable(l, defaultAfectacion)));
+  }, [pedidoLineasData, pedido?.aplica_igv]);
 
   // Inicializar descuento desde el pedido
   useEffect(() => {
     if (pedido) {
       setDescuentoMonto(pedido.descuento_global_monto || 0);
     }
-  }, [pedido?.id]);
+  }, [isOpen, pedido?.id]);
 
-  // Cargar serie activa cuando cambia tipo de documento
-  useEffect(() => {
-    if (!isOpen || !tipoDocCodigo) return;
-    setLoadingSerie(true);
-    setSerie(null);
-    configuracionSeriesService.getSerieByTipoDoc(tipoDocCodigo).then(setSerie).catch(() => setSerie(null)).finally(() => setLoadingSerie(false));
-  }, [isOpen, tipoDocCodigo]);
-
-  // Totales calculados según modelo del usuario
-  const totales = useMemo(() => {
-    let baseGravada = 0;
-    let baseExonerada = 0;
-    let baseInafecta = 0;
-    let totalIgvOriginal = 0;
-
-    for (const l of lineas) {
-      if (l.afectacion_igv === '10') {
-        baseGravada += l.mto_base_igv;
-        totalIgvOriginal += l.mto_igv;
-      } else if (l.afectacion_igv === '20') {
-        baseExonerada += l.subtotal;
-      } else {
-        baseInafecta += l.subtotal;
-      }
-    }
-
-    // El Subtotal es la suma de bases + IGV original (tal cual el Excel del usuario)
-    const subtotalConIgv = parseFloat((baseGravada + baseExonerada + baseInafecta + totalIgvOriginal).toFixed(2));
-    
-    // El Total Final es Subtotal - Descuento Global (Cód. 03 - no afecta base)
-    const totalFinal = parseFloat((subtotalConIgv - descuentoMonto).toFixed(2));
-
-    return { 
-      subtotal: subtotalConIgv,
-      mto_oper_gravadas: parseFloat(baseGravada.toFixed(2)),
-      mto_oper_exoneradas: parseFloat(baseExonerada.toFixed(2)),
-      mto_oper_inafectas: parseFloat(baseInafecta.toFixed(2)),
-      igv: parseFloat(totalIgvOriginal.toFixed(2)),
-      total: totalFinal,
-      descuentoMonto: parseFloat(descuentoMonto.toFixed(2)) 
-    };
-  }, [lineas, descuentoMonto]);
+  const totales = useMemo(
+    () => calcularTotalesSunat(lineas, descuentoMonto),
+    [lineas, descuentoMonto],
+  );
 
   if (!isOpen || !pedido) return null;
 
@@ -178,16 +115,11 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     ? `${serie.serie}-${proximo.toString().padStart(8, '0')}`
     : null;
 
-  const handleVerSustento = async () => {
-    setIsLoadingSustento(true);
-    try {
-      const url = await pedidosService.getSustentoSignedUrl(pedido.sustento_url);
-      window.open(url, '_blank');
-    } catch {
-      toast.error('No se pudo abrir el sustento');
-    } finally {
-      setIsLoadingSustento(false);
-    }
+  const handleVerSustento = () => {
+    sustentoMutation.mutate(pedido.sustento_url, {
+      onSuccess: (url) => window.open(url, '_blank'),
+      onError: () => toast.error('No se pudo abrir el sustento'),
+    });
   };
 
   const updateUnidad = (idx: number, value: string) => {
@@ -198,7 +130,18 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
     setLineas((prev) =>
       prev.map((l, i) =>
         i === idx
-          ? { ...l, afectacion_igv: value, ...calcularSunat(l.precio_unitario, l.cantidad, value) }
+          ? { ...l, afectacion_igv: value, ...calcularLineaSunat(l.precio_unitario, l.cantidad, value, l.descuento_linea_monto ?? 0) }
+          : l
+      )
+    );
+  };
+
+  const updateDescuento = (idx: number, value: number) => {
+    const monto = Math.max(0, value);
+    setLineas((prev) =>
+      prev.map((l, i) =>
+        i === idx
+          ? { ...l, descuento_linea_monto: monto, ...calcularLineaSunat(l.precio_unitario, l.cantidad, l.afectacion_igv, monto) }
           : l
       )
     );
@@ -243,6 +186,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
           subtotal: l.subtotal,
           unidad_sunat: l.unidad_sunat,
           afectacion_igv: l.afectacion_igv,
+          descuento_linea_monto: l.descuento_linea_monto ?? 0,
         })),
         direccion_facturacion: direccionFacturacion.trim() || undefined,
         descuento_global_monto: totales.descuentoMonto,
@@ -261,6 +205,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
         toast.warning('Comprobante registrado. El envío a SUNAT falló — puede reintentar desde la bandeja.');
       }
 
+      onSuccess?.();
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al emitir el comprobante');
@@ -333,10 +278,10 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
             <p className="text-xs font-medium text-[#E2E8F0]">Sustento de Aprobación</p>
             <button
               onClick={handleVerSustento}
-              disabled={isLoadingSustento}
+              disabled={sustentoMutation.isPending}
               className="flex items-center gap-1.5 text-xs text-[#3B82F6] hover:text-blue-400 transition-colors disabled:opacity-50"
             >
-              {isLoadingSustento
+              {sustentoMutation.isPending
                 ? <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base"></iconify-icon>
                 : <iconify-icon icon="solar:eye-linear" class="text-base"></iconify-icon>
               }
@@ -444,6 +389,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-36">Afect. IGV</th>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-24 text-right">IGV</th>
                       <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-24 text-right">Subtotal</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-[70px] text-right">Desc.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#334155]">
@@ -488,6 +434,16 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
                         </td>
                         <td className="px-3 py-2 text-xs text-[#94A3B8] text-right">{formatCurrency(l.mto_igv)}</td>
                         <td className="px-3 py-2 text-xs font-medium text-[#E2E8F0] text-right">{formatCurrency(l.subtotal)}</td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={l.descuento_linea_monto ?? 0}
+                            onChange={(e) => updateDescuento(idx, parseFloat(e.target.value) || 0)}
+                            className="w-[70px] bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-red-400 text-right focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -524,6 +480,18 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido }: Prop
                 <span className="text-[#94A3B8]">Suma de Ítems</span>
                 <span className="text-[#E2E8F0]">{formatCurrency(totales.subtotal)}</span>
               </div>
+              {(() => {
+                const totalDescLineas = lineas.reduce((sum, l) => sum + (l.descuento_linea_monto ?? 0), 0);
+                if (totalDescLineas > 0) {
+                  return (
+                    <div className="flex justify-between text-xs text-red-400">
+                      <span>Desc. por Línea</span>
+                      <span>- {formatCurrency(totalDescLineas)}</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               {totales.descuentoMonto > 0 && (
                 <div className="flex justify-between text-xs text-red-400">
                   <span>Descuento Aplicado</span>

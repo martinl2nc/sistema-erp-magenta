@@ -145,6 +145,90 @@ export const areAllLinesValid = (lineas: LineaLocal[]): boolean => {
   return lineas.every(isValidLine);
 };
 
+// ─── Cálculos SUNAT por línea ───────────────────────────────────────────────
+
+export interface LineaSunatCalc {
+  mto_valor_unitario: number;
+  mto_base_igv: number;
+  mto_igv: number;
+  subtotal: number;
+}
+
+/**
+ * Calcula los valores SUNAT de una línea de comprobante.
+ * Separado de calculateFinancials porque la afectación IGV (Cat. 07) cambia el comportamiento.
+ *
+ * @param precioUnitario - Precio unitario base (sin IGV)
+ * @param cantidad - Cantidad
+ * @param afectacionIgv - Código Cat. 07 SUNAT ('10'=gravado, '20'=exonerado, otros=inafecto)
+ * @param descuentoLinea - Descuento aplicado a la línea (monto, default 0)
+ */
+export const calcularLineaSunat = (
+  precioUnitario: number,
+  cantidad: number,
+  afectacionIgv: string,
+  descuentoLinea: number = 0,
+): LineaSunatCalc => {
+  const mto_valor_unitario = precioUnitario;
+  const base_bruta = cantidad * mto_valor_unitario;
+  const mto_base_igv = roundToDecimal(Math.max(0, base_bruta - descuentoLinea));
+
+  if (afectacionIgv === '10') {
+    const mto_igv = roundToDecimal(mto_base_igv * TAX_RATES.IGV);
+    return { mto_valor_unitario, mto_base_igv, mto_igv, subtotal: roundToDecimal(mto_base_igv + mto_igv) };
+  }
+
+  return { mto_valor_unitario, mto_base_igv, mto_igv: 0, subtotal: mto_base_igv };
+};
+
+export interface TotalesSunat {
+  subtotal: number;
+  mto_oper_gravadas: number;
+  mto_oper_exoneradas: number;
+  mto_oper_inafectas: number;
+  igv: number;
+  total: number;
+  descuentoMonto: number;
+}
+
+/**
+ * Agrega los totales del comprobante por tipo de afectación IGV.
+ * Aplica el descuento global (Cód. 03) sobre el subtotal con IGV.
+ */
+export const calcularTotalesSunat = (
+  lineas: Array<Pick<LineaSunatCalc, 'mto_base_igv' | 'mto_igv' | 'subtotal'> & { afectacion_igv: string }>,
+  descuentoMonto: number,
+): TotalesSunat => {
+  let baseGravada = 0;
+  let baseExonerada = 0;
+  let baseInafecta = 0;
+  let totalIgv = 0;
+
+  for (const l of lineas) {
+    if (l.afectacion_igv === '10') {
+      baseGravada += l.mto_base_igv;
+      totalIgv += l.mto_igv;
+    } else if (l.afectacion_igv === '20') {
+      baseExonerada += l.subtotal;
+    } else {
+      baseInafecta += l.subtotal;
+    }
+  }
+
+  const subtotalConIgv = roundToDecimal(baseGravada + baseExonerada + baseInafecta + totalIgv);
+  return {
+    subtotal: subtotalConIgv,
+    mto_oper_gravadas: roundToDecimal(baseGravada),
+    mto_oper_exoneradas: roundToDecimal(baseExonerada),
+    mto_oper_inafectas: roundToDecimal(baseInafecta),
+    igv: roundToDecimal(totalIgv),
+    total: roundToDecimal(subtotalConIgv - descuentoMonto),
+    descuentoMonto: roundToDecimal(descuentoMonto),
+  };
+};
+
+// ─── Descuentos ──────────────────────────────────────────────────────────────
+
 /**
  * Calcula el descuento global como porcentaje del subtotal
  * 

@@ -67,9 +67,9 @@ export interface EmitirComprobantePayload {
     mto_base_igv: number;
     mto_igv: number;
     subtotal: number;
-    unit_sunat?: string; // unit_sunat instead of unidad_sunat to match RPC if needed
     unidad_sunat: string;
     afectacion_igv: string;
+    descuento_linea_monto?: number;
   }[];
 }
 
@@ -113,7 +113,7 @@ export const facturasService = {
         pedidos ( cotizaciones ( numero_correlativo ) )
       `)
       .order('fecha_emision', { ascending: false });
-    if (error) throw error;
+    if (error) throw new Error('No se pudieron obtener los comprobantes');
     return data || [];
   },
 
@@ -124,7 +124,7 @@ export const facturasService = {
       .select('*')
       .eq('pedido_id', pedidoId)
       .maybeSingle();
-    if (error) throw error;
+    if (error) throw new Error('No se pudo obtener el comprobante del pedido');
     return data;
   },
 
@@ -143,8 +143,10 @@ export const facturasService = {
       p_direccion_facturacion: payload.direccion_facturacion ?? null,
       p_descuento_global_monto:  payload.descuento_global_monto ?? 0,
       p_descuento_global_codigo: payload.descuento_global_codigo ?? null,
+      p_mto_oper_gravadas:     payload.mto_oper_gravadas,
+      p_mto_oper_exoneradas:   payload.mto_oper_exoneradas,
     });
-    if (error) throw error;
+    if (error) throw new Error(error.message || 'No se pudo emitir el comprobante');
     return data as string; // returns comprobante_id (UUID)
   },
 
@@ -155,7 +157,35 @@ export const facturasService = {
   }): Promise<Comprobante> {
     const supabase = createClient();
 
-    // Obtener datos del comprobante original en una sola consulta
+    // Intentar RPC atómica (migración 008); fallback a operación legacy si aún no existe
+    const { data: rpcId, error: rpcError } = await supabase.rpc('crear_nota_credito', {
+      p_comprobante_id:   payload.comprobante_id,
+      p_motivo:          payload.motivo,
+      p_tipo_nota_codigo: payload.tipo_nota_codigo ?? null,
+    });
+
+    if (rpcError) {
+      const isMissing = rpcError.code === 'PGRST202' || rpcError.message?.includes('crear_nota_credito');
+      if (!isMissing) throw new Error('No se pudo crear la nota de crédito');
+      return facturasService._createNotaCreditoLegacy(payload);
+    }
+
+    const { data, error } = await supabase
+      .from('comprobantes')
+      .select('*')
+      .eq('id', rpcId as string)
+      .single();
+    if (error) throw new Error('Nota de crédito creada pero no se pudo recuperar el registro');
+    return data;
+  },
+
+  async _createNotaCreditoLegacy(payload: {
+    comprobante_id: string;
+    motivo: string;
+    tipo_nota_codigo?: string;
+  }): Promise<Comprobante> {
+    const supabase = createClient();
+
     const { data: original, error: origErr } = await supabase
       .from('comprobantes')
       .select('pedido_id, cliente_id')
@@ -166,7 +196,7 @@ export const facturasService = {
     const { data, error } = await supabase
       .from('comprobantes')
       .insert([{
-        pedido_id:                 original.pedido_id,
+        pedido_id:                original.pedido_id,
         cliente_id:               original.cliente_id,
         tipo_doc_codigo:          '07',
         serie:                    'NC01',
@@ -179,13 +209,13 @@ export const facturasService = {
       }])
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw new Error('No se pudo crear la nota de crédito');
 
-    // Marcar comprobante original como anulado
-    await supabase
+    const { error: updateError } = await supabase
       .from('comprobantes')
       .update({ estado_sunat: 'anulada' as ComprobanteEstadoSunat })
       .eq('id', payload.comprobante_id);
+    if (updateError) throw new Error('Nota de crédito creada pero no se pudo anular el comprobante original');
 
     return data;
   },
