@@ -10,6 +10,7 @@ export interface CompanyConfig {
   cuentas_bancarias: string | null;
   terminos_condiciones: string | null;
   logo_url: string | null;
+  detraccion_cuenta_bn: string | null;
 }
 
 export interface CompanyConfigFormData {
@@ -19,6 +20,7 @@ export interface CompanyConfigFormData {
   cuentas_bancarias: string;
   terminos_condiciones: string;
   logo_url: string | null;
+  detraccion_cuenta_bn: string;
 }
 
 // ─── Service Functions (Capa 1) ──────────────────────────────
@@ -103,20 +105,16 @@ export const uploadCompanyLogo = async (file: File): Promise<string> => {
  */
 export const deleteCompanyLogo = async (publicUrl: string): Promise<void> => {
   const supabase = createClient();
-  try {
-    const urlParts = publicUrl.split('/company-assets/');
-    if (urlParts.length !== 2) return;
+  const urlParts = publicUrl.split('/company-assets/');
+  if (urlParts.length !== 2) return;
 
-    const filePath = urlParts[1];
+  const filePath = urlParts[1];
 
-    const { error } = await supabase.storage
-      .from('company-assets')
-      .remove([filePath]);
+  const { error } = await supabase.storage
+    .from('company-assets')
+    .remove([filePath]);
 
-    if (error) {
-      console.error('Error al eliminar logo del storage:', error);
-    }
-  } catch (err) {
-    console.error('Unexpected error deleting company logo:', err);
+  if (error) {
+    throw new Error('Error al eliminar logo del storage: ' + error.message);
   }
 };

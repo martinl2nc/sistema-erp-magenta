@@ -33,6 +33,18 @@ export interface CatCargoDescuento {
   active: boolean;
 }
 
+export interface CatTipoOperacion {
+  codigo: string;
+  descripcion: string;
+  activo: boolean;
+}
+
+export interface CatBienServicioDetraccion {
+  codigo: string;
+  descripcion: string;
+  activo: boolean;
+}
+
 // ─── Service ─────────────────────────────────────────────────
 
 export const catalogosService = {
@@ -42,7 +54,7 @@ export const catalogosService = {
       .from('cat_unidades_medida')
       .select('codigo, descripcion')
       .order('codigo');
-    if (error) throw error;
+    if (error) throw new Error('Error al cargar unidades de medida: ' + error.message);
     return data || [];
   },
 
@@ -52,7 +64,7 @@ export const catalogosService = {
       .from('cat_tipo_afectacion_igv')
       .select('codigo, descripcion, tipo')
       .order('codigo');
-    if (error) throw error;
+    if (error) throw new Error('Error al cargar afectaciones IGV: ' + error.message);
     return data || [];
   },
 
@@ -63,7 +75,7 @@ export const catalogosService = {
       .select('codigo, descripcion, categoria, activo')
       .eq('activo', true)
       .order('codigo');
-    if (error) throw error;
+    if (error) throw new Error('Error al cargar tipos de documento: ' + error.message);
     return data || [];
   },
 
@@ -74,7 +86,7 @@ export const catalogosService = {
       .select('codigo, descripcion, activo')
       .eq('activo', true)
       .order('codigo');
-    if (error) throw error;
+    if (error) throw new Error('Error al cargar tipos de nota de crédito: ' + error.message);
     return data || [];
   },
 
@@ -85,7 +97,29 @@ export const catalogosService = {
       .select('codigo, descripcion, tipo, active')
       .eq('active', true)
       .order('codigo');
-    if (error) throw error;
+    if (error) throw new Error('Error al cargar cargos y descuentos: ' + error.message);
+    return data || [];
+  },
+
+  async getTiposOperacion(): Promise<CatTipoOperacion[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('cat_tipo_operacion')
+      .select('codigo, descripcion, activo')
+      .eq('activo', true)
+      .order('codigo');
+    if (error) throw new Error('Error al cargar tipos de operación: ' + error.message);
+    return data || [];
+  },
+
+  async getBienesDetraccion(): Promise<CatBienServicioDetraccion[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('cat_bien_servicio_detraccion')
+      .select('codigo, descripcion, activo')
+      .eq('activo', true)
+      .order('codigo');
+    if (error) throw new Error('Error al cargar bienes de detracción: ' + error.message);
     return data || [];
   },
 };

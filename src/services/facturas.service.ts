@@ -45,19 +45,27 @@ export interface Comprobante {
 export type Factura = Comprobante;
 export type FacturaEstado = ComprobanteEstadoSunat;
 
+export interface DetraccionPayload {
+  cod_bien: string;
+  cod_medio_pago: string;
+  porcentaje: number;
+  monto: number;
+  cuenta_bn: string;
+}
+
 export interface EmitirComprobantePayload {
   pedido_id: string;
   tipo_doc_codigo: string; // '01' | '03'
   cliente_id: string;
   fecha_emision: string; // 'YYYY-MM-DD'
   subtotal: number;
-  mto_oper_gravadas: number;
-  mto_oper_exoneradas: number;
   igv_monto: number;
   total: number;
   descuento_global_monto?: number;
   descuento_global_codigo?: string;
   direccion_facturacion?: string;
+  tipo_operacion?: string; // Cat. 51 — default '0101'
+  detraccion?: DetraccionPayload;
   lineas: {
     producto_id: string | null;
     nombre_producto: string;
@@ -132,19 +140,23 @@ export const facturasService = {
     const supabase = createClient();
 
     const { data, error } = await supabase.rpc('emitir_comprobante', {
-      p_pedido_id:             payload.pedido_id,
-      p_tipo_doc_codigo:       payload.tipo_doc_codigo,
-      p_cliente_id:            payload.cliente_id,
-      p_fecha_emision:         payload.fecha_emision,
-      p_subtotal:              payload.subtotal,
-      p_igv_monto:             payload.igv_monto,
-      p_total:                 payload.total,
-      p_lineas:                payload.lineas,
-      p_direccion_facturacion: payload.direccion_facturacion ?? null,
-      p_descuento_global_monto:  payload.descuento_global_monto ?? 0,
-      p_descuento_global_codigo: payload.descuento_global_codigo ?? null,
-      p_mto_oper_gravadas:     payload.mto_oper_gravadas,
-      p_mto_oper_exoneradas:   payload.mto_oper_exoneradas,
+      p_pedido_id:                 payload.pedido_id,
+      p_tipo_doc_codigo:           payload.tipo_doc_codigo,
+      p_cliente_id:                payload.cliente_id,
+      p_fecha_emision:             payload.fecha_emision,
+      p_subtotal:                  payload.subtotal,
+      p_igv_monto:                 payload.igv_monto,
+      p_total:                     payload.total,
+      p_lineas:                    payload.lineas,
+      p_direccion_facturacion:     payload.direccion_facturacion ?? null,
+      p_descuento_global_monto:    payload.descuento_global_monto ?? 0,
+      p_descuento_global_codigo:   payload.descuento_global_codigo ?? null,
+      p_tipo_operacion:            payload.tipo_operacion ?? '0101',
+      p_detraccion_cod_bien:       payload.detraccion?.cod_bien ?? null,
+      p_detraccion_cod_medio_pago: payload.detraccion?.cod_medio_pago ?? null,
+      p_detraccion_porcentaje:     payload.detraccion?.porcentaje ?? null,
+      p_detraccion_monto:          payload.detraccion?.monto ?? null,
+      p_detraccion_cuenta_bn:      payload.detraccion?.cuenta_bn ?? null,
     });
     if (error) throw new Error(error.message || 'No se pudo emitir el comprobante');
     return data as string; // returns comprobante_id (UUID)

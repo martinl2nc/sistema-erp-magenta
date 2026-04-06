@@ -11,12 +11,14 @@ const CATALOG_OPTIONS = {
 };
 
 export const catalogosKeys = {
-  all: ['catalogos'] as const,
-  unidades: () => [...catalogosKeys.all, 'unidades_medida'] as const,
-  afectaciones: () => [...catalogosKeys.all, 'afectacion_igv'] as const,
-  tiposDocumento: () => [...catalogosKeys.all, 'tipo_documento'] as const,
-  tiposNotaCredito: () => [...catalogosKeys.all, 'tipo_nota_credito'] as const,
-  cargosDescuentos: () => [...catalogosKeys.all, 'cargos_descuentos'] as const,
+  all: () => ['catalogos'] as const,
+  unidades: () => [...catalogosKeys.all(), 'unidades_medida'] as const,
+  afectaciones: () => [...catalogosKeys.all(), 'afectacion_igv'] as const,
+  tiposDocumento: () => [...catalogosKeys.all(), 'tipo_documento'] as const,
+  tiposNotaCredito: () => [...catalogosKeys.all(), 'tipo_nota_credito'] as const,
+  cargosDescuentos: () => [...catalogosKeys.all(), 'cargos_descuentos'] as const,
+  tiposOperacion: () => [...catalogosKeys.all(), 'tipo_operacion'] as const,
+  bienesDetraccion: () => [...catalogosKeys.all(), 'bien_servicio_detraccion'] as const,
 };
 
 export function useUnidadesMedida() {
@@ -55,6 +57,22 @@ export function useCargosDescuentos() {
   return useQuery({
     queryKey: catalogosKeys.cargosDescuentos(),
     queryFn: catalogosService.getCargosDescuentos,
+    ...CATALOG_OPTIONS,
+  });
+}
+
+export function useTiposOperacion() {
+  return useQuery({
+    queryKey: catalogosKeys.tiposOperacion(),
+    queryFn: catalogosService.getTiposOperacion,
+    ...CATALOG_OPTIONS,
+  });
+}
+
+export function useBienesDetraccion() {
+  return useQuery({
+    queryKey: catalogosKeys.bienesDetraccion(),
+    queryFn: catalogosService.getBienesDetraccion,
     ...CATALOG_OPTIONS,
   });
 }
