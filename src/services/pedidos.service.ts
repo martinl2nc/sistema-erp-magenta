@@ -11,6 +11,7 @@ export interface PedidoLinea {
   precio_unitario: number;
   subtotal_linea: number;
   descuento_linea_monto: number;
+  sku: string | null; // SKU del producto para facturación
 }
 
 export interface CreatePedidoLineaPayload {
@@ -165,10 +166,14 @@ export const pedidosService = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('pedidos_lineas')
-      .select('*')
+      .select('*, productos(sku)')
       .eq('pedido_id', pedidoId);
     if (error) throw error;
-    return data || [];
+    // Normalizar: extraer sku del join
+    return (data || []).map((l: Record<string, unknown>) => ({
+      ...l,
+      sku: (l.productos as Record<string, unknown>)?.sku as string | null ?? null,
+    }));
   },
 
   async createPedidoLineas(lineas: CreatePedidoLineaPayload[]): Promise<void> {
