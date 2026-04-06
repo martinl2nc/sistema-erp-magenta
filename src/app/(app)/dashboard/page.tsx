@@ -15,7 +15,6 @@ import { FinancialMetrics } from '@/components/dashboard/FinancialMetrics';
 import { AlertsSection } from '@/components/dashboard/AlertsSection';
 import { DateRangeFilter, DateRange } from '@/components/dashboard/DateRangeFilter';
 import { ComparisonBadge } from '@/components/dashboard/ComparisonBadge';
-import { ExportButton } from '@/components/dashboard/ExportButton';
 import { Tooltip as CustomTooltip } from '@/components/dashboard/Tooltip';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardService } from '@/services/dashboard.service';
@@ -156,7 +155,7 @@ export default function DashboardPage() {
   }));
 
   return (
-    <div ref={dashboardRef} className="p-6 space-y-6 max-w-screen-xl mx-auto">
+    <div ref={dashboardRef} id="dashboard-export-root" className="p-6 space-y-6 max-w-screen-xl mx-auto">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#E2E8F0]">Dashboard</h1>
@@ -164,7 +163,6 @@ export default function DashboardPage() {
             {isAdmin ? 'Resumen general de todas las cotizaciones' : 'Resumen de tus cotizaciones'}
           </p>
         </div>
-        <ExportButton dashboardRef={dashboardRef} filename="dashboard-cotizaciones" />
       </div>
 
       {/* Filtro de rango de fechas */}

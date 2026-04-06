@@ -16,6 +16,7 @@ export function ExportButton({ dashboardRef, filename = 'dashboard' }: ExportBut
     if (!dashboardRef.current) return;
 
     setIsExporting(true);
+
     try {
       // Capturar el dashboard como imagen
       const canvas = await html2canvas(dashboardRef.current, {
@@ -24,12 +25,38 @@ export function ExportButton({ dashboardRef, filename = 'dashboard' }: ExportBut
         backgroundColor: '#0F1115',
         windowWidth: dashboardRef.current.scrollWidth,
         windowHeight: dashboardRef.current.scrollHeight,
+        logging: false,
+        onclone: (clonedDoc) => {
+          // Forzar todos los elementos a usar colores compatibles
+          const allElements = clonedDoc.querySelectorAll('*');
+          allElements.forEach((el) => {
+            const htmlEl = el as HTMLElement;
+            const computed = window.getComputedStyle(el);
+            
+            // Forzar colores a hex/rgb para evitar lab()
+            if (computed.color) {
+              try {
+                htmlEl.style.color = computed.color.startsWith('rgb') ? computed.color : '#E2E8F0';
+              } catch (e) {
+                htmlEl.style.color = '#E2E8F0';
+              }
+            }
+            
+            if (computed.backgroundColor) {
+              try {
+                htmlEl.style.backgroundColor = computed.backgroundColor.startsWith('rgb') ? computed.backgroundColor : 'transparent';
+              } catch (e) {
+                htmlEl.style.backgroundColor = 'transparent';
+              }
+            }
+          });
+        },
       });
 
-      // Crear PDF
+      // Crear PDF en modo landscape para capturar mejor el dashboard
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4',
       });
@@ -38,13 +65,19 @@ export function ExportButton({ dashboardRef, filename = 'dashboard' }: ExportBut
       const pdfHeight = pdf.internal.pageSize.getHeight();
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
+      
+      // Calcular dimensiones manteniendo aspect ratio
       const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
-      const imgY = 10;
+      const finalWidth = imgWidth * ratio;
+      const finalHeight = imgHeight * ratio;
+      
+      // Centrar imagen en el PDF
+      const imgX = (pdfWidth - finalWidth) / 2;
+      const imgY = (pdfHeight - finalHeight) / 2;
 
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+      pdf.addImage(imgData, 'PNG', imgX, imgY, finalWidth, finalHeight);
 
-      // Descargar
+      // Descargar con timestamp
       const timestamp = new Date().toISOString().split('T')[0];
       pdf.save(`${filename}-${timestamp}.pdf`);
     } catch (error) {
