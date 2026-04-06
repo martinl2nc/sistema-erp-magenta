@@ -20,6 +20,7 @@ interface LineaEditable extends PedidoLinea {
   mto_base_igv: number;
   mto_igv: number;
   subtotal: number;
+  sku: string | null;
 }
 
 interface Props {
@@ -37,6 +38,7 @@ const DEFAULT_AFECTACION_EXONERADA = '20';
 function toLineaEditable(l: PedidoLinea, defaultAfectacion: string): LineaEditable {
   return {
     ...l,
+    sku: l.sku ?? null,
     unidad_sunat: 'NIU',
     afectacion_igv: defaultAfectacion,
     ...calcularLineaSunat(l.precio_unitario, l.cantidad, defaultAfectacion, l.descuento_linea_monto ?? 0),
@@ -219,6 +221,7 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido, onSucc
         total: totales.total,
         lineas: lineas.map((l) => ({
           producto_id: l.producto_id,
+          sku: l.sku,
           nombre_producto: l.nombre_producto_historico,
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,

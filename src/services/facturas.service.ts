@@ -68,6 +68,7 @@ export interface EmitirComprobantePayload {
   detraccion?: DetraccionPayload;
   lineas: {
     producto_id: string | null;
+    sku: string | null;
     nombre_producto: string;
     cantidad: number;
     precio_unitario: number;
