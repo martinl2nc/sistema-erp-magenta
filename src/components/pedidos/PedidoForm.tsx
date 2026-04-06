@@ -188,7 +188,11 @@ export default function PedidoForm({
       }));
 
       if (isEditing && id) {
-        await updatePedido.mutateAsync({ id, payload: payload as any, lineas: lineasPayload });
+        await updatePedido.mutateAsync({ 
+          id, 
+          payload: payload as any, 
+          lineas: lineasPayload.map(l => ({ ...l, pedido_id: id }))
+        });
         toast.success('Pedido actualizado correctamente');
       } else {
         const nuevoPedido = await createPedido.mutateAsync(payload as any);
