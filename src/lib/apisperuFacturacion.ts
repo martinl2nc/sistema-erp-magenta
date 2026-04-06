@@ -6,8 +6,18 @@
 
 import { numeroALetras } from '../utils/numeroALetras';
 import { buildSunatPayloadTotals } from '../utils/calculations';
+import { TAX_RATES } from '@/constants';
 
 // ─── Types ───────────────────────────────────────────────────
+
+export interface ApisPeruDetraccion {
+  codBienDetraccion: string; // Cat. 54 — campo REAL en ApisPerú (NO codBienServicio)
+  codMedioPago: string;       // '001'=Depósito en cta, '002'=Giro, '003'=Transferencia
+  ctaBanco: string;
+  percent: number;
+  mount: number;
+  valueRef?: number;          // mtoImpVenta (opcional)
+}
 
 export interface ApisPeruInvoicePayload {
   ublVersion: string;
@@ -50,6 +60,7 @@ export interface ApisPeruInvoicePayload {
     montoBase: number;
     base: number;
   }[];
+  detraccion?: ApisPeruDetraccion;
 }
 
 export interface ApisPeruDetail {
@@ -116,6 +127,12 @@ export interface ComprobanteData {
   leyendas: { code: string; value: string }[] | null;
   descuento_global_monto?: number;
   descuento_global_codigo?: string;
+  // Detracción
+  detraccion_cod_bien: string | null;
+  detraccion_cod_medio_pago: string | null;
+  detraccion_porcentaje: number | null;
+  detraccion_monto: number | null;
+  detraccion_cuenta_bn: string | null;
 }
 
 export interface ComprobanteDetalle {
@@ -215,7 +232,7 @@ export function buildInvoicePayload(
         const itemIgv = Number(d.igv.toFixed(2));
         const itemTotalImpuestos = Number(d.total_impuestos.toFixed(2));
         const tipAfe = d.tip_afe_igv_codigo ? String(d.tip_afe_igv_codigo) : '10';
-        const porcentajeIgv = Number(d.porcentaje_igv ?? 18);
+        const porcentajeIgv = Number(d.porcentaje_igv ?? (TAX_RATES.IGV * 100));
         const factorImpuesto = (porcentajeIgv / 100) + 1;
 
         // Detectar descuento de línea: explícito o implícito
@@ -279,9 +296,23 @@ export function buildInvoicePayload(
               base: totals.subTotal,
             }]
           : undefined,
-        legends: [{ code: '1000', value: numeroALetras(totals.mtoImpVenta) }],
+        legends: [
+          { code: '1000', value: numeroALetras(totals.mtoImpVenta) },
+          ...(comprobante.detraccion_cod_bien ? [{ code: '2006', value: 'Operación sujeta a detracción' }] : []),
+        ],
       };
     })(),
+    // Detracción — solo se incluye cuando la operación está sujeta a detracción
+    ...(comprobante.detraccion_cod_bien ? {
+      detraccion: {
+        codBienDetraccion: comprobante.detraccion_cod_bien,
+        codMedioPago: comprobante.detraccion_cod_medio_pago ?? '001',
+        ctaBanco: comprobante.detraccion_cuenta_bn ?? '',
+        percent: comprobante.detraccion_porcentaje ?? 0,
+        mount: comprobante.detraccion_monto ?? 0,
+        valueRef: comprobante.mto_imp_venta,
+      } satisfies ApisPeruDetraccion,
+    } : {}),
   } as ApisPeruInvoicePayload;
 }
 

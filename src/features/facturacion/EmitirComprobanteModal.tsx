@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import { usePedidoLineas, useSustentoSignedUrl } from '@/hooks/usePedidos';
 import { useEmitirComprobante, useEnviarASunat, useSerieByTipoDoc } from '@/hooks/useFacturas';
-import { useUnidadesMedida, useAfectacionesIgv, useTiposDocumento, useCargosDescuentos } from '@/hooks/useCatalogos';
+import { useUnidadesMedida, useAfectacionesIgv, useTiposDocumento, useCargosDescuentos, useTiposOperacion, useBienesDetraccion } from '@/hooks/useCatalogos';
+import { useCompanyConfig } from '@/hooks/useCompanyConfig';
 import { numeroALetras } from '@/utils/numeroALetras';
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service';
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
@@ -54,10 +55,19 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido, onSucc
   const { data: afectaciones = [], isLoading: loadingAfectaciones } = useAfectacionesIgv();
   const { data: tiposDoc = [], isLoading: loadingTiposDoc } = useTiposDocumento();
   const { data: cargosDescuentos = [], isLoading: loadingCatalog53 } = useCargosDescuentos();
+  const { data: tiposOperacion = [] } = useTiposOperacion();
+  const { data: bienesDetraccion = [] } = useBienesDetraccion();
+  const { data: companyConfig } = useCompanyConfig();
 
   // Solo comprobantes activos (01=Factura, 03=Boleta)
-  const tiposComprobante = tiposDoc.filter((t) => t.categoria === 'comprobante');
-  const descuentosSunat = cargosDescuentos.filter((c) => c.tipo === 'descuento');
+  const tiposComprobante = useMemo(
+    () => tiposDoc.filter((t) => t.categoria === 'comprobante'),
+    [tiposDoc],
+  );
+  const descuentosSunat = useMemo(
+    () => cargosDescuentos.filter((c) => c.tipo === 'descuento'),
+    [cargosDescuentos],
+  );
   const loadingCatalogos = loadingUnidades || loadingAfectaciones || loadingTiposDoc || loadingCatalog53;
 
   const [tipoDocCodigo, setTipoDocCodigo] = useState('01'); // default Factura
@@ -68,6 +78,14 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido, onSucc
   // Descuento global
   const [descuentoMonto, setDescuentoMonto] = useState(0);
   const [descuentoCodigo, setDescuentoCodigo] = useState('03');
+
+  // Tipo de operación y detracción (Cat. 51 / Cat. 54)
+  const [tipoOperacion, setTipoOperacion] = useState('0101');
+  const [detraccionCodBien, setDetraccionCodBien] = useState('');
+  const [detraccionCodMedioPago, setDetraccionCodMedioPago] = useState('001');
+  const [detraccionPorcentaje, setDetraccionPorcentaje] = useState(0);
+  const [detraccionMonto, setDetraccionMonto] = useState(0);
+  const [detraccionCuentaBn, setDetraccionCuentaBn] = useState('');
 
   // ── Queries TanStack ─────────────────���────────────────────────
   const { data: pedidoLineasData, isLoading: loadingLineas } = usePedidoLineas(pedido?.id, isOpen);
@@ -103,6 +121,32 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido, onSucc
     () => calcularTotalesSunat(lineas, descuentoMonto),
     [lineas, descuentoMonto],
   );
+
+  // Pre-fill cuenta BN desde configuración de empresa cuando se activa detracción
+  useEffect(() => {
+    if (tipoOperacion === '1001' && companyConfig?.detraccion_cuenta_bn) {
+      setDetraccionCuentaBn(prev => prev || companyConfig.detraccion_cuenta_bn || '');
+    }
+  }, [tipoOperacion, companyConfig?.detraccion_cuenta_bn]);
+
+  // Auto-calcular monto de detracción cuando cambia el total o el porcentaje
+  useEffect(() => {
+    if (tipoOperacion === '1001' && detraccionPorcentaje > 0) {
+      setDetraccionMonto(Number((totales.total * (detraccionPorcentaje / 100)).toFixed(2)));
+    }
+  }, [totales.total, detraccionPorcentaje, tipoOperacion]);
+
+  // Reset detracción al cerrar modal
+  useEffect(() => {
+    if (!isOpen) {
+      setTipoOperacion('0101');
+      setDetraccionCodBien('');
+      setDetraccionCodMedioPago('001');
+      setDetraccionPorcentaje(0);
+      setDetraccionMonto(0);
+      setDetraccionCuentaBn('');
+    }
+  }, [isOpen]);
 
   if (!isOpen || !pedido) return null;
 
@@ -171,8 +215,6 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido, onSucc
         cliente_id: cliente.id,
         fecha_emision: fechaHoy,
         subtotal: totales.subtotal,
-        mto_oper_gravadas: totales.mto_oper_gravadas,
-        mto_oper_exoneradas: totales.mto_oper_exoneradas,
         igv_monto: totales.igv,
         total: totales.total,
         lineas: lineas.map((l) => ({
@@ -191,6 +233,14 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido, onSucc
         direccion_facturacion: direccionFacturacion.trim() || undefined,
         descuento_global_monto: totales.descuentoMonto,
         descuento_global_codigo: descuentoCodigo,
+        tipo_operacion: tipoOperacion,
+        detraccion: tipoOperacion === '1001' ? {
+          cod_bien: detraccionCodBien,
+          cod_medio_pago: detraccionCodMedioPago,
+          porcentaje: detraccionPorcentaje,
+          monto: detraccionMonto,
+          cuenta_bn: detraccionCuentaBn,
+        } : undefined,
       });
 
       // Enviar a SUNAT via API Route interna (no-fatal: el comprobante ya está en BD)
@@ -339,6 +389,115 @@ export default function EmitirComprobanteModal({ isOpen, onClose, pedido, onSucc
               )}
             </div>
           </div>
+
+          {/* Tipo de Operación (Cat. 51) */}
+          {tiposOperacion.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                Tipo de Operación <span className="text-[#94A3B8] font-normal">(Catálogo 51 SUNAT)</span>
+              </label>
+              <select
+                value={tipoOperacion}
+                onChange={(e) => setTipoOperacion(e.target.value)}
+                className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
+              >
+                {tiposOperacion.map((t) => (
+                  <option key={t.codigo} value={t.codigo}>
+                    {t.codigo} – {t.descripcion}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Sección Detracción — visible solo cuando tipo = 1001 */}
+          {tipoOperacion === '1001' && (
+            <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-lg space-y-4">
+              <div className="flex items-center gap-2">
+                <iconify-icon icon="solar:bill-check-linear" class="text-amber-400 text-base shrink-0"></iconify-icon>
+                <p className="text-xs font-semibold text-amber-400">Datos de Detracción</p>
+              </div>
+
+              {/* Bien / Servicio + Porcentaje */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                    Bien / Servicio <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={detraccionCodBien}
+                    onChange={(e) => setDetraccionCodBien(e.target.value)}
+                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {bienesDetraccion.map((b) => (
+                      <option key={b.codigo} value={b.codigo}>
+                        {b.codigo} – {b.descripcion}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                    Porcentaje (%) <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={detraccionPorcentaje}
+                    onChange={(e) => setDetraccionPorcentaje(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Monto + Cuenta BN */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                    Monto Detracción
+                    <span className="ml-1 text-[#64748B] font-normal">(auto-calculado)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={detraccionMonto}
+                    onChange={(e) => setDetraccionMonto(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-amber-300 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                    Cuenta Banco de la Nación <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={detraccionCuentaBn}
+                    onChange={(e) => setDetraccionCuentaBn(e.target.value)}
+                    placeholder="Ej. 00-123456-0-01"
+                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Medio de Pago */}
+              <div>
+                <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">Medio de Pago</label>
+                <select
+                  value={detraccionCodMedioPago}
+                  onChange={(e) => setDetraccionCodMedioPago(e.target.value)}
+                  className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                >
+                  <option value="001">001 – Depósito en cuenta</option>
+                  <option value="002">002 – Giro</option>
+                  <option value="003">003 – Transferencia de fondos</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Dirección de facturación */}
           <div>
