@@ -41,10 +41,6 @@ export interface Comprobante {
   };
 }
 
-// --- Backward-compat aliases used by pages ---
-export type Factura = Comprobante;
-export type FacturaEstado = ComprobanteEstadoSunat;
-
 export interface DetraccionPayload {
   cod_bien: string;
   cod_medio_pago: string;
@@ -54,7 +50,7 @@ export interface DetraccionPayload {
 }
 
 export interface EmitirComprobantePayload {
-  pedido_id: string;
+  pedido_id: string | null;
   tipo_doc_codigo: string; // '01' | '03'
   cliente_id: string;
   fecha_emision: string; // 'YYYY-MM-DD'

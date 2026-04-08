@@ -54,6 +54,20 @@ export const getActiveClients = async (): Promise<Client[]> => {
   return data as Client[];
 };
 
+// Variante SSR: acepta cualquier cliente Supabase (browser o server)
+export const getActiveClientsSSR = async (
+  supabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>,
+): Promise<Client[]> => {
+  const { data, error } = await supabase
+    .from('clientes')
+    .select('*')
+    .eq('activo', true)
+    .order('fecha_creacion', { ascending: false });
+
+  if (error) throw new Error('Error al cargar clientes activos: ' + error.message);
+  return (data ?? []) as Client[];
+};
+
 export const createClientRecord = async (client: ClientFormData): Promise<Client> => {
   const supabase = createClient();
   const { data, error } = await supabase
