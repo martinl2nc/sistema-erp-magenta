@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { usePedidosList } from '@/hooks/usePedidos';
 import { useFacturasList, useEnviarASunat } from '@/hooks/useFacturas';
@@ -33,9 +34,10 @@ const ESTADO_LABELS: Record<string, string> = {
 // TIPO_DOC_LABELS se construye dinámicamente desde cat_tipo_documento
 
 export default function FacturacionPage() {
+  const router = useRouter();
   const { role } = useAuth();
-  const { data: pedidos = [], isLoading: loadingPedidos } = usePedidosList();
-  const { data: comprobantes = [], isLoading: loadingComprobantes, refetch: fetchComprobantes } = useFacturasList();
+  const { data: pedidos = [], isLoading: loadingPedidos, isError: errorPedidos } = usePedidosList();
+  const { data: comprobantes = [], isLoading: loadingComprobantes, isError: errorComprobantes } = useFacturasList();
   const { mutateAsync: enviarASunat } = useEnviarASunat();
   const { data: tiposDoc = [] } = useTiposDocumento();
 
@@ -77,23 +79,33 @@ export default function FacturacionPage() {
   };
 
   const getClienteNameComprobante = (f: Comprobante) => {
-    const c = f.clientes;
-    if (!c) return '—';
-    return c.razon_social?.trim() || `${c.nombres_contacto} ${c.apellidos_contacto}`.trim() || '—';
+    if (!f.clientes) return '—';
+    return getClientDisplayName(f.clientes) || '—';
   };
 
   return (
     <div className="max-w-7xl w-full mx-auto flex flex-col md:h-full">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-[#E2E8F0]">Facturación</h1>
-        <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
-          <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
-          {pendientes.length} pendiente{pendientes.length !== 1 ? 's' : ''}
-          {procesando.length > 0 && (
-            <>
-              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block ml-2"></span>
-              {procesando.length} procesando
-            </>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
+            {pendientes.length} pendiente{pendientes.length !== 1 ? 's' : ''}
+            {procesando.length > 0 && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-blue-400 inline-block ml-2"></span>
+                {procesando.length} procesando
+              </>
+            )}
+          </div>
+          {role === 'admin' && (
+            <button
+              onClick={() => router.push('/facturacion/nueva')}
+              className="flex items-center gap-1.5 bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+            >
+              <iconify-icon icon="solar:add-circle-linear" class="text-sm"></iconify-icon>
+              Crear Factura
+            </button>
           )}
         </div>
       </div>
@@ -130,14 +142,21 @@ export default function FacturacionPage() {
             </div>
           )}
 
-          {!loadingPedidos && pendientes.length === 0 && (
+          {errorPedidos && (
+            <div className="flex flex-col items-center justify-center gap-2 p-8 text-center">
+              <iconify-icon icon="solar:danger-triangle-linear" class="text-3xl text-[#EF4444]"></iconify-icon>
+              <p className="text-sm text-[#94A3B8]">Error al cargar los pedidos pendientes.</p>
+            </div>
+          )}
+
+          {!loadingPedidos && !errorPedidos && pendientes.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
               <iconify-icon icon="solar:check-circle-linear" class="text-5xl text-[#10B981]/40"></iconify-icon>
               <p className="text-sm text-[#94A3B8]">No hay pedidos pendientes de facturación.</p>
             </div>
           )}
 
-          {!loadingPedidos && pendientes.length > 0 && (
+          {!loadingPedidos && !errorPedidos && pendientes.length > 0 && (
             <>
               {/* Mobile cards */}
               <div className="md:hidden space-y-3 p-4">
@@ -228,14 +247,21 @@ export default function FacturacionPage() {
             </div>
           )}
 
-          {!loadingComprobantes && comprobantes.length === 0 && (
+          {errorComprobantes && (
+            <div className="flex flex-col items-center justify-center gap-2 p-8 text-center">
+              <iconify-icon icon="solar:danger-triangle-linear" class="text-3xl text-[#EF4444]"></iconify-icon>
+              <p className="text-sm text-[#94A3B8]">Error al cargar los comprobantes.</p>
+            </div>
+          )}
+
+          {!loadingComprobantes && !errorComprobantes && comprobantes.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
               <iconify-icon icon="solar:bill-list-linear" class="text-5xl text-[#334155]"></iconify-icon>
               <p className="text-sm text-[#94A3B8]">No hay comprobantes emitidos aún.</p>
             </div>
           )}
 
-          {!loadingComprobantes && comprobantes.length > 0 && (
+          {!loadingComprobantes && !errorComprobantes && comprobantes.length > 0 && (
             <>
               {/* Mobile cards */}
               <div className="md:hidden space-y-3 p-4">
@@ -274,14 +300,18 @@ export default function FacturacionPage() {
                           CDR
                         </a>
                       )}
-                      {['aceptada_sunat', 'rechazada_sunat', 'emitida'].includes(f.estado_sunat) && (
+                      {['borrador', 'aceptada_sunat', 'rechazada_sunat', 'emitida'].includes(f.estado_sunat) && (
                         <button
                           onClick={async () => {
-                            const res = await enviarASunat(f.id);
-                            if (res.success) {
-                              toast.success(`Comprobante ${f.serie_numero} procesado con éxito`);
-                            } else {
-                              toast.error(res.error || 'Error al procesar comprobante');
+                            try {
+                              const res = await enviarASunat(f.id);
+                              if (res.success) {
+                                toast.success(`Comprobante ${f.serie_numero} procesado con éxito`);
+                              } else {
+                                toast.error(res.error || 'Error al procesar comprobante');
+                              }
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'Error al procesar comprobante');
                             }
                           }}
                           className="flex items-center justify-center p-1.5 rounded-lg bg-[#10B981]/10 text-[#10B981] hover:bg-[#10B981]/20 transition-colors"
@@ -352,14 +382,18 @@ export default function FacturacionPage() {
                                 CDR
                               </a>
                             )}
-                            {['aceptada_sunat', 'rechazada_sunat', 'emitida'].includes(f.estado_sunat) && (
+                            {['borrador', 'aceptada_sunat', 'rechazada_sunat', 'emitida'].includes(f.estado_sunat) && (
                               <button
                                 onClick={async () => {
-                                  const res = await enviarASunat(f.id);
-                                  if (res.success) {
-                                    toast.success(`Comprobante ${f.serie_numero} procesado con éxito`);
-                                  } else {
-                                    toast.error(res.error || 'Error al procesar comprobante');
+                                  try {
+                                    const res = await enviarASunat(f.id);
+                                    if (res.success) {
+                                      toast.success(`Comprobante ${f.serie_numero} procesado con éxito`);
+                                    } else {
+                                      toast.error(res.error || 'Error al procesar comprobante');
+                                    }
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : 'Error al procesar comprobante');
                                   }
                                 }}
                                 className="flex items-center justify-center p-1.5 rounded-lg bg-[#10B981]/10 text-[#10B981] hover:bg-[#10B981]/20 transition-colors"
