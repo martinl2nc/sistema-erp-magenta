@@ -36,7 +36,7 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 ### Objetivos Específicos
 1. **Cotizaciones**: Crear, editar, enviar por email y trackear estados
 2. **Pedidos**: Convertir cotizaciones aprobadas en pedidos de venta
-3. **Facturación**: Emitir facturas y boletas electrónicas conformes a SUNAT
+3. **Comprobantes**: Emitir facturas y boletas electrónicas (tabla `comprobantes`) conformes a SUNAT
 4. **Gestión de datos**: Administrar clientes, productos, vendedores y configuración de empresa
 5. **Análisis**: Visualizar métricas de ventas en tiempo real
 
@@ -169,17 +169,111 @@ src/
 | Tabla | Descripción |
 |-------|-------------|
 | `clientes` | Registro de clientes |
-| `vendedores` | Registro de vendedores vinculados a auth.users |
-| `perfiles_usuario` | Perfiles con rol (admin/vendedor) |
+| `perfiles_usuario` | Registro de usuarios con rol (admin/vendedor) |
 | `productos` | Catálogo de productos |
-| `categorias_productos` | Categorías de productos |
+| `categorias` | Categorías de productos |
 | `cotizaciones` | Cabecera de cotizaciones |
-| `cotizacion_lineas` | Líneas de detalle de cotizaciones |
+| `cotizaciones_lineas` | Líneas de detalle de cotizaciones |
 | `pedidos` | Cabecera de pedidos |
-| `pedido_lineas` | Líneas de detalle de pedidos |
-| `facturas` | Cabecera de comprobantes emitidos |
-| `factura_lineas` | Líneas de detalle de facturas |
+| `pedidos_lineas` | Líneas de detalle de pedidos |
+| `comprobantes` | Cabecera de comprobantes emitidos (Facturas/Boletas) |
+| `comprobantes_detalles` | Líneas de detalle de comprobantes |
 | `empresa_configuracion` | Configuración singleton de la empresa |
+
+#### 5.1 Estructura de Tablas Principales
+
+A continuación se detalla la estructura de las columnas de las entidades core del sistema:
+
+**Tabla: `productos`**
+| Columna | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `id` | UUID | Identificador único |
+| `woo_product_id` | Integer | ID de producto en WooCommerce (opcional) |
+| `sku` | String | Código de referencia |
+| `nombre` | String | Nombre del producto |
+| `descripcion` | Text | Descripción detallada |
+| `categoria_id` | UUID | Relación con tabla `categorias` |
+| `precio_base` | Numeric | Precio de venta base |
+| `activo` | Boolean | Estado de disponibilidad |
+| `unidad_medida` | String | Unidad SUNAT (NIU, KGM, etc.) |
+| `afectacion_igv` | String | Tipo de afectación IGV |
+| `fraccionable` | Boolean | Permite cantidades decimales |
+| `fecha_creacion` | Timestamp | Fecha de registro |
+
+**Tabla: `cotizaciones`**
+| Columna | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `id` | UUID | Identificador único |
+| `numero_correlativo` | Integer | Número autoincremental para PDFs |
+| `origen` | String | Origen (Interno, WooCommerce, etc.) |
+| `woo_order_id` | Integer | ID de pedido en WooCommerce |
+| `cliente_id` | UUID | Relación con tabla `clientes` |
+| `vendedor_id` | UUID | Relación con `perfiles_usuario` |
+| `fecha_emision` | Date | Fecha de creación del documento |
+| `fecha_validez` | Date | Fecha de expiración |
+| `estado` | Enum | Borrador, Enviada, Aprobada, Cancelada |
+| `observaciones_pdf` | Text | Notas visibles en el documento |
+| `aplica_igv` | Boolean | Si se calcula IGV (18%) |
+| `subtotal` | Numeric | Suma de líneas sin impuestos |
+| `descuento_global_monto` | Numeric | Descuento aplicado al total |
+| `igv_monto` | Numeric | Monto total de IGV |
+| `total_final` | Numeric | Monto total a pagar |
+| `fecha_creacion` | Timestamp | Timestamp de sistema |
+| `ultima_actualizacion` | Timestamp | Último cambio registrado |
+| `seguimiento_automatico` | Boolean | Si se envía recordatorio por mail |
+
+**Tabla: `pedidos`**
+| Columna | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `id` | UUID | Identificador único |
+| `cotizacion_id` | UUID | Referencia a la cotización origen |
+| `cliente_id` | UUID | Relación con tabla `clientes` |
+| `vendedor_id` | UUID | Relación con `perfiles_usuario` |
+| `numero_pedido` | Integer | Número autoincremental de pedido |
+| `nro_oc_cliente` | String | Orden de compra del cliente |
+| `sustento_url` | String | Link al archivo de sustento (PDF/IMG) |
+| `sustento_nombre` | String | Nombre original del archivo |
+| `observaciones` | Text | Notas internas |
+| `fecha_pedido` | Date | Fecha de registro del pedido |
+| `direccion_facturacion` | String | Dirección específica para el comprobante |
+| `aplica_igv` | Boolean | Si el pedido incluye IGV |
+| `subtotal` | Numeric | Monto neto |
+| `descuento_global_monto` | Numeric | Descuento total |
+| `igv_monto` | Numeric | Impuesto total |
+| `total_final` | Numeric | Total a facturar |
+| `estado` | Enum | pendiente_facturacion, procesando, facturado, etc. |
+| `fecha_creacion` | Timestamp | Timestamp de sistema |
+| `ultima_actualizacion` | Timestamp | Último cambio |
+
+**Tabla: `comprobantes`**
+| Columna | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `id` | UUID | Identificador único |
+| `pedido_id` | UUID | Relación con el pedido |
+| `cliente_id` | UUID | Relación con cliente |
+| `tipo_doc_codigo` | String | SUNAT: 01 (Factura), 03 (Boleta), 07 (NC) |
+| `serie` | String | Serie del documento (ej: F001) |
+| `correlativo` | Integer | Número correlativo |
+| `serie_numero` | String | Formato completo (EJ: F001-00000001) |
+| `comprobante_referencia_id` | UUID | ID del comprobante que rectifica (para NC) |
+| `motivo_nota` | String | Razón de la nota de crédito |
+| `fecha_emision` | Date | Fecha de emisión SUNAT |
+| `fecha_vencimiento` | Date | Fecha de vencimiento de pago |
+| `tipo_moneda` | String | PEN, USD |
+| `forma_pago` | String | Contado, Crédito |
+| `mto_oper_gravadas` | Numeric | Base imponible gravada |
+| `mto_oper_exoneradas` | Numeric | Base exonerada |
+| `mto_oper_inafectas` | Numeric | Base inafecta |
+| `mto_igv` | Numeric | Impuesto general a las ventas |
+| `total_impuestos` | Numeric | Suma de impuestos |
+| `valor_venta` | Numeric | Valor total sin impuestos |
+| `subtotal` | Numeric | Monto antes de impuestos |
+| `mto_imp_venta` | Numeric | Precio final de venta |
+| `enlace_pdf` | String | URL del PDF generado |
+| `enlace_xml` | String | URL del XML firmado |
+| `enlace_cdr` | String | URL de la constancia de recepción |
+| `apisperu_response` | JSONB | Respuesta íntegra del API |
+| `estado_sunat` | Enum | borrador, aceptada_sunat, rechazada, etc. |
 
 #### Tablas de Catálogo (SUNAT)
 
@@ -254,7 +348,7 @@ src/
 ### Seguridad
 - Autenticación via Supabase Auth
 - Row Level Security (RLS) en todas las tablas
-- Roles diferenciados: admin (acceso total) / vendedor (limitado)
+- Roles diferenciados en `perfiles_usuario`: admin (acceso total) / vendedor (limitado)
 - Contraseñas hasheadas
 - Sesiones con JWT
 
@@ -356,8 +450,8 @@ src/
 |---------|------------|
 | **Cotización** | Documento comercial que detalla productos, precios y condiciones para un cliente potencial |
 | **Pedido** | Confirmación de compra derivada de una cotización aprobada |
-| **Factura electrónica** | Comprobante de pago tipo 01 emitido electrónicamente a SUNAT |
-| **Boleta electrónica** | Comprobante de pago tipo 03 emitido electrónicamente a SUNAT |
+| **Factura electrónica** | Comprobante de pago tipo 01 emitido electrónicamente a SUNAT (tabla `comprobantes`) |
+| **Boleta electrónica** | Comprobante de pago tipo 03 emitido electrónicamente a SUNAT (tabla `comprobantes`) |
 | **Nota de crédito** | Documento que rectifica una factura/boleta (anulación o descuento) |
 | **Detracción** | Descuento del 10% (aprox.) que el cliente deduce y paga a SUNAT por servicios específicos |
 | **CDR** | Constancia de Recepción — respuesta de SUNAT confirmando recepción del comprobante |

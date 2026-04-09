@@ -99,13 +99,22 @@ export default function FacturacionPage() {
             )}
           </div>
           {role === 'admin' && (
-            <button
-              onClick={() => router.push('/facturacion/nueva')}
-              className="flex items-center gap-1.5 bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-            >
-              <iconify-icon icon="solar:add-circle-linear" class="text-sm"></iconify-icon>
-              Crear Factura
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => router.push('/facturacion/externa')}
+                className="flex items-center gap-1.5 bg-[#334155] hover:bg-[#475569] text-[#E2E8F0] text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              >
+                <iconify-icon icon="solar:upload-linear" class="text-sm"></iconify-icon>
+                Registrar Externa
+              </button>
+              <button
+                onClick={() => router.push('/facturacion/nueva')}
+                className="flex items-center gap-1.5 bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              >
+                <iconify-icon icon="solar:add-circle-linear" class="text-sm"></iconify-icon>
+                Crear Factura
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -268,7 +277,12 @@ export default function FacturacionPage() {
                 {comprobantes.map((f) => (
                   <div key={f.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-[#E2E8F0]">{f.serie_numero}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-[#E2E8F0]">{f.serie_numero}</span>
+                        {f.origen_emision === 'sol' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">SOL</span>
+                        )}
+                      </div>
                       <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
                         {f.estado_sunat}
                       </span>
@@ -320,6 +334,16 @@ export default function FacturacionPage() {
                           <iconify-icon icon="solar:restart-linear" class="text-lg"></iconify-icon>
                         </button>
                       )}
+                      {f.origen_emision === 'sol' && (
+                        <button
+                          onClick={() => router.push(`/facturacion/externa/${f.id}/editar`)}
+                          className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#E2E8F0]"
+                          title="Editar comprobante externo"
+                        >
+                          <iconify-icon icon="solar:pen-linear" class="text-base"></iconify-icon>
+                          Editar
+                        </button>
+                      )}
                       {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
                         <button onClick={() => setSelectedComprobante(f)}
                           className="ml-auto text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
@@ -349,7 +373,14 @@ export default function FacturacionPage() {
                   <tbody className="divide-y divide-[#334155] bg-[#181B21]">
                     {comprobantes.map((f) => (
                       <tr key={f.id} className="hover:bg-[#334155]/10 transition-colors">
-                        <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">{f.serie_numero}</td>
+                        <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">
+                          <div className="flex items-center gap-2">
+                            {f.serie_numero}
+                            {f.origen_emision === 'sol' && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">SOL</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{tipoDocLabels[f.tipo_doc_codigo] || f.tipo_doc_codigo}</td>
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0]">{getClienteNameComprobante(f)}</td>
                         <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{formatDate(f.fecha_emision)}</td>
@@ -400,6 +431,16 @@ export default function FacturacionPage() {
                                 title="Reparar / Re-enviar"
                               >
                                 <iconify-icon icon="solar:restart-linear" class="text-sm"></iconify-icon>
+                              </button>
+                            )}
+                            {f.origen_emision === 'sol' && (
+                              <button
+                                onClick={() => router.push(`/facturacion/externa/${f.id}/editar`)}
+                                className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors flex items-center gap-1"
+                                title="Editar comprobante externo"
+                              >
+                                <iconify-icon icon="solar:pen-linear" class="text-xs"></iconify-icon>
+                                Editar
                               </button>
                             )}
                             {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (

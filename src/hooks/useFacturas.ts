@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { facturasService } from '@/services/facturas.service';
 import { configuracionSeriesService } from '@/services/configuracionSeries.service';
-import type { EmitirComprobantePayload, EnviarSunatResponse } from '@/services/facturas.service';
+import type { EmitirComprobantePayload, EnviarSunatResponse, ComprobanteExternoPayload } from '@/services/facturas.service';
 import { pedidosKeys } from './usePedidos';
 
 export const facturasKeys = {
@@ -49,6 +49,28 @@ export function useCreateNotaCredito() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: facturasKeys.list() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.all() });
+    },
+  });
+}
+
+export function useActualizarComprobanteExterno() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload, files }: { id: string; payload: ComprobanteExternoPayload; files: { pdf?: File; xml?: File } }) =>
+      facturasService.actualizarComprobanteExterno(id, payload, files),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: facturasKeys.list() });
+    },
+  });
+}
+
+export function useRegistrarComprobanteExterno() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ payload, files }: { payload: ComprobanteExternoPayload; files: { pdf: File; xml: File } }) =>
+      facturasService.registrarComprobanteExterno(payload, files),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: facturasKeys.list() });
     },
   });
 }

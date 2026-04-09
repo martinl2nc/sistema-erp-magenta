@@ -29,6 +29,7 @@ export interface Comprobante {
   enlace_cdr: string | null;
   apisperu_response: Record<string, unknown> | null;
   estado_sunat: ComprobanteEstadoSunat;
+  origen_emision?: 'sol' | null;
   // Relations
   clientes?: {
     razon_social: string | null;
@@ -89,6 +90,53 @@ export interface EnviarSunatResponse {
   error?: string;
   sunatResponse?: Record<string, unknown>;
 }
+
+export interface ComprobanteExternoPayload {
+  cliente_id: string;
+  tipo_doc_codigo: string; // '01' | '03'
+  serie: string;
+  correlativo: number;
+  fecha_emision: string; // 'YYYY-MM-DD'
+  subtotal: number;
+  igv_monto: number;
+  total: number;
+  pedido_id?: string | null;
+}
+
+export interface PedidoElegible {
+  id: string;
+  numero_pedido: number;
+  cliente_id: string;
+  estado: string;
+}
+
+// ─── SSR Helpers ─────────────────────────────────────────────
+
+export const getComprobanteExternoByIdSSR = async (
+  supabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>,
+  id: string,
+): Promise<Comprobante | null> => {
+  const { data, error } = await supabase
+    .from('comprobantes')
+    .select('*, clientes ( razon_social, nombres_contacto, apellidos_contacto, numero_documento )')
+    .eq('id', id)
+    .eq('origen_emision', 'sol')
+    .maybeSingle();
+  if (error) throw new Error('Error al cargar el comprobante: ' + error.message);
+  return data as Comprobante | null;
+};
+
+export const getPedidosElegiblesSSR = async (
+  supabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>,
+): Promise<PedidoElegible[]> => {
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select('id, numero_pedido, cliente_id, estado')
+    .in('estado', ['pendiente_facturacion', 'error_facturacion'])
+    .order('numero_pedido', { ascending: false });
+  if (error) throw new Error('Error al cargar pedidos elegibles: ' + error.message);
+  return (data ?? []) as PedidoElegible[];
+};
 
 export const facturasService = {
   /**
@@ -197,6 +245,62 @@ export const facturasService = {
       .single();
     if (error) throw new Error('Nota de crédito creada pero no se pudo recuperar el registro');
     return data;
+  },
+
+  async registrarComprobanteExterno(
+    payload: ComprobanteExternoPayload,
+    files: { pdf: File; xml: File }
+  ): Promise<string> {
+    const formData = new FormData();
+    formData.append('cliente_id', payload.cliente_id);
+    formData.append('tipo_doc_codigo', payload.tipo_doc_codigo);
+    formData.append('serie', payload.serie);
+    formData.append('correlativo', String(payload.correlativo));
+    formData.append('fecha_emision', payload.fecha_emision);
+    formData.append('subtotal', String(payload.subtotal));
+    formData.append('igv_monto', String(payload.igv_monto));
+    formData.append('total', String(payload.total));
+    if (payload.pedido_id) formData.append('pedido_id', payload.pedido_id);
+    formData.append('pdf', files.pdf);
+    formData.append('xml', files.xml);
+
+    const response = await fetch('/api/facturacion/externa', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || `Error del servidor: ${response.status}`);
+    }
+    return data.comprobante_id as string;
+  },
+
+  async actualizarComprobanteExterno(
+    id: string,
+    payload: ComprobanteExternoPayload,
+    files: { pdf?: File; xml?: File }
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('cliente_id', payload.cliente_id);
+    formData.append('tipo_doc_codigo', payload.tipo_doc_codigo);
+    formData.append('serie', payload.serie);
+    formData.append('correlativo', String(payload.correlativo));
+    formData.append('fecha_emision', payload.fecha_emision);
+    formData.append('subtotal', String(payload.subtotal));
+    formData.append('igv_monto', String(payload.igv_monto));
+    formData.append('total', String(payload.total));
+    if (payload.pedido_id != null) formData.append('pedido_id', payload.pedido_id);
+    if (files.pdf) formData.append('pdf', files.pdf);
+    if (files.xml) formData.append('xml', files.xml);
+
+    const response = await fetch(`/api/facturacion/externa/${id}`, {
+      method: 'PUT',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || `Error del servidor: ${response.status}`);
+    }
   },
 
   async _createNotaCreditoLegacy(payload: {
