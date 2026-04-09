@@ -72,6 +72,12 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
       clienteId: state.selectedClienteId,
       lineas: state.lineas,
       serie,
+      tipoOperacion: state.tipoOperacion,
+      detraccion: state.tipoOperacion === '1001' ? {
+        cod_bien: state.detraccionCodBien,
+        porcentaje: state.detraccionPorcentaje,
+        cuenta_bn: state.detraccionCuentaBn,
+      } : undefined,
     });
     if (error) {
       setValidationError(error);

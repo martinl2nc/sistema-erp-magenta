@@ -155,7 +155,18 @@ export const facturasService = {
       p_detraccion_monto:          payload.detraccion?.monto ?? null,
       p_detraccion_cuenta_bn:      payload.detraccion?.cuenta_bn ?? null,
     });
-    if (error) throw new Error(error.message || 'No se pudo emitir el comprobante');
+    
+    if (error) {
+      // Traducir errores de FK a mensajes user-friendly
+      if (error.message?.includes('comprobantes_detraccion_cod_bien_fkey')) {
+        throw new Error('El código de bien/servicio para detracción no es válido. Seleccioná uno del catálogo.');
+      }
+      if (error.message?.includes('foreign key') || error.message?.includes('violates')) {
+        throw new Error('Datos de detracción inválidos. Verificá que todos los campos estén correctos.');
+      }
+      throw new Error(error.message || 'No se pudo emitir el comprobante');
+    }
+    
     return data as string; // returns comprobante_id (UUID)
   },
 

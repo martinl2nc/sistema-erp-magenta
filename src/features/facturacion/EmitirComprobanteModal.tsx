@@ -21,6 +21,7 @@ import { numeroALetras } from '@/utils/numeroALetras'
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service'
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters'
 import { calcularLineaSunat, calcularTotalesSunat } from '@/utils/calculations'
+import { validateNuevaFactura } from '@/features/facturacion/nuevaFactura.utils'
 
 // ─── Tipos ─────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ export default function EmitirComprobanteModal({
   const [direccionFacturacion, setDireccionFacturacion] = useState('')
   const [lineas, setLineas] = useState<LineaEditable[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
   // Descuento global
   const [descuentoMonto, setDescuentoMonto] = useState(0)
@@ -193,8 +195,16 @@ export default function EmitirComprobanteModal({
       setDetraccionPorcentaje(0)
       setDetraccionMonto(0)
       setDetraccionCuentaBn('')
+      setHasUnsavedChanges(false)
     }
   }, [isOpen])
+
+  // Marcar cambios cuando se modifica cualquier campo
+  useEffect(() => {
+    if (isOpen && pedidoLineasData) {
+      setHasUnsavedChanges(true)
+    }
+  }, [tipoDocCodigo, direccionFacturacion, descuentoMonto, descuentoCodigo, tipoOperacion, detraccionCodBien, detraccionPorcentaje, detraccionCuentaBn, lineas])
 
   if (!isOpen || !pedido) return null
 
@@ -263,21 +273,36 @@ export default function EmitirComprobanteModal({
   }
 
   const handleSubmit = async () => {
-    if (lineas.length === 0) {
-      toast.error(
-        'No hay líneas de productos. Genera el pedido nuevamente para registrar las líneas.'
-      )
-      return
-    }
-    if (!serie) {
-      toast.error(
-        'No hay serie activa configurada para este tipo de comprobante'
-      )
-      return
-    }
-    if (!cliente?.id) {
-      toast.error('No se encontraron datos del cliente')
-      return
+    // Validación centralizada usando la misma función que NuevaFacturaForm
+    const validationError = validateNuevaFactura({
+      clienteId: cliente?.id ?? null,
+      lineas: lineas.map(l => ({
+        _id: l.id,
+        producto_id: l.producto_id,
+        sku: l.sku,
+        nombre_producto: l.nombre_producto_historico,
+        cantidad: l.cantidad,
+        precio_unitario: l.precio_unitario,
+        unidad_sunat: l.unidad_sunat,
+        afectacion_igv: l.afectacion_igv,
+        descuento_linea_monto: l.descuento_linea_monto ?? 0,
+        mto_valor_unitario: l.mto_valor_unitario,
+        mto_base_igv: l.mto_base_igv,
+        mto_igv: l.mto_igv,
+        subtotal: l.subtotal,
+      })),
+      serie,
+      tipoOperacion,
+      detraccion: tipoOperacion === '1001' ? {
+        cod_bien: detraccionCodBien,
+        porcentaje: detraccionPorcentaje,
+        cuenta_bn: detraccionCuentaBn,
+      } : undefined,
+    });
+
+    if (validationError) {
+      toast.error(validationError);
+      return;
     }
 
     setIsSubmitting(true)
@@ -340,6 +365,7 @@ export default function EmitirComprobanteModal({
         )
       }
 
+      setHasUnsavedChanges(false)
       onSuccess?.()
       onClose()
     } catch (err) {
@@ -351,10 +377,21 @@ export default function EmitirComprobanteModal({
     }
   }
 
+  const handleClose = () => {
+    if (hasUnsavedChanges && !isSubmitting) {
+      if (confirm('Tenés cambios sin guardar. ¿Estás seguro que querés cerrar?')) {
+        setHasUnsavedChanges(false)
+        onClose()
+      }
+    } else {
+      onClose()
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="w-full sm:max-w-3xl bg-[#181B21] border-t sm:border sm:border-[#334155] rounded-t-2xl sm:rounded-xl flex flex-col max-h-[92vh]"
@@ -383,7 +420,7 @@ export default function EmitirComprobanteModal({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1.5 rounded-md text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#334155]/50 transition-colors"
           >
             <iconify-icon
@@ -394,6 +431,31 @@ export default function EmitirComprobanteModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 min-h-0">
+          {/* Header visual del pedido */}
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <iconify-icon icon="solar:document-linear" class="text-blue-400 text-base"></iconify-icon>
+              <p className="text-xs text-blue-400 font-semibold">Emitiendo comprobante para:</p>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">PED-{pedido.numero_pedido} · {clienteName}</p>
+                <div className="flex gap-3 mt-0.5">
+                  {pedido.nro_oc_cliente && (
+                    <p className="text-xs text-blue-300">OC: {pedido.nro_oc_cliente}</p>
+                  )}
+                  {cot && (
+                    <p className="text-xs text-blue-300">COT-{cot.numero_correlativo}</p>
+                  )}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-xs text-blue-400">Total pedido</p>
+                <p className="text-sm font-bold text-white">{formatCurrency(pedido.total_final ?? 0)}</p>
+              </div>
+            </div>
+          </div>
+
           {/* Resumen cliente */}
           <div className="p-3 bg-[#0F1115] border border-[#334155] rounded-lg space-y-1.5">
             <div className="flex items-center justify-between gap-4">
