@@ -175,10 +175,10 @@ export default function PedidosPage() {
                           e.stopPropagation();
                           router.push(`/pedidos/editar/${p.id}`);
                         }}
-                        className="text-[#3B82F6] hover:bg-[#3B82F6]/10 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-transparent hover:border-[#3B82F6]/20 flex items-center gap-1.5"
+                        title="Editar pedido"
+                        className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors"
                       >
-                        <iconify-icon icon="solar:pen-linear" class="text-sm"></iconify-icon>
-                        Editar
+                        <iconify-icon icon="solar:pen-linear" class="text-lg"></iconify-icon>
                       </button>
                     </div>
                   )}
@@ -231,9 +231,9 @@ export default function PedidosPage() {
                             <button
                               onClick={() => router.push(`/pedidos/editar/${p.id}`)}
                               title="Editar pedido"
-                              className="text-[#94A3B8] hover:text-[#3B82F6] hover:bg-[#3B82F6]/10 p-1.5 rounded transition-colors"
+                              className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors"
                             >
-                              <iconify-icon icon="solar:pen-linear" class="text-[1.2rem]"></iconify-icon>
+                              <iconify-icon icon="solar:pen-linear" class="text-lg"></iconify-icon>
                             </button>
                           </div>
                         )}

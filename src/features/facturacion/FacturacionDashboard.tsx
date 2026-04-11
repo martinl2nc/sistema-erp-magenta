@@ -51,7 +51,15 @@ export default function FacturacionPage() {
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
   const [selectedComprobante, setSelectedComprobante] = useState<Comprobante | null>(null);
 
-  const pendientes = useMemo(
+  // Filtros tab pendientes
+  const [searchPendientes, setSearchPendientes] = useState('');
+  const [filterEstadoPendiente, setFilterEstadoPendiente] = useState('');
+
+  // Filtros tab emitidas
+  const [searchEmitidas, setSearchEmitidas] = useState('');
+  const [filterTipoDoc, setFilterTipoDoc] = useState('');
+
+  const pendientesBase = useMemo(
     () => pedidos.filter((p) => ['pendiente_facturacion', 'error_facturacion'].includes(p.estado)),
     [pedidos]
   );
@@ -60,6 +68,44 @@ export default function FacturacionPage() {
     () => pedidos.filter((p) => ['procesando_facturacion'].includes(p.estado)),
     [pedidos]
   );
+
+  const pendientes = useMemo(() => {
+    let list = pendientesBase;
+    if (filterEstadoPendiente) list = list.filter((p) => p.estado === filterEstadoPendiente);
+    const search = searchPendientes.trim().toLowerCase();
+    if (search) {
+      list = list.filter((p) => {
+        const c = p.clientes;
+        return [
+          String(p.numero_pedido || ''),
+          c?.razon_social || '',
+          c?.nombres_contacto || '',
+          c?.apellidos_contacto || '',
+          c?.numero_documento || '',
+          p.nro_oc_cliente || '',
+        ].some((f) => f.toLowerCase().includes(search));
+      });
+    }
+    return list;
+  }, [pendientesBase, filterEstadoPendiente, searchPendientes]);
+
+  const comprobantesFiltered = useMemo(() => {
+    let list = comprobantes;
+    if (filterTipoDoc) list = list.filter((f) => f.tipo_doc_codigo === filterTipoDoc);
+    const search = searchEmitidas.trim().toLowerCase();
+    if (search) {
+      list = list.filter((f) => {
+        const c = f.clientes;
+        return [
+          f.serie_numero || '',
+          c ? (getClientDisplayName(c) || '') : '',
+          c?.numero_documento || '',
+          tipoDocLabels[f.tipo_doc_codigo] || f.tipo_doc_codigo || '',
+        ].some((s) => s.toLowerCase().includes(search));
+      });
+    }
+    return list;
+  }, [comprobantes, filterTipoDoc, searchEmitidas, tipoDocLabels]);
 
   if (role !== 'admin') {
     return (
@@ -102,16 +148,16 @@ export default function FacturacionPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => router.push('/facturacion/externa')}
-                className="flex items-center gap-1.5 bg-[#334155] hover:bg-[#475569] text-[#E2E8F0] text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                className="bg-[#334155] hover:bg-[#475569] text-[#E2E8F0] px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-[#334155] focus:ring-offset-2 focus:ring-offset-[#0F1115] flex items-center justify-center gap-2 whitespace-nowrap"
               >
-                <iconify-icon icon="solar:upload-linear" class="text-sm"></iconify-icon>
+                <iconify-icon icon="solar:upload-linear" class="text-lg"></iconify-icon>
                 Registrar Externa
               </button>
               <button
                 onClick={() => router.push('/facturacion/nueva')}
-                className="flex items-center gap-1.5 bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                className="bg-[#3B82F6] hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:ring-offset-2 focus:ring-offset-[#0F1115] flex items-center justify-center gap-2 whitespace-nowrap"
               >
-                <iconify-icon icon="solar:add-circle-linear" class="text-sm"></iconify-icon>
+                <iconify-icon icon="solar:add-circle-linear" class="text-lg"></iconify-icon>
                 Crear Factura
               </button>
             </div>
@@ -143,7 +189,37 @@ export default function FacturacionPage() {
 
       {/* Tab: Pendientes */}
       {tab === 'pendientes' && (
-        <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
+        <>
+          <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4 mb-4 shadow-sm flex flex-col lg:flex-row gap-4">
+            <div className="relative group">
+              <select
+                title="Filtrar por estado"
+                value={filterEstadoPendiente}
+                onChange={(e) => setFilterEstadoPendiente(e.target.value)}
+                className="appearance-none w-full sm:w-52 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
+              >
+                <option value="">Todos los estados</option>
+                <option value="pendiente_facturacion">Pendiente</option>
+                <option value="error_facturacion">Con error</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-[#94A3B8]">
+                <iconify-icon icon="solar:alt-arrow-down-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+              </div>
+            </div>
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-[#94A3B8]">
+                <iconify-icon icon="solar:magnifer-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+              </div>
+              <input
+                type="text"
+                value={searchPendientes}
+                onChange={(e) => setSearchPendientes(e.target.value)}
+                placeholder="Buscar por pedido, cliente u OC..."
+                className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
+              />
+            </div>
+          </div>
+          <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
           {loadingPedidos && (
             <div className="flex items-center justify-center gap-2 p-8 text-[#94A3B8] text-sm">
               <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>
@@ -244,11 +320,43 @@ export default function FacturacionPage() {
             </>
           )}
         </div>
+        </>
       )}
 
       {/* Tab: Emitidas */}
       {tab === 'emitidas' && (
-        <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
+        <>
+          <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4 mb-4 shadow-sm flex flex-col lg:flex-row gap-4">
+            <div className="relative group">
+              <select
+                title="Filtrar por tipo de comprobante"
+                value={filterTipoDoc}
+                onChange={(e) => setFilterTipoDoc(e.target.value)}
+                className="appearance-none w-full sm:w-52 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
+              >
+                <option value="">Todos los tipos</option>
+                {tiposDoc.map((t) => (
+                  <option key={t.codigo} value={t.codigo}>{t.descripcion}</option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-[#94A3B8]">
+                <iconify-icon icon="solar:alt-arrow-down-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+              </div>
+            </div>
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-[#94A3B8]">
+                <iconify-icon icon="solar:magnifer-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+              </div>
+              <input
+                type="text"
+                value={searchEmitidas}
+                onChange={(e) => setSearchEmitidas(e.target.value)}
+                placeholder="Buscar por serie, cliente o documento..."
+                className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
+              />
+            </div>
+          </div>
+          <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
           {loadingComprobantes && (
             <div className="flex items-center justify-center gap-2 p-8 text-[#94A3B8] text-sm">
               <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>
@@ -263,18 +371,18 @@ export default function FacturacionPage() {
             </div>
           )}
 
-          {!loadingComprobantes && !errorComprobantes && comprobantes.length === 0 && (
+          {!loadingComprobantes && !errorComprobantes && comprobantesFiltered.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
               <iconify-icon icon="solar:bill-list-linear" class="text-5xl text-[#334155]"></iconify-icon>
-              <p className="text-sm text-[#94A3B8]">No hay comprobantes emitidos aún.</p>
+              <p className="text-sm text-[#94A3B8]">{comprobantes.length === 0 ? 'No hay comprobantes emitidos aún.' : 'No hay comprobantes que coincidan con los filtros.'}</p>
             </div>
           )}
 
-          {!loadingComprobantes && !errorComprobantes && comprobantes.length > 0 && (
+          {!loadingComprobantes && !errorComprobantes && comprobantesFiltered.length > 0 && (
             <>
               {/* Mobile cards */}
               <div className="md:hidden space-y-3 p-4">
-                {comprobantes.map((f) => (
+                {comprobantesFiltered.map((f) => (
                   <div key={f.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -337,11 +445,10 @@ export default function FacturacionPage() {
                       {f.origen_emision === 'sol' && (
                         <button
                           onClick={() => router.push(`/facturacion/externa/${f.id}/editar`)}
-                          className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#E2E8F0]"
+                          className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors"
                           title="Editar comprobante externo"
                         >
                           <iconify-icon icon="solar:pen-linear" class="text-base"></iconify-icon>
-                          Editar
                         </button>
                       )}
                       {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
@@ -371,7 +478,7 @@ export default function FacturacionPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#334155] bg-[#181B21]">
-                    {comprobantes.map((f) => (
+                    {comprobantesFiltered.map((f) => (
                       <tr key={f.id} className="hover:bg-[#334155]/10 transition-colors">
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">
                           <div className="flex items-center gap-2">
@@ -436,11 +543,10 @@ export default function FacturacionPage() {
                             {f.origen_emision === 'sol' && (
                               <button
                                 onClick={() => router.push(`/facturacion/externa/${f.id}/editar`)}
-                                className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors flex items-center gap-1"
+                                className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors flex items-center"
                                 title="Editar comprobante externo"
                               >
                                 <iconify-icon icon="solar:pen-linear" class="text-xs"></iconify-icon>
-                                Editar
                               </button>
                             )}
                             {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
@@ -462,6 +568,7 @@ export default function FacturacionPage() {
             </>
           )}
         </div>
+        </>
       )}
 
       <EmitirComprobanteModal

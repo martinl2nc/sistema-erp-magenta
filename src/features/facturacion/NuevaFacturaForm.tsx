@@ -1,69 +1,80 @@
-'use client';
+'use client'
 
-import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-import Link from 'next/link';
+import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import Link from 'next/link'
 
-import { useNuevaFacturaState } from '@/features/facturacion/useNuevaFacturaState';
-import { useEmitirComprobante, useEnviarASunat, useSerieByTipoDoc } from '@/hooks/useFacturas';
+import { useNuevaFacturaState } from '@/features/facturacion/useNuevaFacturaState'
+import {
+  useEmitirComprobante,
+  useEnviarASunat,
+  useSerieByTipoDoc
+} from '@/hooks/useFacturas'
 import {
   useUnidadesMedida,
   useAfectacionesIgv,
   useTiposOperacion,
   useBienesDetraccion,
-  useCargosDescuentos,
-} from '@/hooks/useCatalogos';
-import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
-import { TAX_RATES } from '@/constants';
-import { validateNuevaFactura } from '@/features/facturacion/nuevaFactura.utils';
-import type { Client } from '@/services/clients.service';
+  useCargosDescuentos
+} from '@/hooks/useCatalogos'
+import { formatCurrency, getClientDisplayName } from '@/utils/formatters'
+import { TAX_RATES } from '@/constants'
+import { validateNuevaFactura } from '@/features/facturacion/nuevaFactura.utils'
+import type { Client } from '@/services/clients.service'
 
 interface Props {
-  initialClients: Client[];
+  initialClients: Client[]
 }
 
 export default function NuevaFacturaForm({ initialClients }: Props) {
-  const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [clientSearch, setClientSearch] = useState('');
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [clientSearch, setClientSearch] = useState('')
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   // State hook
-  const state = useNuevaFacturaState(initialClients);
+  const state = useNuevaFacturaState(initialClients)
 
   // Catálogos para selects en el formulario
-  const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesMedida();
-  const { data: afectaciones = [] } = useAfectacionesIgv();
-  const { data: tiposOperacion = [] } = useTiposOperacion();
-  const { data: bienesDetraccion = [] } = useBienesDetraccion();
-  const { data: cargosDescuentos = [] } = useCargosDescuentos();
+  const { data: unidades = [], isLoading: loadingUnidades } =
+    useUnidadesMedida()
+  const { data: afectaciones = [] } = useAfectacionesIgv()
+  const { data: tiposOperacion = [] } = useTiposOperacion()
+  const { data: bienesDetraccion = [] } = useBienesDetraccion()
+  const { data: cargosDescuentos = [] } = useCargosDescuentos()
 
   const descuentosSunat = useMemo(
     () => cargosDescuentos.filter((c) => c.tipo === 'descuento'),
-    [cargosDescuentos],
-  );
+    [cargosDescuentos]
+  )
 
   // Serie preview
-  const { data: serie, isLoading: loadingSerie } = useSerieByTipoDoc(state.tipoDocCodigo);
-  const proximo = serie ? serie.correlativo_actual + 1 : null;
+  const { data: serie, isLoading: loadingSerie } = useSerieByTipoDoc(
+    state.tipoDocCodigo
+  )
+  const proximo = serie ? serie.correlativo_actual + 1 : null
   const previewSerie =
-    serie && proximo ? `${serie.serie}-${proximo.toString().padStart(8, '0')}` : null;
+    serie && proximo
+      ? `${serie.serie}-${proximo.toString().padStart(8, '0')}`
+      : null
 
   // Mutations
-  const emitirComprobante = useEmitirComprobante();
-  const enviarASunat = useEnviarASunat();
+  const emitirComprobante = useEmitirComprobante()
+  const enviarASunat = useEnviarASunat()
 
   // Clientes filtrados para selector standalone
   const filteredClients = useMemo(() => {
-    if (!clientSearch.trim()) return initialClients.slice(0, 20);
-    const q = clientSearch.toLowerCase();
-    return initialClients.filter(
-      (c) =>
-        getClientDisplayName(c).toLowerCase().includes(q) ||
-        c.numero_documento?.includes(q),
-    ).slice(0, 20);
-  }, [initialClients, clientSearch]);
+    if (!clientSearch.trim()) return initialClients.slice(0, 20)
+    const q = clientSearch.toLowerCase()
+    return initialClients
+      .filter(
+        (c) =>
+          getClientDisplayName(c).toLowerCase().includes(q) ||
+          c.numero_documento?.includes(q)
+      )
+      .slice(0, 20)
+  }, [initialClients, clientSearch])
 
   // ─── Submit ──────────────────────────────────────────────────
 
@@ -73,21 +84,24 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
       lineas: state.lineas,
       serie,
       tipoOperacion: state.tipoOperacion,
-      detraccion: state.tipoOperacion === '1001' ? {
-        cod_bien: state.detraccionCodBien,
-        porcentaje: state.detraccionPorcentaje,
-        cuenta_bn: state.detraccionCuentaBn,
-      } : undefined,
-    });
+      detraccion:
+        state.tipoOperacion === '1001'
+          ? {
+              cod_bien: state.detraccionCodBien,
+              porcentaje: state.detraccionPorcentaje,
+              cuenta_bn: state.detraccionCuentaBn
+            }
+          : undefined
+    })
     if (error) {
-      setValidationError(error);
-      return;
+      setValidationError(error)
+      return
     }
 
-    setValidationError(null);
-    setIsSubmitting(true);
+    setValidationError(null)
+    setIsSubmitting(true)
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0];
+      const fechaHoy = new Date().toISOString().split('T')[0]
 
       const comprobanteId = await emitirComprobante.mutateAsync({
         pedido_id: state.selectedPedidoId,
@@ -109,7 +123,7 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
           subtotal: l.subtotal,
           unidad_sunat: l.unidad_sunat,
           afectacion_igv: l.afectacion_igv,
-          descuento_linea_monto: l.descuento_linea_monto,
+          descuento_linea_monto: l.descuento_linea_monto
         })),
         direccion_facturacion: state.direccionFacturacion.trim() || undefined,
         descuento_global_monto: state.descuentoMonto,
@@ -122,42 +136,45 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 cod_medio_pago: state.detraccionCodMedioPago,
                 porcentaje: state.detraccionPorcentaje,
                 monto: state.detraccionMonto,
-                cuenta_bn: state.detraccionCuentaBn,
+                cuenta_bn: state.detraccionCuentaBn
               }
-            : undefined,
-      });
+            : undefined
+      })
 
       try {
-        const sunatResult = await enviarASunat.mutateAsync(comprobanteId);
+        const sunatResult = await enviarASunat.mutateAsync(comprobanteId)
         if (sunatResult.success) {
-          toast.success(`Comprobante ${sunatResult.serie_numero} aceptado por SUNAT ✓`);
+          toast.success(
+            `Comprobante ${sunatResult.serie_numero} aceptado por SUNAT ✓`
+          )
         } else {
           toast.warning(
-            `Comprobante registrado pero SUNAT respondió: ${sunatResult.error || 'Error desconocido'}`,
-          );
+            `Comprobante registrado pero SUNAT respondió: ${sunatResult.error || 'Error desconocido'}`
+          )
         }
       } catch {
         toast.warning(
-          'Comprobante registrado. El envío a SUNAT falló — puede reintentar desde la bandeja.',
-        );
+          'Comprobante registrado. El envío a SUNAT falló — puede reintentar desde la bandeja.'
+        )
       }
 
-      router.push('/facturacion');
+      router.push('/facturacion')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al emitir el comprobante');
+      toast.error(
+        err instanceof Error ? err.message : 'Error al emitir el comprobante'
+      )
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   // ─── Render ──────────────────────────────────────────────────
 
-  const isPedidoMode = !!state.selectedPedidoId;
-  const pedidoCliente = state.selectedPedido?.clientes;
+  const isPedidoMode = !!state.selectedPedidoId
+  const pedidoCliente = state.selectedPedido?.clientes
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#0F1115]">
-
       {/* Header */}
       <header className="flex shrink-0 bg-[#0F1115] h-16 border-[#334155] border-b px-6 items-center justify-between z-10">
         <div className="flex items-center gap-3">
@@ -165,11 +182,16 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
             href="/facturacion"
             className="flex items-center gap-1.5 text-sm text-[#94A3B8] hover:text-[#E2E8F0] transition-colors"
           >
-            <iconify-icon icon="solar:arrow-left-linear" class="text-base"></iconify-icon>
+            <iconify-icon
+              icon="solar:arrow-left-linear"
+              class="text-base"
+            ></iconify-icon>
             Facturación
           </Link>
           <span className="text-[#334155]">/</span>
-          <span className="text-sm font-medium text-[#E2E8F0]">Nueva Factura</span>
+          <span className="text-sm font-medium text-[#E2E8F0]">
+            Nueva Factura
+          </span>
         </div>
         <div className="hidden sm:flex items-center gap-3">
           {validationError && (
@@ -178,12 +200,18 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="flex items-center gap-2 bg-[#10B981] hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            className="flex items-center gap-2 bg-[#3B82F6] hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             {isSubmitting ? (
-              <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base"></iconify-icon>
+              <iconify-icon
+                icon="solar:spinner-linear"
+                class="animate-spin text-base"
+              ></iconify-icon>
             ) : (
-              <iconify-icon icon="solar:bill-list-linear" class="text-base"></iconify-icon>
+              <iconify-icon
+                icon="solar:bill-list-linear"
+                class="text-base"
+              ></iconify-icon>
             )}
             Emitir Comprobante
           </button>
@@ -193,20 +221,24 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
       {/* Body */}
       <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
         <div className="max-w-3xl mx-auto space-y-6">
-
           {/* ── Selector de Pedido ──────────────────────────── */}
           <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-[#E2E8F0]">
                 Pedido vinculado
-                <span className="ml-1.5 text-xs text-[#94A3B8] font-normal">(opcional)</span>
+                <span className="ml-1.5 text-xs text-[#94A3B8] font-normal">
+                  (opcional)
+                </span>
               </p>
               {state.selectedPedidoId && (
                 <button
                   onClick={() => state.handlePedidoSelect(null)}
                   className="text-xs text-[#94A3B8] hover:text-[#E2E8F0] flex items-center gap-1 transition-colors"
                 >
-                  <iconify-icon icon="solar:close-linear" class="text-sm"></iconify-icon>
+                  <iconify-icon
+                    icon="solar:close-linear"
+                    class="text-sm"
+                  ></iconify-icon>
                   Limpiar
                 </button>
               )}
@@ -226,7 +258,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
               ))}
             </select>
             {state.pendingPedidos.length === 0 && (
-              <p className="text-xs text-[#64748B]">No hay pedidos pendientes de facturación.</p>
+              <p className="text-xs text-[#64748B]">
+                No hay pedidos pendientes de facturación.
+              </p>
             )}
           </section>
 
@@ -237,10 +271,13 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
             {isPedidoMode && pedidoCliente ? (
               /* Pedido seleccionado → cliente read-only */
               <div className="p-3 bg-[#0F1115] border border-[#334155] rounded-lg space-y-1">
-                <p className="text-sm font-medium text-[#E2E8F0]">{getClientDisplayName(pedidoCliente)}</p>
+                <p className="text-sm font-medium text-[#E2E8F0]">
+                  {getClientDisplayName(pedidoCliente)}
+                </p>
                 {pedidoCliente.numero_documento && (
                   <p className="text-xs text-[#94A3B8]">
-                    {pedidoCliente.tipo_documento?.toUpperCase()}: {pedidoCliente.numero_documento}
+                    {pedidoCliente.tipo_documento?.toUpperCase()}:{' '}
+                    {pedidoCliente.numero_documento}
                   </p>
                 )}
               </div>
@@ -257,9 +294,10 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 <select
                   value={state.selectedClienteId ?? ''}
                   onChange={(e) => {
-                    const id = e.target.value || null;
-                    const client = initialClients.find((c) => c.id === id) ?? null;
-                    state.handleClienteSelect(id, client);
+                    const id = e.target.value || null
+                    const client =
+                      initialClients.find((c) => c.id === id) ?? null
+                    state.handleClienteSelect(id, client)
                   }}
                   className="w-full bg-[#0F1115] border border-[#334155] rounded-lg py-2.5 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
                 >
@@ -274,8 +312,11 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 {state.selectedClient && (
                   <div className="p-2 bg-[#0F1115] border border-[#334155] rounded-lg">
                     <p className="text-xs text-[#94A3B8]">
-                      {state.selectedClient.tipo_documento?.toUpperCase()}: {state.selectedClient.numero_documento || '—'}
-                      {state.selectedClient.email ? ` · ${state.selectedClient.email}` : ''}
+                      {state.selectedClient.tipo_documento?.toUpperCase()}:{' '}
+                      {state.selectedClient.numero_documento || '—'}
+                      {state.selectedClient.email
+                        ? ` · ${state.selectedClient.email}`
+                        : ''}
                     </p>
                   </div>
                 )}
@@ -293,7 +334,7 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { codigo: '01', label: 'Factura (RUC)' },
-                    { codigo: '03', label: 'Boleta (DNI)' },
+                    { codigo: '03', label: 'Boleta (DNI)' }
                   ].map((t) => (
                     <button
                       key={t.codigo}
@@ -317,19 +358,28 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 </label>
                 <div className="flex items-center h-10 px-3 rounded-md border border-[#334155] bg-[#0F1115]">
                   {loadingSerie ? (
-                    <iconify-icon icon="solar:spinner-linear" class="animate-spin text-sm text-[#94A3B8]"></iconify-icon>
+                    <iconify-icon
+                      icon="solar:spinner-linear"
+                      class="animate-spin text-sm text-[#94A3B8]"
+                    ></iconify-icon>
                   ) : previewSerie ? (
-                    <span className="text-sm font-mono font-semibold text-[#10B981]">{previewSerie}</span>
+                    <span className="text-sm font-mono font-semibold text-[#10B981]">
+                      {previewSerie}
+                    </span>
                   ) : (
                     <span className="text-xs text-red-400 flex items-center gap-1">
-                      <iconify-icon icon="solar:danger-triangle-linear" class="text-sm"></iconify-icon>
+                      <iconify-icon
+                        icon="solar:danger-triangle-linear"
+                        class="text-sm"
+                      ></iconify-icon>
                       Sin serie configurada
                     </span>
                   )}
                 </div>
                 {state.tipoDocCodigo === '03' && (
                   <p className="mt-1 text-[10px] text-[#94A3B8]">
-                    Las boletas se validan en el resumen diario nocturno de SUNAT.
+                    Las boletas se validan en el resumen diario nocturno de
+                    SUNAT.
                   </p>
                 )}
               </div>
@@ -341,7 +391,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
             <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5">
               <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
                 Tipo de Operación
-                <span className="ml-1 text-[#94A3B8] font-normal">(Catálogo 51 SUNAT)</span>
+                <span className="ml-1 text-[#94A3B8] font-normal">
+                  (Catálogo 51 SUNAT)
+                </span>
               </label>
               <select
                 value={state.tipoOperacion}
@@ -361,8 +413,13 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
           {state.tipoOperacion === '1001' && (
             <section className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-4">
               <div className="flex items-center gap-2">
-                <iconify-icon icon="solar:bill-check-linear" class="text-amber-400 text-base shrink-0"></iconify-icon>
-                <p className="text-xs font-semibold text-amber-400">Datos de Detracción</p>
+                <iconify-icon
+                  icon="solar:bill-check-linear"
+                  class="text-amber-400 text-base shrink-0"
+                ></iconify-icon>
+                <p className="text-xs font-semibold text-amber-400">
+                  Datos de Detracción
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -393,7 +450,11 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                     max="100"
                     step="0.01"
                     value={state.detraccionPorcentaje}
-                    onChange={(e) => state.setDetraccionPorcentaje(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      state.setDetraccionPorcentaje(
+                        parseFloat(e.target.value) || 0
+                      )
+                    }
                     className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
                   />
                 </div>
@@ -403,25 +464,32 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 <div>
                   <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
                     Monto Detracción
-                    <span className="ml-1 text-[#64748B] font-normal">(auto-calculado)</span>
+                    <span className="ml-1 text-[#64748B] font-normal">
+                      (auto-calculado)
+                    </span>
                   </label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={state.detraccionMonto}
-                    onChange={(e) => state.setDetraccionMonto(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      state.setDetraccionMonto(parseFloat(e.target.value) || 0)
+                    }
                     className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-amber-300 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Cuenta Banco de la Nación <span className="text-red-400">*</span>
+                    Cuenta Banco de la Nación{' '}
+                    <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
                     value={state.detraccionCuentaBn}
-                    onChange={(e) => state.setDetraccionCuentaBn(e.target.value)}
+                    onChange={(e) =>
+                      state.setDetraccionCuentaBn(e.target.value)
+                    }
                     placeholder="Ej. 00-123456-0-01"
                     className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
                   />
@@ -429,10 +497,14 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">Medio de Pago</label>
+                <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                  Medio de Pago
+                </label>
                 <select
                   value={state.detraccionCodMedioPago}
-                  onChange={(e) => state.setDetraccionCodMedioPago(e.target.value)}
+                  onChange={(e) =>
+                    state.setDetraccionCodMedioPago(e.target.value)
+                  }
                   className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
                 >
                   <option value="001">001 – Depósito en cuenta</option>
@@ -447,7 +519,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
           <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5">
             <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
               Dirección de Facturación
-              <span className="ml-1 text-[#94A3B8] font-normal">(si difiere del cliente)</span>
+              <span className="ml-1 text-[#94A3B8] font-normal">
+                (si difiere del cliente)
+              </span>
             </label>
             <input
               type="text"
@@ -469,14 +543,20 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 onClick={state.addLinea}
                 className="flex items-center gap-1.5 text-xs text-[#10B981] hover:text-emerald-400 border border-[#10B981]/30 hover:border-emerald-400/50 px-2.5 py-1.5 rounded-md transition-colors"
               >
-                <iconify-icon icon="solar:add-circle-linear" class="text-sm"></iconify-icon>
+                <iconify-icon
+                  icon="solar:add-circle-linear"
+                  class="text-sm"
+                ></iconify-icon>
                 Agregar línea
               </button>
             </div>
 
             {state.loadingLineas && (
               <div className="flex items-center gap-2 py-4 text-xs text-[#94A3B8]">
-                <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base text-[#3B82F6]"></iconify-icon>
+                <iconify-icon
+                  icon="solar:spinner-linear"
+                  class="animate-spin text-base text-[#3B82F6]"
+                ></iconify-icon>
                 Cargando líneas del pedido...
               </div>
             )}
@@ -484,7 +564,8 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
             {!state.loadingLineas && state.lineas.length === 0 && (
               <div className="p-6 border border-dashed border-[#334155] rounded-lg text-center">
                 <p className="text-sm text-[#64748B]">
-                  No hay líneas. Seleccioná un pedido o agregá líneas manualmente.
+                  No hay líneas. Seleccioná un pedido o agregá líneas
+                  manualmente.
                 </p>
               </div>
             )}
@@ -494,13 +575,27 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 <table className="w-full text-left min-w-[700px]">
                   <thead className="bg-[#0F1115]">
                     <tr>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Producto / Descripción</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-16 text-center">Cant.</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-24 text-right">P. Unit.</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-28">Unidad</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-32">Afect. IGV</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-20 text-right">Subtotal</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-20 text-right">Desc.</th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">
+                        Producto / Descripción
+                      </th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-16 text-center">
+                        Cant.
+                      </th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-24 text-right">
+                        P. Unit.
+                      </th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-28">
+                        Unidad
+                      </th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-32">
+                        Afect. IGV
+                      </th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-20 text-right">
+                        Subtotal
+                      </th>
+                      <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-20 text-right">
+                        Desc.
+                      </th>
                       <th className="w-8"></th>
                     </tr>
                   </thead>
@@ -511,12 +606,18 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                           <input
                             type="text"
                             value={l.nombre_producto}
-                            onChange={(e) => state.updateLinea(idx, { nombre_producto: e.target.value })}
+                            onChange={(e) =>
+                              state.updateLinea(idx, {
+                                nombre_producto: e.target.value
+                              })
+                            }
                             placeholder="Descripción del producto"
                             className="w-full bg-transparent text-xs text-[#E2E8F0] placeholder-[#94A3B8]/50 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] rounded px-1 py-0.5"
                           />
                           {l.sku && (
-                            <p className="text-[10px] text-[#64748B] px-1">{l.sku}</p>
+                            <p className="text-[10px] text-[#64748B] px-1">
+                              {l.sku}
+                            </p>
                           )}
                         </td>
                         <td className="px-3 py-2">
@@ -525,7 +626,11 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                             min="0.01"
                             step="0.01"
                             value={l.cantidad}
-                            onChange={(e) => state.updateLinea(idx, { cantidad: parseFloat(e.target.value) || 0 })}
+                            onChange={(e) =>
+                              state.updateLinea(idx, {
+                                cantidad: parseFloat(e.target.value) || 0
+                              })
+                            }
                             className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-xs text-[#E2E8F0] text-center focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
                           />
                         </td>
@@ -535,7 +640,11 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                             min="0"
                             step="0.01"
                             value={l.precio_unitario}
-                            onChange={(e) => state.updateLinea(idx, { precio_unitario: parseFloat(e.target.value) || 0 })}
+                            onChange={(e) =>
+                              state.updateLinea(idx, {
+                                precio_unitario: parseFloat(e.target.value) || 0
+                              })
+                            }
                             className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-xs text-[#E2E8F0] text-right focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
                           />
                         </td>
@@ -545,7 +654,11 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                           ) : (
                             <select
                               value={l.unidad_sunat}
-                              onChange={(e) => state.updateLinea(idx, { unidad_sunat: e.target.value })}
+                              onChange={(e) =>
+                                state.updateLinea(idx, {
+                                  unidad_sunat: e.target.value
+                                })
+                              }
                               className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-[11px] text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
                             >
                               {unidades.map((u) => (
@@ -559,7 +672,11 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                         <td className="px-3 py-2">
                           <select
                             value={l.afectacion_igv}
-                            onChange={(e) => state.updateLinea(idx, { afectacion_igv: e.target.value })}
+                            onChange={(e) =>
+                              state.updateLinea(idx, {
+                                afectacion_igv: e.target.value
+                              })
+                            }
                             className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-[11px] text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
                           >
                             {afectaciones.map((a) => (
@@ -578,7 +695,12 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                             min="0"
                             step="0.01"
                             value={l.descuento_linea_monto}
-                            onChange={(e) => state.updateLinea(idx, { descuento_linea_monto: parseFloat(e.target.value) || 0 })}
+                            onChange={(e) =>
+                              state.updateLinea(idx, {
+                                descuento_linea_monto:
+                                  parseFloat(e.target.value) || 0
+                              })
+                            }
                             className="w-full bg-[#0F1115] border border-[#334155] rounded px-1.5 py-1 text-xs text-[#E2E8F0] text-right focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
                           />
                         </td>
@@ -589,7 +711,10 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                             className="p-1 text-[#64748B] hover:text-red-400 transition-colors"
                             title="Eliminar línea"
                           >
-                            <iconify-icon icon="solar:trash-bin-minimalistic-linear" class="text-sm"></iconify-icon>
+                            <iconify-icon
+                              icon="solar:trash-bin-minimalistic-linear"
+                              class="text-sm"
+                            ></iconify-icon>
                           </button>
                         </td>
                       </tr>
@@ -613,7 +738,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                     min="0"
                     step="0.01"
                     value={state.descuentoMonto}
-                    onChange={(e) => state.setDescuentoMonto(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      state.setDescuentoMonto(parseFloat(e.target.value) || 0)
+                    }
                     placeholder="0.00"
                     className="flex-1 bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
                   />
@@ -643,7 +770,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
               {state.descuentoMonto > 0 && (
                 <div className="flex justify-between text-xs text-[#94A3B8]">
                   <span>Descuento global</span>
-                  <span className="text-red-400">- {formatCurrency(state.descuentoMonto)}</span>
+                  <span className="text-red-400">
+                    - {formatCurrency(state.descuentoMonto)}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between text-xs text-[#94A3B8]">
@@ -652,7 +781,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
               </div>
               <div className="flex justify-between text-sm font-semibold text-[#E2E8F0] pt-1 border-t border-[#334155]">
                 <span>Total</span>
-                <span className="text-[#10B981]">{formatCurrency(state.totales.total)}</span>
+                <span className="text-[#10B981]">
+                  {formatCurrency(state.totales.total)}
+                </span>
               </div>
             </div>
           </section>
@@ -660,7 +791,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
           {/* ── Botón submit mobile + error de validación ──── */}
           <div className="sm:hidden pb-6 space-y-3">
             {validationError && (
-              <p className="text-sm text-[#EF4444] text-center">{validationError}</p>
+              <p className="text-sm text-[#EF4444] text-center">
+                {validationError}
+              </p>
             )}
             <button
               onClick={handleSubmit}
@@ -668,17 +801,21 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
               className="w-full flex items-center justify-center gap-2 bg-[#10B981] hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-medium py-3 rounded-lg transition-colors"
             >
               {isSubmitting ? (
-                <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base"></iconify-icon>
+                <iconify-icon
+                  icon="solar:spinner-linear"
+                  class="animate-spin text-base"
+                ></iconify-icon>
               ) : (
-                <iconify-icon icon="solar:bill-list-linear" class="text-base"></iconify-icon>
+                <iconify-icon
+                  icon="solar:bill-list-linear"
+                  class="text-base"
+                ></iconify-icon>
               )}
               Emitir Comprobante
             </button>
           </div>
-
-
         </div>
       </main>
     </div>
-  );
+  )
 }

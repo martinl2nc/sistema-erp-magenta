@@ -185,7 +185,9 @@ export default function QuotesList() {
                       <button onClick={() => setHistoryQuote({ id: quote.id, idStr: `COT-${quote.numero_correlativo}` })} className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors" title="Historial de envíos">
                         <iconify-icon icon="solar:history-2-linear" class="text-lg"></iconify-icon>
                       </button>
-                      <button onClick={() => router.push(`/cotizaciones/editar/${quote.id}`)} className="border border-[#334155] text-white text-xs font-medium px-3 py-1.5 rounded-md hover:bg-[#334155]/50 transition-colors">Editar</button>
+                      <button onClick={() => router.push(`/cotizaciones/editar/${quote.id}`)} className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors" title="Editar cotización">
+                        <iconify-icon icon="solar:pen-linear" class="text-lg"></iconify-icon>
+                      </button>
                       <button onClick={() => handleDelete(quote.id)} disabled={deleteMutation.isPending} className="border border-red-500/50 text-red-500 text-xs font-medium px-2 py-1.5 rounded-md hover:bg-red-500/10 transition-colors disabled:opacity-50" title="Eliminar">
                         <iconify-icon icon="solar:trash-bin-trash-linear" class="text-lg"></iconify-icon>
                       </button>
@@ -246,7 +248,9 @@ export default function QuotesList() {
                         <button onClick={() => setHistoryQuote({ id: quote.id, idStr: `COT-${quote.numero_correlativo}` })} className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors" title="Historial de envíos">
                           <iconify-icon icon="solar:history-2-linear" class="text-lg"></iconify-icon>
                         </button>
-                        <button onClick={() => router.push(`/cotizaciones/editar/${quote.id}`)} className="border border-[#334155] text-white text-xs font-medium px-3 py-1.5 rounded-md hover:bg-[#334155]/50 transition-colors whitespace-nowrap">Editar</button>
+                        <button onClick={() => router.push(`/cotizaciones/editar/${quote.id}`)} className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors" title="Editar cotización">
+                          <iconify-icon icon="solar:pen-linear" class="text-lg"></iconify-icon>
+                        </button>
                         <button onClick={() => handleDelete(quote.id)} disabled={deleteMutation.isPending} className="border border-red-500/50 text-red-500 text-xs font-medium px-2 py-1.5 rounded-md hover:bg-red-500/10 transition-colors disabled:opacity-50" title="Eliminar">
                           <iconify-icon icon="solar:trash-bin-trash-linear" class="text-lg"></iconify-icon>
                         </button>

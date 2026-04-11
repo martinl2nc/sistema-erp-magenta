@@ -219,7 +219,9 @@ export default function PedidoForm({
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-6 space-y-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-medium tracking-tight text-[#E2E8F0]">Generar Pedido Directo</h1>
+          <h1 className="text-2xl font-medium tracking-tight text-[#E2E8F0]">
+            {isEditing ? `Editar Pedido PED-${existingPedido?.numero_pedido ?? ''}` : 'Nuevo Pedido Directo'}
+          </h1>
         </div>
 
         <PedidoFormMasterData
