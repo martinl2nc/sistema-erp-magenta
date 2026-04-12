@@ -6,17 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { pdf } from '@react-pdf/renderer';
 
-import { useQuoteDetail, useSaveQuote, useDeleteQuote, useSendQuoteWebhook } from '@/hooks/useQuotes';
+import { useSaveQuote, useDeleteQuote, useSendQuoteWebhook } from '@/hooks/useQuotes';
 import { useLogEmailSend } from '@/hooks/useEmailHistory';
-import { useClientsList, useActiveClientsList, clientsKeys } from '@/hooks/useClients';
-import { useSellersList } from '@/hooks/useSellers';
-import { useProductsList } from '@/hooks/useProducts';
-import { useCompanyConfig } from '@/hooks/useCompanyConfig';
+import { clientsKeys } from '@/hooks/useClients';
 
 import ClientFormModal from '@/features/clients/ClientFormModal';
 import QuotePDFPreviewModal from './QuotePDFPreviewModal';
 import type { Client } from '@/services/clients.service';
-import type { QuoteFormData, QuoteStatus } from '@/services/quotes.service';
+import type { Product } from '@/services/products.service';
+import type { Seller } from '@/services/sellers.service';
+import type { CompanyConfig } from '@/services/companyConfig.service';
+import type { Quote, QuoteFormData, QuoteStatus } from '@/services/quotes.service';
 import { isWebhookConfigured, buildWebhookPayload } from '@/services/webhook.service';
 import { useQuoteFormState } from './useQuoteFormState';
 import { formatCurrency, getClientDisplayName, validateQuoteForm, blobToBase64, downloadBlob } from './quoteForm.utils';
@@ -24,28 +24,39 @@ import { QuotePDFDocument } from './QuotePDFTemplate';
 
 interface QuoteFormProps {
   id?: string;
+  initialQuote?: Quote;
+  initialAllClients: Client[];
+  initialActiveClients: Client[];
+  initialProducts: Product[];
+  initialSellers: Seller[];
+  companyConfig: CompanyConfig | null;
 }
 
-export default function QuoteForm({ id }: QuoteFormProps) {
+export default function QuoteForm({
+  id,
+  initialQuote,
+  initialAllClients,
+  initialActiveClients,
+  initialProducts,
+  initialSellers,
+  companyConfig,
+}: QuoteFormProps) {
   const router = useRouter();
   const isEditing = Boolean(id);
 
-  const { data: activeClients = [], isLoading: loadingActiveClients } = useActiveClientsList();
-  const { data: allClients = [], isLoading: loadingAllClients } = useClientsList();
-  const { data: sellers = [], isLoading: loadingSellers } = useSellersList();
-  const { data: products = [], isLoading: loadingProducts } = useProductsList();
-  const { data: existingQuote, isLoading: loadingQuote } = useQuoteDetail(id || null);
-  const { data: companyConfig = null } = useCompanyConfig();
+  // Catalog data now comes from server-side props
+  const allClients = initialAllClients;
+  const activeClients = initialActiveClients;
+  const sellers = initialSellers;
+  const products = initialProducts;
+  const existingQuote = initialQuote;
 
+  // Only mutation hooks remain client-side
   const saveQuoteMutation = useSaveQuote();
   const deleteQuoteMutation = useDeleteQuote();
   const webhookMutation = useSendQuoteWebhook();
   const logEmailSendMutation = useLogEmailSend();
   const queryClient = useQueryClient();
-
-  const loadingClients = loadingActiveClients || loadingAllClients;
-  const loadingDropdowns = loadingClients || loadingSellers || loadingProducts;
-  const loading = loadingDropdowns || (isEditing && loadingQuote);
 
   const [error, setError] = useState<string | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -63,13 +74,13 @@ export default function QuoteForm({ id }: QuoteFormProps) {
     lineItems,
     totals,
     selectableClients,
+    isVendorLocked,
     handleQuoteChange,
     addLineItem,
     removeLineItem,
     updateLineItem,
   } = useQuoteFormState({
     isEditing,
-    loading,
     existingQuote,
     activeClients,
     allClients,
@@ -243,17 +254,6 @@ export default function QuoteForm({ id }: QuoteFormProps) {
 
   const isSaving = saveQuoteMutation.isPending || deleteQuoteMutation.isPending || isPreviewLoading;
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="text-[#94A3B8] flex items-center gap-2">
-          <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>
-          Cargando motor de cotizaciones...
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#0F1115]">
       {/* Top Header */}
@@ -280,7 +280,8 @@ export default function QuoteForm({ id }: QuoteFormProps) {
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border
             ${quoteData.estado === 'Aprobada' || quoteData.estado === 'Enviada' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' :
               quoteData.estado === 'Borrador' ? 'bg-[#94A3B8]/10 text-[#94A3B8] border-[#94A3B8]/20' :
-            'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20'}`}>
+              quoteData.estado === 'Cancelada' ? 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20' :
+            'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'}`}>
             {quoteData.estado}
           </span>
         </div>
@@ -304,10 +305,19 @@ export default function QuoteForm({ id }: QuoteFormProps) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Vendedor Asignado</label>
-                <select className="w-full bg-[#0F1115] border border-[#334155] rounded-lg text-sm text-[#E2E8F0] px-3 py-2.5 focus:outline-none focus:border-[#3B82F6]" value={quoteData.vendedor_id || ''} onChange={(e) => handleQuoteChange('vendedor_id', e.target.value)}>
-                  <option value="">(Sin Asignar)</option>
-                  {sellers.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                </select>
+                {isVendorLocked ? (
+                  <div className="w-full bg-[#0F1115]/60 border border-[#334155]/60 rounded-lg px-3 py-2.5 text-sm text-[#94A3B8] cursor-not-allowed flex items-center gap-2">
+                    <iconify-icon icon="solar:lock-linear" class="text-base shrink-0"></iconify-icon>
+                    <span className="text-[#E2E8F0]">
+                      {sellers.find(s => s.id === quoteData.vendedor_id)?.nombre || '—'}
+                    </span>
+                  </div>
+                ) : (
+                  <select className="w-full bg-[#0F1115] border border-[#334155] rounded-lg text-sm text-[#E2E8F0] px-3 py-2.5 focus:outline-none focus:border-[#3B82F6]" value={quoteData.vendedor_id || ''} onChange={(e) => handleQuoteChange('vendedor_id', e.target.value)}>
+                    <option value="">(Sin Asignar)</option>
+                    {sellers.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  </select>
+                )}
               </div>
             </div>
 
@@ -380,7 +390,7 @@ export default function QuoteForm({ id }: QuoteFormProps) {
               <thead>
                 <tr className="bg-[#0F1115] border-b border-[#334155]">
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[220px]">De Catálogo</th>
-                  <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase min-w-[250px]">Descripción Producto</th>
+                  <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase min-w-[250px]">Producto personalizado</th>
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[100px]">Cant.</th>
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[140px]">Precio U. (S/)</th>
                   <th className="py-3 px-4 text-xs font-medium text-[#94A3B8] uppercase w-[130px]">Desc (S/)</th>
@@ -441,14 +451,14 @@ export default function QuoteForm({ id }: QuoteFormProps) {
               <div className="flex justify-between text-xs text-[#94A3B8]">
                 <span>Subtotal</span><span className="text-[#E2E8F0]">{formatCurrency(totals.subtotal)}</span>
               </div>
-              {quoteData.descuento_global_monto > 0 && (
-                <div className="flex justify-between text-xs text-[#94A3B8]">
-                  <span>Descuento Global</span><span className="text-[#EF4444]">- {formatCurrency(quoteData.descuento_global_monto)}</span>
-                </div>
-              )}
               {quoteData.aplica_igv && (
                 <div className="flex justify-between text-xs text-[#94A3B8]">
                   <span>IGV (18%)</span><span className="text-[#E2E8F0]">{formatCurrency(totals.igv_monto)}</span>
+                </div>
+              )}
+              {quoteData.descuento_global_monto > 0 && (
+                <div className="flex justify-between text-xs text-[#94A3B8]">
+                  <span>Descuento Global</span><span className="text-[#EF4444]">- {formatCurrency(quoteData.descuento_global_monto)}</span>
                 </div>
               )}
             </div>
@@ -487,14 +497,14 @@ export default function QuoteForm({ id }: QuoteFormProps) {
               <div className="flex justify-between items-center text-sm text-[#94A3B8]">
                 <span>Subtotal</span><span className="font-medium text-[#E2E8F0]">{formatCurrency(totals.subtotal)}</span>
               </div>
-              {quoteData.descuento_global_monto > 0 && (
-                <div className="flex justify-between items-center text-sm text-[#94A3B8]">
-                  <span>Descuento Global</span><span className="font-medium text-[#EF4444]">- {formatCurrency(quoteData.descuento_global_monto)}</span>
-                </div>
-              )}
               {quoteData.aplica_igv && (
                 <div className="flex justify-between items-center text-sm text-[#94A3B8]">
                   <span>IGV (18%)</span><span className="font-medium text-[#E2E8F0]">{formatCurrency(totals.igv_monto)}</span>
+                </div>
+              )}
+              {quoteData.descuento_global_monto > 0 && (
+                <div className="flex justify-between items-center text-sm text-[#94A3B8]">
+                  <span>Descuento Global</span><span className="font-medium text-[#EF4444]">- {formatCurrency(quoteData.descuento_global_monto)}</span>
                 </div>
               )}
               <div className="h-px bg-[#334155] w-full my-3"></div>

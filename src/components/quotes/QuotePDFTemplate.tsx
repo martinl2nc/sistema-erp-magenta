@@ -213,19 +213,19 @@ export const QuotePDFDocument = ({ quoteData, totals, lineItems, client, sellerN
             <Text style={S.totalsTitle}>Totales:</Text>
             <View style={S.totalsBox}>
               <View style={S.totalsLine}>
-                <Text style={S.tLabel}>SUBTOTAL:</Text>
+                <Text style={S.tLabel}>SUBTOTAL (Base):</Text>
                 <Text style={S.tValue}>{formatCurrency(totals.subtotal)}</Text>
               </View>
-              {quoteData.descuento_global_monto > 0 && (
-                <View style={S.totalsLine}>
-                  <Text style={S.tLabel}>DESCUENTO:</Text>
-                  <Text style={S.tDiscount}>- {formatCurrency(quoteData.descuento_global_monto)}</Text>
-                </View>
-              )}
               {quoteData.aplica_igv && (
                 <View style={S.totalsLine}>
                   <Text style={S.tLabel}>IGV (18%):</Text>
                   <Text style={S.tValue}>{formatCurrency(totals.igv_monto)}</Text>
+                </View>
+              )}
+              {quoteData.descuento_global_monto > 0 && (
+                <View style={S.totalsLine}>
+                  <Text style={S.tLabel}>DESCUENTO GLOBAL:</Text>
+                  <Text style={S.tDiscount}>- {formatCurrency(quoteData.descuento_global_monto)}</Text>
                 </View>
               )}
               <View style={S.tDivider} />

@@ -38,6 +38,7 @@ export const sendQuoteToWebhook = async (params: SendQuoteWebhookParams): Promis
  */
 export const isWebhookConfigured = (): boolean => !!WEBHOOK_URL;
 
+
 /**
  * Builds the webhook payload from quote context data.
  * Returns null if the client has no email (webhook cannot send).

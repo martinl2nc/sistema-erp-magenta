@@ -1,5 +1,7 @@
 import type { Client } from '@/services/clients.service';
 import type { QuoteFormData, QuoteLineItem } from '@/services/quotes.service';
+import { formatCurrency as formatCurrencyUtil, getClientDisplayName as getClientNameUtil } from '@/utils/formatters';
+import { TAX_RATES } from '@/constants';
 
 export interface QuoteTotals {
   subtotal: number;
@@ -40,15 +42,22 @@ export const getInitialQuoteData = (): QuoteFormData => {
 };
 
 export const calculateQuoteTotals = (lineItems: QuoteLineItem[], descuentoGlobalInput: number, aplicaIgv: boolean): QuoteTotals => {
-  const subtotal = lineItems.reduce((acc, item) => acc + (item.subtotal_linea || 0), 0);
+  const subtotalBase = lineItems.reduce((acc, item) => acc + (item.subtotal_linea || 0), 0);
   const descuentoGlobal = Number(descuentoGlobalInput) || 0;
-  const baseParaIgv = Math.max(0, subtotal - descuentoGlobal);
-  const igv = aplicaIgv ? baseParaIgv * 0.18 : 0;
+  
+  // IGV se calcula sobre la base completa (sin descontar el descuento global aún)
+  const igv = aplicaIgv ? subtotalBase * TAX_RATES.IGV : 0;
+  
+  // Subtotal con IGV = Base + IGV
+  const subtotalConIgv = subtotalBase + igv;
+  
+  // Total Final = (Base + IGV) - Descuento Global
+  const total_final = Math.max(0, subtotalConIgv - descuentoGlobal);
 
   return {
-    subtotal,
+    subtotal: subtotalBase,
     igv_monto: igv,
-    total_final: baseParaIgv + igv,
+    total_final: total_final,
   };
 };
 
@@ -65,13 +74,14 @@ export const validateQuoteForm = (quoteData: QuoteFormData, lineItems: QuoteLine
 };
 
 export const getClientDisplayName = (client: Client): string => {
-  const name = client.razon_social && client.razon_social.trim() !== ''
-    ? `${client.razon_social} (Doc: ${client.numero_documento || 'N/A'})`
-    : `${client.nombres_contacto || ''} ${client.apellidos_contacto || ''}`.trim() || 'Sin Nombre';
-  return client.activo ? name : `${name} - (Inactivo)`;
+  const baseName = getClientNameUtil(client);
+  const nameWithDoc = client.numero_documento 
+    ? `${baseName} (Doc: ${client.numero_documento})`
+    : baseName;
+  return client.activo ? nameWithDoc : `${nameWithDoc} - (Inactivo)`;
 };
 
-export const formatCurrency = (value: number): string => `S/ ${value.toFixed(2)}`;
+export const formatCurrency = (value: number): string => formatCurrencyUtil(value);
 
 export const blobToBase64 = async (blob: Blob): Promise<string> => {
   const arrayBuffer = await blob.arrayBuffer();

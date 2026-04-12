@@ -9,18 +9,20 @@ import {
   toggleClientActive,
   deleteClient,
 } from '@/services/clients.service';
-import type { ClientFormData } from '@/services/clients.service';
+import type { ClientFormData, ClientsListParams } from '@/services/clients.service';
 
 export const clientsKeys = {
   all: () => ['clients'] as const,
-  list: () => [...clientsKeys.all(), 'list'] as const,
+  lists: () => [...clientsKeys.all(), 'list'] as const,
+  list: (params?: ClientsListParams) => [...clientsKeys.lists(), params] as const,
   active: () => [...clientsKeys.all(), 'active'] as const,
 };
 
-export const useClientsList = () => {
+export const useClientsList = (params?: ClientsListParams) => {
   return useQuery({
-    queryKey: clientsKeys.list(),
-    queryFn: getClients,
+    queryKey: clientsKeys.list(params),
+    queryFn: () => getClients(params),
+    placeholderData: (prev) => prev,
   });
 };
 
@@ -37,7 +39,7 @@ export const useCreateClient = () => {
   return useMutation({
     mutationFn: (data: ClientFormData) => createClientRecord(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: clientsKeys.list() });
+      queryClient.invalidateQueries({ queryKey: clientsKeys.lists() });
       queryClient.invalidateQueries({ queryKey: clientsKeys.active() });
     },
   });
@@ -49,7 +51,7 @@ export const useUpdateClient = () => {
     mutationFn: ({ id, data }: { id: string; data: Partial<ClientFormData> }) =>
       updateClient(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: clientsKeys.list() });
+      queryClient.invalidateQueries({ queryKey: clientsKeys.lists() });
       queryClient.invalidateQueries({ queryKey: clientsKeys.active() });
     },
   });
@@ -61,7 +63,7 @@ export const useToggleClientActive = () => {
     mutationFn: ({ id, activo }: { id: string; activo: boolean }) =>
       toggleClientActive(id, activo),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: clientsKeys.list() });
+      queryClient.invalidateQueries({ queryKey: clientsKeys.lists() });
       queryClient.invalidateQueries({ queryKey: clientsKeys.active() });
     },
   });
@@ -72,7 +74,7 @@ export const useDeleteClient = () => {
   return useMutation({
     mutationFn: (id: string) => deleteClient(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: clientsKeys.list() });
+      queryClient.invalidateQueries({ queryKey: clientsKeys.lists() });
       queryClient.invalidateQueries({ queryKey: clientsKeys.active() });
     },
   });

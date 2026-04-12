@@ -13,6 +13,9 @@ export const dashboardKeys = {
   porEstado: (vendedorId?: string | null) => [...dashboardKeys.all, 'porEstado', vendedorId] as const,
   topClientes: (vendedorId?: string | null) => [...dashboardKeys.all, 'topClientes', vendedorId] as const,
   topProductos: (vendedorId?: string | null) => [...dashboardKeys.all, 'topProductos', vendedorId] as const,
+  funnel: (vendedorId?: string | null) => [...dashboardKeys.all, 'funnel', vendedorId] as const,
+  financial: (vendedorId?: string | null) => [...dashboardKeys.all, 'financial', vendedorId] as const,
+  alerts: (vendedorId?: string | null) => [...dashboardKeys.all, 'alerts', vendedorId] as const,
 };
 
 export function useDashboardStats() {
@@ -49,5 +52,23 @@ export function useDashboardStats() {
     staleTime: STALE_TIME,
   });
 
-  return { kpis, porMes, porEstado, topClientes, topProductos };
+  const funnel = useQuery({
+    queryKey: dashboardKeys.funnel(vendedorId),
+    queryFn: () => dashboardService.getFunnelStats(vendedorId),
+    staleTime: STALE_TIME,
+  });
+
+  const financial = useQuery({
+    queryKey: dashboardKeys.financial(vendedorId),
+    queryFn: () => dashboardService.getFinancialMetrics(vendedorId),
+    staleTime: STALE_TIME,
+  });
+
+  const alerts = useQuery({
+    queryKey: dashboardKeys.alerts(vendedorId),
+    queryFn: () => dashboardService.getAlertData(vendedorId),
+    staleTime: STALE_TIME,
+  });
+
+  return { kpis, porMes, porEstado, topClientes, topProductos, funnel, financial, alerts };
 }

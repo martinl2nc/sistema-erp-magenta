@@ -89,6 +89,7 @@ export interface QuoteLineItem {
   precio_unitario: number;
   descuento_linea_monto: number;
   subtotal_linea: number;
+  productos?: { fraccionable: boolean } | null;
 }
 
 export type QuoteStatus = 'Aprobada' | 'Enviada' | 'Cancelada' | 'Borrador';
@@ -124,21 +125,67 @@ export interface QuoteFormData extends Omit<Quote, 'id' | 'numero_correlativo' |
   lineas: QuoteLineItem[];
 }
 
-export const quotesService = {
-  async getQuotes(): Promise<Quote[]> {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from('cotizaciones')
-      .select(`
-        *,
-        clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento ),
-        perfiles_usuario ( id, nombre )
-      `)
-      .order('fecha_emision', { ascending: false })
-      .order('numero_correlativo', { ascending: false });
+export interface QuotesListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  vendedor_id?: string;
+  estado?: string;
+}
 
+export interface PaginatedQuotes {
+  data: Quote[];
+  count: number;
+}
+
+export const quotesService = {
+  async getQuotes(params?: QuotesListParams): Promise<PaginatedQuotes> {
+    const supabase = createClient();
+    const { page = 1, pageSize = 10, search, vendedor_id, estado } = params ?? {};
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('cotizaciones')
+      .select(
+        `*, clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento ), perfiles_usuario ( id, nombre )`,
+        { count: 'exact' }
+      )
+      .order('fecha_emision', { ascending: false })
+      .order('numero_correlativo', { ascending: false })
+      .range(from, to);
+
+    if (search?.trim()) {
+      const term = search.trim();
+      const correlativoNum = parseInt(term);
+      const isNumeric = !isNaN(correlativoNum) && term === String(correlativoNum);
+
+      const { data: matchingClients } = await supabase
+        .from('clientes')
+        .select('id')
+        .or(
+          `razon_social.ilike.%${term}%,nombres_contacto.ilike.%${term}%,apellidos_contacto.ilike.%${term}%,numero_documento.ilike.%${term}%`
+        );
+
+      const clientIds = (matchingClients ?? []).map((c) => c.id);
+
+      if (isNumeric && clientIds.length > 0) {
+        query = query.or(`numero_correlativo.eq.${correlativoNum},cliente_id.in.(${clientIds.join(',')})`);
+      } else if (isNumeric) {
+        query = query.eq('numero_correlativo', correlativoNum);
+      } else if (clientIds.length > 0) {
+        query = query.in('cliente_id', clientIds);
+      } else {
+        return { data: [], count: 0 };
+      }
+    }
+
+    if (vendedor_id) query = query.eq('vendedor_id', vendedor_id);
+    if (estado) query = query.eq('estado', estado);
+
+    const { data, error, count } = await query;
     if (error) throw error;
-    return data || [];
+    return { data: data || [], count: count ?? 0 };
   },
 
   async getQuoteById(id: string): Promise<Quote> {
@@ -149,7 +196,7 @@ export const quotesService = {
         *,
         clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, email, telefono, direccion ),
         perfiles_usuario ( id, nombre, email ),
-        cotizaciones_lineas (*)
+        cotizaciones_lineas (*, productos(fraccionable))
       `)
       .eq('id', id)
       .single();

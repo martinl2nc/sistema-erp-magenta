@@ -67,7 +67,7 @@ export default function EmailHistoryModal({ isOpen, onClose, cotizacionId, quote
           {!isLoading && history.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
               <iconify-icon icon="solar:letter-opened-linear" class="text-5xl text-[#334155]"></iconify-icon>
-              <p className="text-sm text-[#94A3B8]">Esta cotización no ha sido enviada por correo aún.</p>
+              <p className="text-sm text-[#94A3B8]">No hay registros de envío por correo.</p>
             </div>
           )}
 

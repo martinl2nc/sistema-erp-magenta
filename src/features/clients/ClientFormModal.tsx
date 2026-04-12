@@ -26,6 +26,7 @@ const initialFormState: ClientFormData = {
 export default function ClientFormModal({ isOpen, onClose, client, onSuccess }: ClientFormModalProps) {
   const [formData, setFormData] = useState<ClientFormData>(initialFormState);
   const [error, setError] = useState<string | null>(null);
+  const [isSearchingDoc, setIsSearchingDoc] = useState(false);
 
   const createMutation = useCreateClient();
   const updateMutation = useUpdateClient();
@@ -59,6 +60,57 @@ export default function ClientFormModal({ isOpen, onClose, client, onSuccess }: 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSearchDoc = async () => {
+    const tipo = formData.tipo_documento;
+    const numero = formData.numero_documento.trim();
+
+    if (!numero) {
+      toast.error('Ingrese un número de documento primero.');
+      return;
+    }
+
+    if (tipo !== 'DNI' && tipo !== 'RUC') {
+      toast.error('La búsqueda automática solo está disponible para DNI y RUC.');
+      return;
+    }
+
+    setIsSearchingDoc(true);
+    try {
+      const res = await fetch(`/api/sunat?tipo=${tipo}&numero=${numero}`);
+      const json = await res.json();
+
+      if (!json.success) {
+        toast.error(json.message || 'Error al consultar documento.');
+        return;
+      }
+
+      toast.success('Datos encontrados y autocompletados.');
+
+      if (tipo === 'DNI') {
+        const { nombres, apellidoPaterno, apellidoMaterno } = json.data;
+        setFormData(prev => ({
+          ...prev,
+          nombres_contacto: nombres || '',
+          apellidos_contacto: `${apellidoPaterno || ''} ${apellidoMaterno || ''}`.trim()
+        }));
+      } else if (tipo === 'RUC') {
+        const { razonSocial, direccion } = json.data;
+        setFormData(prev => ({
+          ...prev,
+          razon_social: razonSocial || '',
+          direccion: direccion || '',
+          nombres_contacto: '', // Forced to be filled manually
+          apellidos_contacto: '' // Forced to be filled manually
+        }));
+      }
+    } catch (err: any) {
+      console.error('Error searching document:', err);
+      toast.error('Error de conexión al consultar el documento.');
+    } finally {
+      setIsSearchingDoc(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -146,15 +198,38 @@ export default function ClientFormModal({ isOpen, onClose, client, onSuccess }: 
               </div>
               <div className="space-y-2">
                 <label className="block text-xs font-medium text-[#94A3B8]">Número de Documento *</label>
-                <input
-                  type="text"
-                  name="numero_documento"
-                  value={formData.numero_documento}
-                  onChange={handleChange}
-                  placeholder="Ej: 20123456789"
-                  className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/50 focus:outline-none focus:border-[#3B82F6]"
-                  required
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    name="numero_documento"
+                    value={formData.numero_documento}
+                    onChange={handleChange}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSearchDoc();
+                      }
+                    }}
+                    placeholder={formData.tipo_documento === 'DNI' ? "Ej: 41221501" : "Ej: 20123456789"}
+                    className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/50 focus:outline-none focus:border-[#3B82F6]"
+                    required
+                  />
+                  {(formData.tipo_documento === 'RUC' || formData.tipo_documento === 'DNI') && (
+                    <button
+                      type="button"
+                      onClick={handleSearchDoc}
+                      disabled={isSearchingDoc || !formData.numero_documento}
+                      className="px-3 py-2.5 bg-[#334155]/50 border border-[#334155] hover:bg-[#334155] text-[#E2E8F0] rounded-lg transition-colors focus:outline-none flex items-center justify-center disabled:opacity-50"
+                      title={`Buscar en ${formData.tipo_documento === 'RUC' ? 'SUNAT' : 'RENIEC'}`}
+                    >
+                      {isSearchingDoc ? (
+                        <iconify-icon icon="line-md:loading-twotone-loop" class="text-xl"></iconify-icon>
+                      ) : (
+                        <iconify-icon icon="solar:rounded-magnifer-linear" class="text-xl"></iconify-icon>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Razón Social */}

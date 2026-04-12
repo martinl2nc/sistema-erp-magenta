@@ -1,0 +1,106 @@
+'use client';
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { pedidosService } from '@/services/pedidos.service';
+import type { PedidoEstado, CreatePedidoPayload, CreatePedidoLineaPayload, UpdatePedidoBasicPayload, PedidosListParams } from '@/services/pedidos.service';
+
+export const pedidosKeys = {
+  all: () => ['pedidos'] as const,
+  lists: () => [...pedidosKeys.all(), 'list'] as const,
+  list: (params?: PedidosListParams) => [...pedidosKeys.lists(), params] as const,
+  detail: (id: string) => [...pedidosKeys.all(), 'detail', id] as const,
+  lines: (id: string) => [...pedidosKeys.all(), 'lines', id] as const,
+};
+
+export function usePedidosList(params?: PedidosListParams) {
+  return useQuery({
+    queryKey: pedidosKeys.list(params),
+    queryFn: () => pedidosService.getPedidos(params),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useCreatePedido() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreatePedidoPayload) => pedidosService.createPedido(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
+    },
+  });
+}
+
+export function useUpdatePedidoForEmision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { direccion_facturacion?: string } }) =>
+      pedidosService.updateForEmision(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
+    },
+  });
+}
+
+export function useUpdatePedidoEstado() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, estado }: { id: string; estado: PedidoEstado }) =>
+      pedidosService.updateEstado(id, estado),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
+    },
+  });
+}
+
+export function useUpdatePedidoBasic() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdatePedidoBasicPayload }) =>
+      pedidosService.updatePedidoBasic(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
+    },
+  });
+}
+
+export function usePedido(id?: string) {
+  return useQuery({
+    queryKey: pedidosKeys.detail(id!),
+    queryFn: async () => {
+      if (!id) return null;
+      const pedido = await pedidosService.getPedidoById(id);
+      const lineas = await pedidosService.getPedidoLineas(id);
+      return { ...pedido, lineas };
+    },
+    enabled: !!id,
+  });
+}
+
+export function usePedidoLineas(pedidoId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: pedidosKeys.lines(pedidoId!),
+    queryFn: () => pedidosService.getPedidoLineas(pedidoId!),
+    enabled: !!pedidoId && enabled,
+  });
+}
+
+export function useSustentoSignedUrl() {
+  return useMutation({
+    mutationFn: (path: string) => pedidosService.getSustentoSignedUrl(path),
+  });
+}
+
+export function useUpdatePedidoCompleto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload, lineas }: { id: string; payload: CreatePedidoPayload; lineas: CreatePedidoLineaPayload[] }) =>
+      pedidosService.updatePedidoCompleto(id, payload, lineas),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
+    },
+  });
+}

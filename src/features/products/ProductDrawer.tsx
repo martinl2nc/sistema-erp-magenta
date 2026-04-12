@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useCategoriesList } from '@/hooks/useCategories';
+import { useUnidadesMedida, useAfectacionesIgv } from '@/hooks/useCatalogos';
 import type { Product } from '@/services/products.service';
 import type { ProductFormData } from '@/services/products.service';
 
@@ -18,10 +19,15 @@ const initialForm: ProductFormData = {
   descripcion: '',
   categoria_id: null,
   precio_base: 0,
+  unidad_medida: 'NIU',
+  afectacion_igv: '10',
+  fraccionable: false,
 };
 
 export default function ProductDrawer({ open, product, onClose, onSave, isSaving }: ProductDrawerProps) {
   const { data: categories = [] } = useCategoriesList();
+  const { data: unidades = [] } = useUnidadesMedida();
+  const { data: afectaciones = [] } = useAfectacionesIgv();
   const [formData, setFormData] = useState<ProductFormData>(initialForm);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -34,6 +40,9 @@ export default function ProductDrawer({ open, product, onClose, onSave, isSaving
         descripcion: product.descripcion || '',
         categoria_id: product.categoria_id,
         precio_base: parseFloat(product.precio_base) || 0,
+        unidad_medida: product.unidad_medida || 'NIU',
+        afectacion_igv: product.afectacion_igv || '10',
+        fraccionable: product.fraccionable ?? false,
       });
     } else {
       setFormData(initialForm);
@@ -128,6 +137,19 @@ export default function ProductDrawer({ open, product, onClose, onSave, isSaving
               />
             </div>
 
+            {/* Descripción */}
+            <div>
+              <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Descripción</label>
+              <textarea
+                name="descripcion"
+                value={formData.descripcion}
+                onChange={handleChange}
+                rows={3}
+                placeholder="Detalles sobre el producto..."
+                className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow resize-none"
+              />
+            </div>
+
             {/* Categoría */}
             <div>
               <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Categoría</label>
@@ -147,6 +169,69 @@ export default function ProductDrawer({ open, product, onClose, onSave, isSaving
                   <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[#94A3B8] text-base"></iconify-icon>
                 </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Unidad SUNAT */}
+              <div>
+                <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Unidad MED. (SUNAT)</label>
+                <div className="relative">
+                  <select
+                    name="unidad_medida"
+                    value={formData.unidad_medida}
+                    onChange={handleChange}
+                    className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow appearance-none cursor-pointer"
+                  >
+                    {unidades.map(u => (
+                      <option key={u.codigo} value={u.codigo}>{u.codigo} - {u.descripcion}</option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[#94A3B8] text-base"></iconify-icon>
+                  </div>
+                </div>
+              </div>
+
+              {/* Afectación IGV (SUNAT) */}
+              <div>
+                <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Afectación IGV</label>
+                <div className="relative">
+                  <select
+                    name="afectacion_igv"
+                    value={formData.afectacion_igv}
+                    onChange={handleChange}
+                    className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow appearance-none cursor-pointer"
+                  >
+                    {afectaciones.map(a => (
+                      <option key={a.codigo} value={a.codigo}>{a.codigo} - {a.descripcion}</option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[#94A3B8] text-base"></iconify-icon>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Fraccionable */}
+            <div className="flex items-center justify-between py-1">
+              <div>
+                <p className="text-xs font-medium text-[#94A3B8]">¿Se vende por fracción?</p>
+                <p className="text-[11px] text-[#94A3B8]/60 mt-0.5">Permite cantidades decimales (ej: 2.5 kg, 1.5 m)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, fraccionable: !prev.fraccionable }))}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                  formData.fraccionable ? 'bg-[#3B82F6]' : 'bg-[#334155]'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                    formData.fraccionable ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
             </div>
 
             {/* Precio Base */}
