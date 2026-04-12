@@ -28,7 +28,24 @@ DECLARE
   v_nc_id            uuid;
   v_serie_original   varchar(4);
   v_primer_caracter  char(1);
+  v_caller_uid       uuid;
+  v_caller_rol       text;
+  v_orig_cantidad    numeric;
 BEGIN
+  -- 0. Verificar identidad y rol del llamador
+  v_caller_uid := auth.uid();
+  IF v_caller_uid IS NULL THEN
+    RAISE EXCEPTION 'Acceso denegado';
+  END IF;
+
+  SELECT rol INTO v_caller_rol
+  FROM perfiles_usuario
+  WHERE id = v_caller_uid;
+
+  IF v_caller_rol IS DISTINCT FROM 'admin' THEN
+    RAISE EXCEPTION 'Acceso denegado';
+  END IF;
+
   -- 1. Obtener el comprobante original con bloqueo FOR UPDATE
   SELECT * INTO v_original
   FROM comprobantes
@@ -76,9 +93,7 @@ BEGIN
     VALUES ('07', v_serie_nc, 1, true)
     ON CONFLICT (serie) DO UPDATE
       SET correlativo_actual = configuracion_series.correlativo_actual + 1
-    RETURNING * INTO v_config_serie;
-    
-    v_correlativo_nc := 1;
+    RETURNING correlativo_actual INTO v_correlativo_nc;
   ELSE
     v_correlativo_nc := v_config_serie.correlativo_actual + 1;
     UPDATE configuracion_series
@@ -168,6 +183,36 @@ BEGIN
 
   -- 6. Insertar las líneas
   IF p_lineas IS NOT NULL THEN
+
+    -- Validar que ninguna línea exceda la cantidad original del comprobante
+    DECLARE
+      v_linea jsonb;
+    BEGIN
+      FOR v_linea IN SELECT * FROM jsonb_array_elements(p_lineas) LOOP
+        IF (v_linea->>'id') IS NULL THEN
+          RAISE EXCEPTION 'Línea sin id: cada línea debe incluir el id del detalle original';
+        END IF;
+
+        SELECT cantidad INTO v_orig_cantidad
+        FROM comprobantes_detalles
+        WHERE id = (v_linea->>'id')::uuid
+          AND comprobante_id = p_comprobante_id;
+
+        IF NOT FOUND THEN
+          RAISE EXCEPTION 'Detalle % no pertenece al comprobante %',
+            v_linea->>'id',
+            p_comprobante_id;
+        END IF;
+
+        IF (v_linea->>'cantidad')::numeric > v_orig_cantidad THEN
+          RAISE EXCEPTION 'La cantidad solicitada (%) para el detalle % supera la cantidad original (%)',
+            (v_linea->>'cantidad')::numeric,
+            v_linea->>'id',
+            v_orig_cantidad;
+        END IF;
+      END LOOP;
+    END;
+
      INSERT INTO comprobantes_detalles (
       comprobante_id,
       producto_id,
@@ -252,4 +297,3 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION crear_nota_credito(uuid, text, varchar, jsonb, numeric, numeric, numeric, numeric, numeric, numeric) TO authenticated;
-GRANT EXECUTE ON FUNCTION crear_nota_credito(uuid, text, varchar, jsonb, numeric, numeric, numeric, numeric, numeric, numeric) TO anon;

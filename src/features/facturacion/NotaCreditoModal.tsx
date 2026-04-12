@@ -6,9 +6,10 @@ import { useCreateNotaCredito, useComprobanteDetalles } from '@/hooks/useFactura
 import { useTiposNotaCredito } from '@/hooks/useCatalogos';
 import { useQueryClient } from '@tanstack/react-query';
 import { pedidosKeys } from '@/hooks/usePedidos';
-import type { Comprobante } from '@/services/facturas.service';
+import type { Comprobante, ComprobanteDetalleDB } from '@/services/facturas.service';
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
 import { calcularLineaSunat, calcularTotalesSunat } from '@/utils/calculations';
+import { TAX_RATES } from '@/constants';
 
 interface Props {
   isOpen: boolean;
@@ -29,7 +30,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
   const [motivo, setMotivo] = useState('');
 
   // State for editable lines
-  const [lineasNC, setLineasNC] = useState<any[]>([]);
+  const [lineasNC, setLineasNC] = useState<ComprobanteDetalleDB[]>([]);
   const [montoDescuentoGlobal, setMontoDescuentoGlobal] = useState<number>(0);
 
   // 04: Descuento global
@@ -54,11 +55,10 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
     }
   }, [isNotaParcial, detallesOriginales, lineasNC.length]);
 
-  // Computed Totals for Partial NC
-  const customTotales = useMemo(() => {
-    if (!isNotaParcial || lineasNC.length === 0) return null;
+  // Computed Totals for Partial NC — also produces updated line fields for the RPC payload
+  const { customTotales, lineasNCCalculadas } = useMemo(() => {
+    if (!isNotaParcial || lineasNC.length === 0) return { customTotales: null, lineasNCCalculadas: [] };
 
-    // Compute per line based on PUV edits 
     const lineasCalculadas = lineasNC.map(linea => {
       const calcInfo = calcularLineaSunat(
         Number(linea.mto_valor_unitario),
@@ -67,17 +67,16 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
         0
       );
 
-      // Update properties inside lineas for the RPC Payload
-      linea.mto_base_igv = calcInfo.mto_base_igv;
-      linea.igv = calcInfo.mto_igv;
-      linea.subtotal = calcInfo.subtotal;
-      linea.total_impuestos = calcInfo.mto_igv;
-      linea.mto_valor_venta = calcInfo.mto_base_igv;
-
       return {
+        // Spread original fields, then override with recalculated values (no direct mutation)
+        ...linea,
         mto_base_igv: calcInfo.mto_base_igv,
-        mto_igv: calcInfo.mto_igv,
+        igv: calcInfo.mto_igv,
         subtotal: calcInfo.subtotal,
+        total_impuestos: calcInfo.mto_igv,
+        mto_valor_venta: calcInfo.mto_base_igv,
+        // Used by calcularTotalesSunat
+        mto_igv: calcInfo.mto_igv,
         afectacion_igv: linea.tip_afe_igv_codigo || '10',
       };
     });
@@ -85,12 +84,15 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
     const sumTotales = calcularTotalesSunat(lineasCalculadas, 0);
 
     return {
-      mto_oper_gravadas: sumTotales.mto_oper_gravadas,
-      mto_igv: sumTotales.igv,
-      mto_imp_venta: sumTotales.total,
-      valor_venta: sumTotales.subtotal - sumTotales.igv,
-      subtotal: sumTotales.subtotal,
-      total_impuestos: sumTotales.igv,
+      customTotales: {
+        mto_oper_gravadas: sumTotales.mto_oper_gravadas,
+        mto_igv: sumTotales.igv,
+        mto_imp_venta: sumTotales.total,
+        valor_venta: sumTotales.subtotal - sumTotales.igv,
+        subtotal: sumTotales.subtotal,
+        total_impuestos: sumTotales.igv,
+      },
+      lineasNCCalculadas: lineasCalculadas,
     };
   }, [isNotaParcial, lineasNC]);
 
@@ -98,7 +100,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
     if (!isNotaGlobal || montoDescuentoGlobal <= 0) return null;
 
     // Treat it as a single line with total amount including IGV
-    const base = montoDescuentoGlobal / 1.18;
+    const base = montoDescuentoGlobal / (1 + TAX_RATES.IGV);
     const igv = montoDescuentoGlobal - base;
     
     return {
@@ -122,7 +124,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
   const updateLineaValue = (idx: number, newValor: number) => {
     setLineasNC(prev => {
       const copy = [...prev];
-      copy[idx].mto_valor_unitario = newValor;
+      copy[idx] = { ...copy[idx], mto_valor_unitario: newValor };
       return copy;
     });
   };
@@ -130,7 +132,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
   const updateLineaCantidad = (idx: number, newCantidad: number) => {
     setLineasNC(prev => {
       const copy = [...prev];
-      copy[idx].cantidad = newCantidad;
+      copy[idx] = { ...copy[idx], cantidad: newCantidad };
       return copy;
     });
   };
@@ -159,7 +161,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
       return;
     }
 
-    let payloadLineas = isNotaParcial ? lineasNC : undefined;
+    let payloadLineas = isNotaParcial ? lineasNCCalculadas : undefined;
     let payloadTotales = isNotaParcial ? customTotales! : undefined;
 
     if (isNotaGlobal) {
@@ -359,7 +361,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
                               type="number"
                               min="1"
                               step="any"
-                              max={detallesOriginales.find((d: any) => d.id === linea.id)?.cantidad}
+                              max={detallesOriginales.find(d => d.id === linea.id)?.cantidad}
                               value={linea.cantidad}
                               onChange={e => updateLineaCantidad(idx, Number(e.target.value))}
                               className="w-16 bg-[#181B21] border border-[#334155] rounded-md py-1.5 px-2 text-xs text-[#E2E8F0] focus:ring-1 focus:ring-[#3B82F6] outline-none transition-colors"
@@ -380,7 +382,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
                         </div>
                         <div className="text-right mt-2">
                           <p className="text-[10px] text-[#94A3B8]">Subtotal ítem</p>
-                          <p className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(linea.subtotal || 0)}</p>
+                          <p className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(Number(linea.mto_valor_unitario) * Number(linea.cantidad) * (1 + TAX_RATES.IGV))}</p>
                         </div>
                       </div>
                     </div>

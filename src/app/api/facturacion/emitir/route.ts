@@ -119,19 +119,25 @@ export async function POST(request: Request) {
           .from('facturas_emitidas')
           .createSignedUrl(path, 31536000 * 100); // 100 años
         if (error) {
-          console.error(`Error generando signed URL para ${path}:`, error.message);
           return null;
         }
         return data?.signedUrl || null;
-      } catch (err) {
-        console.error('Excepción en getFileUrl:', err);
+      } catch {
         return null;
       }
     };
 
-    let enlacePdf: string | null = yaAceptado ? null : comprobante.enlace_pdf;
-    let enlaceXml: string | null = yaAceptado ? null : comprobante.enlace_xml;
-    let enlaceCdr: string | null = yaAceptado ? null : comprobante.enlace_cdr;
+    // Start with existing links as fallback; on yaAceptado force re-generation by clearing them
+    let enlacePdf: string | null = comprobante.enlace_pdf ?? null;
+    let enlaceXml: string | null = comprobante.enlace_xml ?? null;
+    let enlaceCdr: string | null = comprobante.enlace_cdr ?? null;
+
+    if (yaAceptado) {
+      // Force re-upload of all files for a repair attempt, but keep old values as fallback
+      enlacePdf = null;
+      enlaceXml = null;
+      enlaceCdr = null;
+    }
 
     // PDF
     if (!enlacePdf) {
@@ -141,13 +147,16 @@ export async function POST(request: Request) {
         const { error: upErr } = await supabaseAdmin.storage
           .from('facturas_emitidas')
           .upload(pdfPath, pdfBuffer, { upsert: true, contentType: 'application/pdf' });
-        
+
         if (!upErr) {
           enlacePdf = await getFileUrl(pdfPath);
         } else {
-          console.error('Error subiendo PDF:', upErr.message);
+          // Preserve the previously valid link if upload fails on re-generation
+          if (yaAceptado) enlacePdf = comprobante.enlace_pdf ?? null;
         }
-      } catch (e: unknown) { console.error('Error proceso PDF:', e); }
+      } catch {
+        if (yaAceptado) enlacePdf = comprobante.enlace_pdf ?? null;
+      }
     }
 
     // XML
@@ -162,9 +171,11 @@ export async function POST(request: Request) {
         if (!upErr) {
           enlaceXml = await getFileUrl(xmlPath);
         } else {
-          console.error('Error subiendo XML:', upErr.message);
+          if (yaAceptado) enlaceXml = comprobante.enlace_xml ?? null;
         }
-      } catch (e: unknown) { console.error('Error proceso XML:', e); }
+      } catch {
+        if (yaAceptado) enlaceXml = comprobante.enlace_xml ?? null;
+      }
     }
 
     // CDR (Constancia de Recepción de SUNAT)
@@ -180,9 +191,11 @@ export async function POST(request: Request) {
         if (!upErr) {
           enlaceCdr = await getFileUrl(cdrPath);
         } else {
-          console.error('Error subiendo CDR:', upErr.message);
+          if (yaAceptado) enlaceCdr = comprobante.enlace_cdr ?? null;
         }
-      } catch (e: unknown) { console.error('Error proceso CDR:', e); }
+      } catch {
+        if (yaAceptado) enlaceCdr = comprobante.enlace_cdr ?? null;
+      }
     }
 
     // 3. Actualizar registro final

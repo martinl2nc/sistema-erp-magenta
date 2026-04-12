@@ -104,6 +104,35 @@ export interface ComprobanteExternoPayload {
   pedido_id?: string | null;
 }
 
+export interface ComprobanteDetalleDB {
+  id: string;
+  comprobante_id: string;
+  producto_id: string | null;
+  cod_producto: string | null;
+  cod_prod_sunat: string | null;
+  cod_prod_gs1: string | null;
+  unidad_codigo: string;
+  descripcion: string;
+  cantidad: number;
+  mto_valor_unitario: number;
+  mto_valor_gratuito: number | null;
+  mto_precio_unitario: number;
+  mto_valor_venta: number;
+  mto_base_igv: number;
+  porcentaje_igv: number;
+  igv: number;
+  tip_afe_igv_codigo: string;
+  descuento: number | null;
+  tipo_sis_isc_codigo: string | null;
+  mto_base_isc: number | null;
+  porcentaje_isc: number | null;
+  isc: number | null;
+  factor_icbper: number | null;
+  icbper: number | null;
+  total_impuestos: number;
+  subtotal: number | null;
+}
+
 export interface PedidoElegible {
   id: string;
   numero_pedido: number;
@@ -256,24 +285,24 @@ export const facturasService = {
     return data as string; // returns comprobante_id (UUID)
   },
 
-  async getDetallesComprobante(comprobanteId: string): Promise<any[]> {
+  async getDetallesComprobante(comprobanteId: string): Promise<ComprobanteDetalleDB[]> {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('comprobantes_detalles')
       .select('*')
       .eq('comprobante_id', comprobanteId);
-    
+
     if (error) {
       throw new Error(`Error al obtener detalles: ${error.message}`);
     }
-    return data || [];
+    return (data || []) as ComprobanteDetalleDB[];
   },
 
   async createNotaCredito(payload: {
     comprobante_id: string;
     motivo: string;
     tipo_nota_codigo?: string; // catálogo 09 SUNAT, ej: '01' = Anulación Total
-    lineas?: any[];
+    lineas?: ComprobanteDetalleDB[];
     totales?: {
       mto_oper_gravadas: number;
       mto_igv: number;
