@@ -138,6 +138,18 @@ export const getPedidosElegiblesSSR = async (
   return (data ?? []) as PedidoElegible[];
 };
 
+export interface FacturasListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  tipo_doc?: string;
+}
+
+export interface PaginatedFacturas {
+  data: Comprobante[];
+  count: number;
+}
+
 export const facturasService = {
   /**
    * Envía un comprobante ya creado a SUNAT via el API route server-side.
@@ -156,18 +168,43 @@ export const facturasService = {
     return data;
   },
 
-  async getFacturas(): Promise<Comprobante[]> {
+  async getFacturas(params?: FacturasListParams): Promise<PaginatedFacturas> {
     const supabase = createClient();
-    const { data, error } = await supabase
+    const { page = 1, pageSize = 10, search, tipo_doc } = params ?? {};
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
       .from('comprobantes')
-      .select(`
-        *,
-        clientes ( razon_social, nombres_contacto, apellidos_contacto, numero_documento ),
-        pedidos ( cotizaciones ( numero_correlativo ) )
-      `)
-      .order('fecha_emision', { ascending: false });
+      .select(
+        `*, clientes ( razon_social, nombres_contacto, apellidos_contacto, numero_documento ), pedidos ( cotizaciones ( numero_correlativo ) )`,
+        { count: 'exact' }
+      )
+      .order('fecha_emision', { ascending: false })
+      .range(from, to);
+
+    if (tipo_doc) query = query.eq('tipo_doc_codigo', tipo_doc);
+
+    if (search?.trim()) {
+      const term = search.trim();
+
+      const { data: matchingClients } = await supabase
+        .from('clientes')
+        .select('id')
+        .or(
+          `razon_social.ilike.%${term}%,nombres_contacto.ilike.%${term}%,numero_documento.ilike.%${term}%`
+        );
+
+      const clientIds = (matchingClients ?? []).map((c) => c.id);
+      const orParts: string[] = [`serie_numero.ilike.%${term}%`];
+      if (clientIds.length > 0) orParts.push(`cliente_id.in.(${clientIds.join(',')})`);
+
+      query = query.or(orParts.join(','));
+    }
+
+    const { data, error, count } = await query;
     if (error) throw new Error('No se pudieron obtener los comprobantes');
-    return data || [];
+    return { data: data || [], count: count ?? 0 };
   },
 
   async getComprobanteByPedido(pedidoId: string): Promise<Comprobante | null> {

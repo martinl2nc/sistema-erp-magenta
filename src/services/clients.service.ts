@@ -31,15 +31,39 @@ export interface ClientFormData {
 
 // ─── Service Functions (Capa 1) ──────────────────────────────
 
-export const getClients = async (): Promise<Client[]> => {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('clientes')
-    .select('*')
-    .order('fecha_creacion', { ascending: false });
+export interface ClientsListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
 
+export interface PaginatedClients {
+  data: Client[];
+  count: number;
+}
+
+export const getClients = async (params?: ClientsListParams): Promise<PaginatedClients> => {
+  const supabase = createClient();
+  const { page = 1, pageSize = 10, search } = params ?? {};
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase
+    .from('clientes')
+    .select('*', { count: 'exact' })
+    .order('fecha_creacion', { ascending: false })
+    .range(from, to);
+
+  if (search?.trim()) {
+    const term = `%${search.trim()}%`;
+    query = query.or(
+      `numero_documento.ilike.${term},razon_social.ilike.${term},nombres_contacto.ilike.${term},apellidos_contacto.ilike.${term},email.ilike.${term}`
+    );
+  }
+
+  const { data, error, count } = await query;
   if (error) throw new Error('Error al cargar clientes: ' + error.message);
-  return data as Client[];
+  return { data: (data ?? []) as Client[], count: count ?? 0 };
 };
 
 export const getActiveClients = async (): Promise<Client[]> => {

@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePedidosList } from '@/hooks/usePedidos';
+import { useDebounce } from '@/hooks/useDebounce';
+import Pagination from '@/components/ui/Pagination';
 import { useAuth } from '@/context/AuthContext';
 import type { Pedido, PedidoEstado } from '@/services/pedidos.service';
 import PedidoDetailDrawer from '@/features/pedidos/PedidoDetailDrawer';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
+import { PAGINATION, TIMEOUTS } from '@/constants';
 
 const ESTADO_LABELS: Record<PedidoEstado, string> = {
   pendiente_facturacion: 'Pendiente',
@@ -27,37 +30,29 @@ const ESTADO_STYLES: Record<PedidoEstado, string> = {
 export default function PedidosPage() {
   const { role, user } = useAuth();
   const router = useRouter();
-  const { data: allPedidos = [], isLoading, isError, error } = usePedidosList();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEstado, setSelectedEstado] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
 
-  const pedidos = useMemo(() => {
-    let list = allPedidos;
-    if (role === 'vendedor' && user?.id) {
-      list = list.filter((p) => p.vendedor_id === user.id);
-    }
-    const search = searchTerm.trim().toLowerCase();
-    if (search) {
-      list = list.filter((p) => {
-        const cliente = p.clientes;
-        const fields = [
-          String(p.numero_pedido || ''),
-          String(p.cotizaciones?.numero_correlativo || ''),
-          cliente?.razon_social || '',
-          cliente?.nombres_contacto || '',
-          cliente?.apellidos_contacto || '',
-          cliente?.numero_documento || '',
-          p.nro_oc_cliente || '',
-        ];
-        return fields.some((f) => f.toLowerCase().includes(search));
-      });
-    }
-    if (selectedEstado) {
-      list = list.filter((p) => p.estado === selectedEstado);
-    }
-    return list;
-  }, [allPedidos, role, user?.id, searchTerm, selectedEstado]);
+  const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);
+
+  const { data: result, isLoading, isError, error } = usePedidosList({
+    page,
+    pageSize,
+    search: debouncedSearch,
+    estado: selectedEstado || undefined,
+    vendedor_id: role === 'vendedor' && user?.id ? user.id : undefined,
+  });
+  const pedidos = result?.data ?? [];
+  const totalItems = result?.count ?? 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
+  const handleFilterChange = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    setPage(1);
+  };
 
   const formatDate = (d: string | null) => {
     if (!d) return '—';
@@ -89,7 +84,7 @@ export default function PedidosPage() {
           <select
             title="Filtrar por estado"
             value={selectedEstado}
-            onChange={(e) => setSelectedEstado(e.target.value)}
+            onChange={(e) => handleFilterChange(setSelectedEstado)(e.target.value)}
             className="appearance-none w-full sm:w-48 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
           >
             <option value="">Todos los estados</option>
@@ -108,7 +103,7 @@ export default function PedidosPage() {
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
             placeholder="Buscar por cotización, cliente u OC..."
             className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
           />
@@ -244,6 +239,16 @@ export default function PedidosPage() {
               </table>
             </div>
           </>
+        )}
+        {!isLoading && !isError && totalPages > 0 && (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          />
         )}
       </div>
 

@@ -1,35 +1,49 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import AdminTabs from '@/components/admin/AdminTabs';
 import { useProductsList, useCreateProduct, useUpdateProduct, useToggleProductActive } from '@/hooks/useProducts';
+import { useDebounce } from '@/hooks/useDebounce';
+import Pagination from '@/components/ui/Pagination';
 import ProductDrawer from '@/features/products/ProductDrawer';
 import CategoryDrawer from '@/features/products/CategoryDrawer';
 import type { Product, ProductFormData } from '@/services/products.service';
+import { PAGINATION, TIMEOUTS } from '@/constants';
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [categoryDrawerOpen, setCategoryDrawerOpen] = useState(false);
 
+  const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);
+
   // ─── Server State (Capa 2) ──────────────────────────────────
-  const { data: products = [], isLoading, isError, error } = useProductsList();
+  const { data: result, isLoading, isError, error } = useProductsList({
+    page,
+    pageSize,
+    search: debouncedSearch,
+  });
+  const products = result?.data ?? [];
+  const totalItems = result?.count ?? 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
   const toggleMutation = useToggleProductActive();
 
-  // ─── Derived: Filtered products ─────────────────────────────
-  const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return products;
-    const term = searchTerm.toLowerCase();
-    return products.filter(p =>
-      (p.sku?.toLowerCase().includes(term)) ||
-      p.nombre.toLowerCase().includes(term) ||
-      (p.categorias?.nombre?.toLowerCase().includes(term))
-    );
-  }, [products, searchTerm]);
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+  };
 
   // ─── Handlers ───────────────────────────────────────────────
   const handleNew = () => {
@@ -103,7 +117,7 @@ export default function ProductsPage() {
               type="text"
               placeholder="Buscar Producto..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg pl-10 pr-3 py-2 text-sm text-[#E2E8F0] placeholder-[#94A3B8] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow"
             />
           </div>
@@ -140,7 +154,7 @@ export default function ProductsPage() {
                 {error instanceof Error ? error.message : 'Error al cargar productos'}
               </div>
             </div>
-          ) : filteredProducts.length === 0 ? (
+          ) : products.length === 0 ? (
             <div className="p-12 text-center text-[#94A3B8] text-sm">
               {searchTerm ? 'No se encontraron productos.' : 'No hay productos registrados.'}
             </div>
@@ -148,7 +162,7 @@ export default function ProductsPage() {
             <>
               {/* Mobile cards */}
               <div className="md:hidden space-y-3 p-4">
-                {filteredProducts.map((product) => (
+                {products.map((product) => (
                   <div key={product.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <p className={`text-sm font-medium leading-snug ${product.activo ? 'text-[#E2E8F0]' : 'text-[#94A3B8]'}`}>
@@ -206,7 +220,7 @@ export default function ProductsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#334155]">
-                    {filteredProducts.map((product, index) => (
+                    {products.map((product, index) => (
                       <tr
                         key={product.id}
                         className={`hover:bg-[#334155]/30 transition-colors group ${
@@ -259,6 +273,16 @@ export default function ProductsPage() {
                 </table>
               </div>
             </>
+          )}
+          {!isLoading && !isError && totalPages > 0 && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={handlePageSizeChange}
+            />
           )}
         </div>
       </div>

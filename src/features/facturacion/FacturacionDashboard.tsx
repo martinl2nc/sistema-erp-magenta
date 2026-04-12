@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { usePedidosList } from '@/hooks/usePedidos';
 import { useFacturasList, useEnviarASunat } from '@/hooks/useFacturas';
+import { useDebounce } from '@/hooks/useDebounce';
+import Pagination from '@/components/ui/Pagination';
 import { useTiposDocumento } from '@/hooks/useCatalogos';
 import { useAuth } from '@/context/AuthContext';
 import EmitirComprobanteModal from '@/features/facturacion/EmitirComprobanteModal';
@@ -12,6 +14,7 @@ import NotaCreditoModal from '@/features/facturacion/NotaCreditoModal';
 import type { Pedido } from '@/services/pedidos.service';
 import type { Comprobante } from '@/services/facturas.service';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
+import { PAGINATION, TIMEOUTS } from '@/constants';
 
 type Tab = 'pendientes' | 'emitidas';
 
@@ -36,8 +39,6 @@ const ESTADO_LABELS: Record<string, string> = {
 export default function FacturacionPage() {
   const router = useRouter();
   const { role } = useAuth();
-  const { data: pedidos = [], isLoading: loadingPedidos, isError: errorPedidos } = usePedidosList();
-  const { data: comprobantes = [], isLoading: loadingComprobantes, isError: errorComprobantes } = useFacturasList();
   const { mutateAsync: enviarASunat } = useEnviarASunat();
   const { data: tiposDoc = [] } = useTiposDocumento();
 
@@ -51,13 +52,36 @@ export default function FacturacionPage() {
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
   const [selectedComprobante, setSelectedComprobante] = useState<Comprobante | null>(null);
 
-  // Filtros tab pendientes
+  // Filtros y paginación tab pendientes
   const [searchPendientes, setSearchPendientes] = useState('');
   const [filterEstadoPendiente, setFilterEstadoPendiente] = useState('');
+  const [pagePendientes, setPagePendientes] = useState(1);
+  const [pageSizePendientes, setPageSizePendientes] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
 
-  // Filtros tab emitidas
+  // Filtros y paginación tab emitidas
   const [searchEmitidas, setSearchEmitidas] = useState('');
   const [filterTipoDoc, setFilterTipoDoc] = useState('');
+  const [pageEmitidas, setPageEmitidas] = useState(1);
+  const [pageSizeEmitidas, setPageSizeEmitidas] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+
+  const debouncedSearchEmitidas = useDebounce(searchEmitidas, TIMEOUTS.SEARCH_DEBOUNCE);
+
+  // Pendientes: carga sin paginación (siempre son pocos — cola de trabajo activa)
+  const { data: pedidosResult = { data: [], count: 0 }, isLoading: loadingPedidos, isError: errorPedidos } = usePedidosList({
+    pageSize: 200,
+  });
+  const pedidos = pedidosResult.data;
+
+  // Emitidas: paginación server-side (crece indefinidamente)
+  const { data: comprobantesResult, isLoading: loadingComprobantes, isError: errorComprobantes } = useFacturasList({
+    page: pageEmitidas,
+    pageSize: pageSizeEmitidas,
+    search: debouncedSearchEmitidas,
+    tipo_doc: filterTipoDoc || undefined,
+  });
+  const comprobantes = comprobantesResult?.data ?? [];
+  const totalEmitidas = comprobantesResult?.count ?? 0;
+  const totalPagesEmitidas = Math.ceil(totalEmitidas / pageSizeEmitidas);
 
   const pendientesBase = useMemo(
     () => pedidos.filter((p) => ['pendiente_facturacion', 'error_facturacion'].includes(p.estado)),
@@ -69,7 +93,7 @@ export default function FacturacionPage() {
     [pedidos]
   );
 
-  const pendientes = useMemo(() => {
+  const pendientesFiltered = useMemo(() => {
     let list = pendientesBase;
     if (filterEstadoPendiente) list = list.filter((p) => p.estado === filterEstadoPendiente);
     const search = searchPendientes.trim().toLowerCase();
@@ -89,23 +113,12 @@ export default function FacturacionPage() {
     return list;
   }, [pendientesBase, filterEstadoPendiente, searchPendientes]);
 
-  const comprobantesFiltered = useMemo(() => {
-    let list = comprobantes;
-    if (filterTipoDoc) list = list.filter((f) => f.tipo_doc_codigo === filterTipoDoc);
-    const search = searchEmitidas.trim().toLowerCase();
-    if (search) {
-      list = list.filter((f) => {
-        const c = f.clientes;
-        return [
-          f.serie_numero || '',
-          c ? (getClientDisplayName(c) || '') : '',
-          c?.numero_documento || '',
-          tipoDocLabels[f.tipo_doc_codigo] || f.tipo_doc_codigo || '',
-        ].some((s) => s.toLowerCase().includes(search));
-      });
-    }
-    return list;
-  }, [comprobantes, filterTipoDoc, searchEmitidas, tipoDocLabels]);
+  const totalPendientes = pendientesFiltered.length;
+  const totalPagesPendientes = Math.ceil(totalPendientes / pageSizePendientes);
+  const pendientes = useMemo(() => {
+    const from = (pagePendientes - 1) * pageSizePendientes;
+    return pendientesFiltered.slice(from, from + pageSizePendientes);
+  }, [pendientesFiltered, pagePendientes, pageSizePendientes]);
 
   if (role !== 'admin') {
     return (
@@ -136,7 +149,7 @@ export default function FacturacionPage() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
             <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
-            {pendientes.length} pendiente{pendientes.length !== 1 ? 's' : ''}
+            {totalPendientes} pendiente{totalPendientes !== 1 ? 's' : ''}
             {procesando.length > 0 && (
               <>
                 <span className="w-2 h-2 rounded-full bg-blue-400 inline-block ml-2"></span>
@@ -178,9 +191,9 @@ export default function FacturacionPage() {
             }`}
           >
             {label}
-            {key === 'pendientes' && pendientes.length > 0 && (
+            {key === 'pendientes' && totalPendientes > 0 && (
               <span className="ml-1.5 bg-yellow-500/20 text-yellow-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                {pendientes.length}
+                {totalPendientes}
               </span>
             )}
           </button>
@@ -195,7 +208,7 @@ export default function FacturacionPage() {
               <select
                 title="Filtrar por estado"
                 value={filterEstadoPendiente}
-                onChange={(e) => setFilterEstadoPendiente(e.target.value)}
+                onChange={(e) => { setFilterEstadoPendiente(e.target.value); setPagePendientes(1); }}
                 className="appearance-none w-full sm:w-52 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
               >
                 <option value="">Todos los estados</option>
@@ -213,7 +226,7 @@ export default function FacturacionPage() {
               <input
                 type="text"
                 value={searchPendientes}
-                onChange={(e) => setSearchPendientes(e.target.value)}
+                onChange={(e) => { setSearchPendientes(e.target.value); setPagePendientes(1); }}
                 placeholder="Buscar por pedido, cliente u OC..."
                 className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
               />
@@ -234,14 +247,14 @@ export default function FacturacionPage() {
             </div>
           )}
 
-          {!loadingPedidos && !errorPedidos && pendientes.length === 0 && (
+          {!loadingPedidos && !errorPedidos && totalPendientes === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
               <iconify-icon icon="solar:check-circle-linear" class="text-5xl text-[#10B981]/40"></iconify-icon>
               <p className="text-sm text-[#94A3B8]">No hay pedidos pendientes de facturación.</p>
             </div>
           )}
 
-          {!loadingPedidos && !errorPedidos && pendientes.length > 0 && (
+          {!loadingPedidos && !errorPedidos && totalPendientes > 0 && (
             <>
               {/* Mobile cards */}
               <div className="md:hidden space-y-3 p-4">
@@ -319,6 +332,16 @@ export default function FacturacionPage() {
               </div>
             </>
           )}
+          {!loadingPedidos && !errorPedidos && (
+            <Pagination
+              currentPage={pagePendientes}
+              totalPages={totalPagesPendientes}
+              totalItems={totalPendientes}
+              pageSize={pageSizePendientes}
+              onPageChange={setPagePendientes}
+              onPageSizeChange={(size) => { setPageSizePendientes(size); setPagePendientes(1); }}
+            />
+          )}
         </div>
         </>
       )}
@@ -331,7 +354,7 @@ export default function FacturacionPage() {
               <select
                 title="Filtrar por tipo de comprobante"
                 value={filterTipoDoc}
-                onChange={(e) => setFilterTipoDoc(e.target.value)}
+                onChange={(e) => { setFilterTipoDoc(e.target.value); setPageEmitidas(1); }}
                 className="appearance-none w-full sm:w-52 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
               >
                 <option value="">Todos los tipos</option>
@@ -350,7 +373,7 @@ export default function FacturacionPage() {
               <input
                 type="text"
                 value={searchEmitidas}
-                onChange={(e) => setSearchEmitidas(e.target.value)}
+                onChange={(e) => { setSearchEmitidas(e.target.value); setPageEmitidas(1); }}
                 placeholder="Buscar por serie, cliente o documento..."
                 className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
               />
@@ -371,18 +394,18 @@ export default function FacturacionPage() {
             </div>
           )}
 
-          {!loadingComprobantes && !errorComprobantes && comprobantesFiltered.length === 0 && (
+          {!loadingComprobantes && !errorComprobantes && comprobantes.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
               <iconify-icon icon="solar:bill-list-linear" class="text-5xl text-[#334155]"></iconify-icon>
               <p className="text-sm text-[#94A3B8]">{comprobantes.length === 0 ? 'No hay comprobantes emitidos aún.' : 'No hay comprobantes que coincidan con los filtros.'}</p>
             </div>
           )}
 
-          {!loadingComprobantes && !errorComprobantes && comprobantesFiltered.length > 0 && (
+          {!loadingComprobantes && !errorComprobantes && comprobantes.length > 0 && (
             <>
               {/* Mobile cards */}
               <div className="md:hidden space-y-3 p-4">
-                {comprobantesFiltered.map((f) => (
+                {comprobantes.map((f) => (
                   <div key={f.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -478,7 +501,7 @@ export default function FacturacionPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#334155] bg-[#181B21]">
-                    {comprobantesFiltered.map((f) => (
+                    {comprobantes.map((f) => (
                       <tr key={f.id} className="hover:bg-[#334155]/10 transition-colors">
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">
                           <div className="flex items-center gap-2">
@@ -566,6 +589,16 @@ export default function FacturacionPage() {
                 </table>
               </div>
             </>
+          )}
+          {!loadingComprobantes && !errorComprobantes && totalPagesEmitidas > 0 && (
+            <Pagination
+              currentPage={pageEmitidas}
+              totalPages={totalPagesEmitidas}
+              totalItems={totalEmitidas}
+              pageSize={pageSizeEmitidas}
+              onPageChange={setPageEmitidas}
+              onPageSizeChange={(size) => { setPageSizeEmitidas(size); setPageEmitidas(1); }}
+            />
           )}
         </div>
         </>

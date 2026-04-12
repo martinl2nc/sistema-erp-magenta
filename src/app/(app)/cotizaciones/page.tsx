@@ -1,28 +1,50 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuotesList, useUpdateQuoteStatus, useDeleteQuote, useUpdateQuoteFollowup } from '@/hooks/useQuotes';
 import { useSellersList } from '@/hooks/useSellers';
+import { useDebounce } from '@/hooks/useDebounce';
+import Pagination from '@/components/ui/Pagination';
 import type { Quote, QuoteStatus } from '@/services/quotes.service';
 import EmailHistoryModal from '@/features/quotes/EmailHistoryModal';
 import GenerarPedidoModal from '@/features/pedidos/GenerarPedidoModal';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
+import { PAGINATION, TIMEOUTS } from '@/constants';
 
 export default function QuotesList() {
   const router = useRouter();
 
-  const { data: quotes = [], isLoading, isError, error } = useQuotesList();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSellerId, setSelectedSellerId] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [historyQuote, setHistoryQuote] = useState<{ id: string; idStr: string } | null>(null);
+  const [pedidoQuote, setPedidoQuote] = useState<Quote | null>(null);
+
+  const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);
+
+  const { data: result, isLoading, isError, error } = useQuotesList({
+    page,
+    pageSize,
+    search: debouncedSearch,
+    vendedor_id: selectedSellerId || undefined,
+    estado: selectedStatus || undefined,
+  });
+  const quotes = result?.data ?? [];
+  const totalItems = result?.count ?? 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
   const { data: sellers = [] } = useSellersList();
   const updateStatusMutation = useUpdateQuoteStatus();
   const deleteMutation = useDeleteQuote();
   const updateFollowupMutation = useUpdateQuoteFollowup();
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSeller, setSelectedSeller] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [historyQuote, setHistoryQuote] = useState<{ id: string; idStr: string } | null>(null);
-  const [pedidoQuote, setPedidoQuote] = useState<Quote | null>(null);
+  const handleFilterChange = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    setPage(1);
+  };
 
   const handleStatusChange = (id: string, newStatus: string) => {
     updateStatusMutation.mutate({ id, status: newStatus as QuoteStatus });
@@ -39,31 +61,6 @@ export default function QuotesList() {
     if (!confirmed) return;
     deleteMutation.mutate(id);
   };
-
-  const normalizeAccent = (str: string) =>
-    str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-
-  const filteredQuotes = useMemo(() => {
-    if (!quotes) return [];
-    const search = normalizeAccent(searchTerm.trim());
-    return quotes.filter(quote => {
-      let matchSearch = true;
-      if (search !== '') {
-        const cliente = quote.clientes;
-        const fields = [
-          String(quote.numero_correlativo || ''),
-          String(cliente?.razon_social || ''),
-          String(cliente?.numero_documento || ''),
-          String(cliente?.nombres_contacto || ''),
-          String(cliente?.apellidos_contacto || ''),
-        ];
-        matchSearch = fields.some(f => normalizeAccent(f).includes(search));
-      }
-      const matchSeller = selectedSeller === '' || quote.perfiles_usuario?.nombre === selectedSeller;
-      const matchStatus = selectedStatus === '' || quote.estado === selectedStatus;
-      return matchSearch && matchSeller && matchStatus;
-    });
-  }, [quotes, searchTerm, selectedSeller, selectedStatus]);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
@@ -97,16 +94,16 @@ export default function QuotesList() {
       <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4 mb-6 shadow-sm flex flex-col lg:flex-row gap-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative group">
-            <select title="Filtrar por vendedor" value={selectedSeller} onChange={(e) => setSelectedSeller(e.target.value)} className="appearance-none w-full sm:w-44 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer">
+            <select title="Filtrar por vendedor" value={selectedSellerId} onChange={(e) => handleFilterChange(setSelectedSellerId)(e.target.value)} className="appearance-none w-full sm:w-44 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer">
               <option value="">Por Vendedor</option>
-              {sellers.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+              {sellers.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-[#94A3B8]">
               <iconify-icon icon="solar:alt-arrow-down-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
             </div>
           </div>
           <div className="relative group">
-            <select title="Filtrar por estado" value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="appearance-none w-full sm:w-44 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer">
+            <select title="Filtrar por estado" value={selectedStatus} onChange={(e) => handleFilterChange(setSelectedStatus)(e.target.value)} className="appearance-none w-full sm:w-44 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer">
               <option value="">Por Estado</option>
               <option value="Borrador">Borrador</option>
               <option value="Enviada">Enviada</option>
@@ -122,7 +119,7 @@ export default function QuotesList() {
           <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-[#94A3B8]">
             <iconify-icon icon="solar:magnifer-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
           </div>
-          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Buscar por Correlativo, Doc o Nombre..." className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors" />
+          <input type="text" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }} placeholder="Buscar por Correlativo, Doc o Nombre..." className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors" />
         </div>
       </div>
 
@@ -138,17 +135,17 @@ export default function QuotesList() {
             {error instanceof Error ? error.message : 'Error desconocido'}
           </div>
         )}
-        {!isLoading && !isError && filteredQuotes.length === 0 && (
+        {!isLoading && !isError && quotes.length === 0 && (
           <div className="p-8 text-center text-[#94A3B8] text-sm">
             No se encontraron cotizaciones con los filtros aplicados.
           </div>
         )}
 
-        {!isLoading && !isError && filteredQuotes.length > 0 && (
+        {!isLoading && !isError && quotes.length > 0 && (
           <>
             {/* Mobile cards */}
             <div className="md:hidden space-y-3 p-4">
-              {filteredQuotes.map((quote) => (
+              {quotes.map((quote) => (
                 <div key={quote.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-[#E2E8F0]">COT-{quote.numero_correlativo}</span>
@@ -213,7 +210,7 @@ export default function QuotesList() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#334155] bg-[#181B21]">
-                  {filteredQuotes.map((quote) => (
+                  {quotes.map((quote) => (
                     <tr key={quote.id} className="group hover:bg-[#334155]/10 transition-colors">
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">COT-{quote.numero_correlativo}</td>
                       <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{formatDate(quote.fecha_emision)}</td>
@@ -261,6 +258,16 @@ export default function QuotesList() {
               </table>
             </div>
           </>
+        )}
+        {!isLoading && !isError && totalPages > 0 && (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          />
         )}
       </div>
 

@@ -3,12 +3,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { facturasService } from '@/services/facturas.service';
 import { configuracionSeriesService } from '@/services/configuracionSeries.service';
-import type { EmitirComprobantePayload, EnviarSunatResponse, ComprobanteExternoPayload } from '@/services/facturas.service';
+import type { EmitirComprobantePayload, EnviarSunatResponse, ComprobanteExternoPayload, FacturasListParams } from '@/services/facturas.service';
 import { pedidosKeys } from './usePedidos';
 
 export const facturasKeys = {
   all: () => ['comprobantes'] as const,
-  list: () => [...facturasKeys.all(), 'list'] as const,
+  lists: () => [...facturasKeys.all(), 'list'] as const,
+  list: (params?: FacturasListParams) => [...facturasKeys.lists(), params] as const,
 };
 
 export const seriesKeys = {
@@ -24,10 +25,11 @@ export function useSerieByTipoDoc(tipoDocCodigo: string, enabled = true) {
   });
 }
 
-export function useFacturasList() {
+export function useFacturasList(params?: FacturasListParams) {
   return useQuery({
-    queryKey: facturasKeys.list(),
-    queryFn: facturasService.getFacturas,
+    queryKey: facturasKeys.list(params),
+    queryFn: () => facturasService.getFacturas(params),
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -36,7 +38,7 @@ export function useEmitirComprobante() {
   return useMutation({
     mutationFn: (payload: EmitirComprobantePayload) => facturasService.emitirComprobante(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: facturasKeys.list() });
+      queryClient.invalidateQueries({ queryKey: facturasKeys.lists() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.all() });
     },
   });
@@ -47,7 +49,7 @@ export function useCreateNotaCredito() {
   return useMutation({
     mutationFn: facturasService.createNotaCredito,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: facturasKeys.list() });
+      queryClient.invalidateQueries({ queryKey: facturasKeys.lists() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.all() });
     },
   });
@@ -59,7 +61,7 @@ export function useActualizarComprobanteExterno() {
     mutationFn: ({ id, payload, files }: { id: string; payload: ComprobanteExternoPayload; files: { pdf?: File; xml?: File } }) =>
       facturasService.actualizarComprobanteExterno(id, payload, files),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: facturasKeys.list() });
+      queryClient.invalidateQueries({ queryKey: facturasKeys.lists() });
     },
   });
 }
@@ -70,7 +72,7 @@ export function useRegistrarComprobanteExterno() {
     mutationFn: ({ payload, files }: { payload: ComprobanteExternoPayload; files: { pdf: File; xml: File } }) =>
       facturasService.registrarComprobanteExterno(payload, files),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: facturasKeys.list() });
+      queryClient.invalidateQueries({ queryKey: facturasKeys.lists() });
     },
   });
 }
@@ -80,7 +82,7 @@ export function useEnviarASunat() {
   return useMutation<EnviarSunatResponse, Error, string>({
     mutationFn: (comprobanteId: string) => facturasService.enviarASunat(comprobanteId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: facturasKeys.list() });
+      queryClient.invalidateQueries({ queryKey: facturasKeys.lists() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.all() });
     },
   });

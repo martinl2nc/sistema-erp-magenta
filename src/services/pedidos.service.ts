@@ -98,20 +98,61 @@ export interface UpdatePedidoBasicPayload {
   direccion_facturacion?: string | null;
 }
 
+export interface PedidosListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  estado?: string;
+  vendedor_id?: string;
+}
+
+export interface PaginatedPedidos {
+  data: Pedido[];
+  count: number;
+}
+
 export const pedidosService = {
-  async getPedidos(): Promise<Pedido[]> {
+  async getPedidos(params?: PedidosListParams): Promise<PaginatedPedidos> {
     const supabase = createClient();
-    const { data, error } = await supabase
+    const { page = 1, pageSize = 10, search, estado, vendedor_id } = params ?? {};
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
       .from('pedidos')
-      .select(`
-        *,
-        cotizaciones ( numero_correlativo ),
-        clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ),
-        perfiles_usuario ( nombre )
-      `)
-      .order('fecha_creacion', { ascending: false });
+      .select(
+        `*, cotizaciones ( numero_correlativo ), clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ), perfiles_usuario ( nombre )`,
+        { count: 'exact' }
+      )
+      .order('fecha_creacion', { ascending: false })
+      .range(from, to);
+
+    if (search?.trim()) {
+      const term = search.trim();
+      const pedidoNum = parseInt(term);
+      const isNumeric = !isNaN(pedidoNum) && term === String(pedidoNum);
+
+      const { data: matchingClients } = await supabase
+        .from('clientes')
+        .select('id')
+        .or(
+          `razon_social.ilike.%${term}%,nombres_contacto.ilike.%${term}%,numero_documento.ilike.%${term}%`
+        );
+
+      const clientIds = (matchingClients ?? []).map((c) => c.id);
+      const orParts: string[] = [`nro_oc_cliente.ilike.%${term}%`];
+      if (isNumeric) orParts.push(`numero_pedido.eq.${pedidoNum}`);
+      if (clientIds.length > 0) orParts.push(`cliente_id.in.(${clientIds.join(',')})`);
+
+      query = query.or(orParts.join(','));
+    }
+
+    if (estado) query = query.eq('estado', estado);
+    if (vendedor_id) query = query.eq('vendedor_id', vendedor_id);
+
+    const { data, error, count } = await query;
     if (error) throw error;
-    return data || [];
+    return { data: data || [], count: count ?? 0 };
   },
 
   async getPedidoById(id: string): Promise<Pedido> {

@@ -2,20 +2,22 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { quotesService } from '@/services/quotes.service';
-import type { QuoteFormData, QuoteStatus, Quote } from '@/services/quotes.service';
+import type { QuoteFormData, QuoteStatus, Quote, QuotesListParams, PaginatedQuotes } from '@/services/quotes.service';
 import { sendQuoteToWebhook } from '@/services/webhook.service';
 import type { SendQuoteWebhookParams } from '@/services/webhook.service';
 
 export const quotesKeys = {
-  all: ['quotes'] as const,
-  list: () => [...quotesKeys.all, 'list'] as const,
-  detail: (id: string) => [...quotesKeys.all, 'detail', id] as const,
+  all: () => ['quotes'] as const,
+  lists: () => [...quotesKeys.all(), 'list'] as const,
+  list: (params?: QuotesListParams) => [...quotesKeys.lists(), params] as const,
+  detail: (id: string) => [...quotesKeys.all(), 'detail', id] as const,
 };
 
-export function useQuotesList() {
+export function useQuotesList(params?: QuotesListParams) {
   return useQuery({
-    queryKey: quotesKeys.list(),
-    queryFn: quotesService.getQuotes,
+    queryKey: quotesKeys.list(params),
+    queryFn: () => quotesService.getQuotes(params),
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -32,7 +34,7 @@ export function useSaveQuote() {
   return useMutation({
     mutationFn: (data: QuoteFormData) => quotesService.saveQuote(data),
     onSuccess: (savedQuote) => {
-      queryClient.invalidateQueries({ queryKey: quotesKeys.list() });
+      queryClient.invalidateQueries({ queryKey: quotesKeys.lists() });
       if (savedQuote.id) {
         queryClient.invalidateQueries({ queryKey: quotesKeys.detail(savedQuote.id) });
       }
@@ -45,7 +47,7 @@ export function useDeleteQuote() {
   return useMutation({
     mutationFn: (id: string) => quotesService.deleteQuote(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: quotesKeys.list() });
+      queryClient.invalidateQueries({ queryKey: quotesKeys.lists() });
     },
   });
 }
@@ -56,20 +58,19 @@ export function useUpdateQuoteStatus() {
     mutationFn: ({ id, status }: { id: string; status: QuoteStatus }) =>
       quotesService.updateQuoteStatus(id, status),
     onMutate: async ({ id, status }) => {
-      await queryClient.cancelQueries({ queryKey: quotesKeys.list() });
-      const previousQuotes = queryClient.getQueryData<Quote[]>(quotesKeys.list());
-      queryClient.setQueryData<Quote[]>(quotesKeys.list(), (old) =>
-        old?.map(q => q.id === id ? { ...q, estado: status } : q) ?? []
+      await queryClient.cancelQueries({ queryKey: quotesKeys.lists() });
+      const queries = queryClient.getQueriesData<PaginatedQuotes>({ queryKey: quotesKeys.lists() });
+      queryClient.setQueriesData<PaginatedQuotes>(
+        { queryKey: quotesKeys.lists() },
+        (old) => old ? { ...old, data: old.data.map((q) => (q.id === id ? { ...q, estado: status } : q)) } : old
       );
-      return { previousQuotes };
+      return { queries };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previousQuotes) {
-        queryClient.setQueryData(quotesKeys.list(), context.previousQuotes);
-      }
+      context?.queries.forEach(([key, data]) => queryClient.setQueryData(key, data));
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: quotesKeys.list() });
+      queryClient.invalidateQueries({ queryKey: quotesKeys.lists() });
     },
   });
 }
@@ -80,20 +81,19 @@ export function useUpdateQuoteFollowup() {
     mutationFn: ({ id, value }: { id: string; value: boolean }) =>
       quotesService.updateQuoteFollowup(id, value),
     onMutate: async ({ id, value }) => {
-      await queryClient.cancelQueries({ queryKey: quotesKeys.list() });
-      const previousQuotes = queryClient.getQueryData<Quote[]>(quotesKeys.list());
-      queryClient.setQueryData<Quote[]>(quotesKeys.list(), (old) =>
-        old?.map(q => q.id === id ? { ...q, seguimiento_automatico: value } : q) ?? []
+      await queryClient.cancelQueries({ queryKey: quotesKeys.lists() });
+      const queries = queryClient.getQueriesData<PaginatedQuotes>({ queryKey: quotesKeys.lists() });
+      queryClient.setQueriesData<PaginatedQuotes>(
+        { queryKey: quotesKeys.lists() },
+        (old) => old ? { ...old, data: old.data.map((q) => (q.id === id ? { ...q, seguimiento_automatico: value } : q)) } : old
       );
-      return { previousQuotes };
+      return { queries };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previousQuotes) {
-        queryClient.setQueryData(quotesKeys.list(), context.previousQuotes);
-      }
+      context?.queries.forEach(([key, data]) => queryClient.setQueryData(key, data));
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: quotesKeys.list() });
+      queryClient.invalidateQueries({ queryKey: quotesKeys.lists() });
     },
   });
 }

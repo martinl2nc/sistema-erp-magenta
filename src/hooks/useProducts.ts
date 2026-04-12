@@ -8,17 +8,19 @@ import {
   deleteProduct,
   toggleProductActive,
 } from '@/services/products.service';
-import type { ProductFormData } from '@/services/products.service';
+import type { ProductFormData, ProductsListParams } from '@/services/products.service';
 
 export const productsKeys = {
   all: () => ['products'] as const,
-  list: () => [...productsKeys.all(), 'list'] as const,
+  lists: () => [...productsKeys.all(), 'list'] as const,
+  list: (params?: ProductsListParams) => [...productsKeys.lists(), params] as const,
 };
 
-export const useProductsList = () => {
+export const useProductsList = (params?: ProductsListParams) => {
   return useQuery({
-    queryKey: productsKeys.list(),
-    queryFn: getProducts,
+    queryKey: productsKeys.list(params),
+    queryFn: () => getProducts(params),
+    placeholderData: (prev) => prev,
   });
 };
 
@@ -27,7 +29,7 @@ export const useCreateProduct = () => {
   return useMutation({
     mutationFn: (data: ProductFormData) => createProduct(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productsKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productsKeys.lists() });
     },
   });
 };
@@ -38,7 +40,7 @@ export const useUpdateProduct = () => {
     mutationFn: ({ id, data }: { id: string; data: Partial<ProductFormData> }) =>
       updateProduct(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productsKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productsKeys.lists() });
     },
   });
 };
@@ -48,7 +50,7 @@ export const useDeleteProduct = () => {
   return useMutation({
     mutationFn: (id: string) => deleteProduct(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productsKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productsKeys.lists() });
     },
   });
 };
@@ -59,7 +61,7 @@ export const useToggleProductActive = () => {
     mutationFn: ({ id, activo }: { id: string; activo: boolean }) =>
       toggleProductActive(id, activo),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: productsKeys.list() });
+      queryClient.invalidateQueries({ queryKey: productsKeys.lists() });
     },
   });
 };

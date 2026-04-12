@@ -31,15 +31,37 @@ export interface ProductFormData {
 
 // ─── Service Functions (Capa 1) ──────────────────────────────
 
-export const getProducts = async (): Promise<Product[]> => {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('productos')
-    .select('*, categorias(nombre)')
-    .order('fecha_creacion', { ascending: false });
+export interface ProductsListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
 
+export interface PaginatedProducts {
+  data: Product[];
+  count: number;
+}
+
+export const getProducts = async (params?: ProductsListParams): Promise<PaginatedProducts> => {
+  const supabase = createClient();
+  const { page = 1, pageSize = 10, search } = params ?? {};
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase
+    .from('productos')
+    .select('*, categorias(nombre)', { count: 'exact' })
+    .order('fecha_creacion', { ascending: false })
+    .range(from, to);
+
+  if (search?.trim()) {
+    const term = `%${search.trim()}%`;
+    query = query.or(`sku.ilike.${term},nombre.ilike.${term}`);
+  }
+
+  const { data, error, count } = await query;
   if (error) throw new Error('Error al cargar productos: ' + error.message);
-  return data as Product[];
+  return { data: (data ?? []) as Product[], count: count ?? 0 };
 };
 
 export const createProduct = async (product: ProductFormData): Promise<Product> => {

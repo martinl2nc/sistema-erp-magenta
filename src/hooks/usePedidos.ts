@@ -2,19 +2,21 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pedidosService } from '@/services/pedidos.service';
-import type { PedidoEstado, CreatePedidoPayload, CreatePedidoLineaPayload, UpdatePedidoBasicPayload } from '@/services/pedidos.service';
+import type { PedidoEstado, CreatePedidoPayload, CreatePedidoLineaPayload, UpdatePedidoBasicPayload, PedidosListParams } from '@/services/pedidos.service';
 
 export const pedidosKeys = {
   all: () => ['pedidos'] as const,
-  list: () => [...pedidosKeys.all(), 'list'] as const,
+  lists: () => [...pedidosKeys.all(), 'list'] as const,
+  list: (params?: PedidosListParams) => [...pedidosKeys.lists(), params] as const,
   detail: (id: string) => [...pedidosKeys.all(), 'detail', id] as const,
   lines: (id: string) => [...pedidosKeys.all(), 'lines', id] as const,
 };
 
-export function usePedidosList() {
+export function usePedidosList(params?: PedidosListParams) {
   return useQuery({
-    queryKey: pedidosKeys.list(),
-    queryFn: pedidosService.getPedidos,
+    queryKey: pedidosKeys.list(params),
+    queryFn: () => pedidosService.getPedidos(params),
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -23,7 +25,7 @@ export function useCreatePedido() {
   return useMutation({
     mutationFn: (payload: CreatePedidoPayload) => pedidosService.createPedido(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
     },
   });
 }
@@ -34,7 +36,7 @@ export function useUpdatePedidoForEmision() {
     mutationFn: ({ id, data }: { id: string; data: { direccion_facturacion?: string } }) =>
       pedidosService.updateForEmision(id, data),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
     },
   });
@@ -46,7 +48,7 @@ export function useUpdatePedidoEstado() {
     mutationFn: ({ id, estado }: { id: string; estado: PedidoEstado }) =>
       pedidosService.updateEstado(id, estado),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
     },
   });
@@ -58,7 +60,7 @@ export function useUpdatePedidoBasic() {
     mutationFn: ({ id, data }: { id: string; data: UpdatePedidoBasicPayload }) =>
       pedidosService.updatePedidoBasic(id, data),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
     },
   });
@@ -97,7 +99,7 @@ export function useUpdatePedidoCompleto() {
     mutationFn: ({ id, payload, lineas }: { id: string; payload: CreatePedidoPayload; lineas: CreatePedidoLineaPayload[] }) =>
       pedidosService.updatePedidoCompleto(id, payload, lineas),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: pedidosKeys.list() });
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });
     },
   });

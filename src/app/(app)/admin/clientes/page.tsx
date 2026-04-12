@@ -1,36 +1,48 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { useClientsList, useToggleClientActive, useDeleteClient } from '@/hooks/useClients';
+import { useDebounce } from '@/hooks/useDebounce';
 import ClientFormModal from '@/features/clients/ClientFormModal';
 import SellersTab from '@/features/sellers/SellersTab';
 import AdminTabs from '@/components/admin/AdminTabs';
+import Pagination from '@/components/ui/Pagination';
 import type { Client } from '@/services/clients.service';
+import { PAGINATION, TIMEOUTS } from '@/constants';
 
 export default function ClientsPage() {
   const [activeTab, setActiveTab] = useState<'clientes' | 'vendedores'>('clientes');
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
 
+  const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);
+
   // ─── Server State (Capa 2) ──────────────────────────────────
-  const { data: clients = [], isLoading, isError, error } = useClientsList();
+  const { data: result, isLoading, isError, error } = useClientsList({
+    page,
+    pageSize,
+    search: debouncedSearch,
+  });
+  const clients = result?.data ?? [];
+  const totalItems = result?.count ?? 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
   const toggleMutation = useToggleClientActive();
   const deleteClientMutation = useDeleteClient();
 
-  // ─── Derived: Filtered clients ──────────────────────────────
-  const filteredClients = useMemo(() => {
-    if (!searchTerm.trim()) return clients;
-    const term = searchTerm.toLowerCase();
-    return clients.filter(c =>
-      (c.numero_documento?.toLowerCase().includes(term)) ||
-      (c.razon_social?.toLowerCase().includes(term)) ||
-      (c.nombres_contacto.toLowerCase().includes(term)) ||
-      (c.apellidos_contacto.toLowerCase().includes(term)) ||
-      (c.email.toLowerCase().includes(term))
-    );
-  }, [clients, searchTerm]);
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+  };
 
   // ─── Handlers ───────────────────────────────────────────────
   const handleToggle = (client: Client) => {
@@ -113,7 +125,7 @@ export default function ClientsPage() {
                 type="text"
                 placeholder="Buscar por RUC, Razón Social o Email..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg pl-10 pr-4 py-2 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow"
               />
             </div>
@@ -140,7 +152,7 @@ export default function ClientsPage() {
             <div className="flex items-center justify-center p-12 text-red-400 text-sm">
               {error instanceof Error ? error.message : 'Error al cargar clientes'}
             </div>
-          ) : filteredClients.length === 0 ? (
+          ) : clients.length === 0 ? (
             <div className="flex items-center justify-center p-12 text-[#94A3B8] text-sm">
               {searchTerm ? 'No se encontraron clientes con esa búsqueda.' : 'No hay clientes registrados.'}
             </div>
@@ -148,7 +160,7 @@ export default function ClientsPage() {
             <>
               {/* Mobile cards */}
               <div className="md:hidden space-y-3 p-4">
-                {filteredClients.map((client) => (
+                {clients.map((client) => (
                   <div key={client.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <p className={`text-sm font-medium leading-snug ${client.activo ? 'text-[#E2E8F0]' : 'text-[#94A3B8]'}`}>
@@ -213,7 +225,7 @@ export default function ClientsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#334155]/60 bg-[#181B21]">
-                    {filteredClients.map((client) => (
+                    {clients.map((client) => (
                       <tr key={client.id} className="hover:bg-[#334155]/20 transition-colors group">
                         <td className={`px-6 py-4 whitespace-nowrap text-xs ${client.activo ? 'text-[#94A3B8]' : 'text-[#94A3B8]/50'}`}>
                           {client.numero_documento || '—'}
@@ -268,6 +280,16 @@ export default function ClientsPage() {
                 </table>
               </div>
             </>
+          )}
+          {!isLoading && !isError && totalPages > 0 && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={handlePageSizeChange}
+            />
           )}
         </div>
           </>
