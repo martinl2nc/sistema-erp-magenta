@@ -12,6 +12,7 @@ export interface Comprobante {
   serie_numero: string;
   comprobante_referencia_id: string | null;
   motivo_nota: string | null;
+  tipo_nota_codigo: string | null;
   fecha_emision: string;
   fecha_vencimiento: string | null;
   tipo_moneda: string;
@@ -255,24 +256,51 @@ export const facturasService = {
     return data as string; // returns comprobante_id (UUID)
   },
 
+  async getDetallesComprobante(comprobanteId: string): Promise<any[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('comprobantes_detalles')
+      .select('*')
+      .eq('comprobante_id', comprobanteId);
+    
+    if (error) {
+      throw new Error(`Error al obtener detalles: ${error.message}`);
+    }
+    return data || [];
+  },
+
   async createNotaCredito(payload: {
     comprobante_id: string;
     motivo: string;
-    tipo_nota_codigo?: string; // catálogo 09 SUNAT, ej: '01' = Anulación
+    tipo_nota_codigo?: string; // catálogo 09 SUNAT, ej: '01' = Anulación Total
+    lineas?: any[];
+    totales?: {
+      mto_oper_gravadas: number;
+      mto_igv: number;
+      mto_imp_venta: number;
+      valor_venta: number;
+      subtotal: number;
+      total_impuestos: number;
+    };
   }): Promise<Comprobante> {
     const supabase = createClient();
 
-    // Intentar RPC atómica (migración 008); fallback a operación legacy si aún no existe
+    // RPC atómica: crea la NC, copia/inyecta detalles, anula el original si corresponde
     const { data: rpcId, error: rpcError } = await supabase.rpc('crear_nota_credito', {
       p_comprobante_id:   payload.comprobante_id,
       p_motivo:          payload.motivo,
       p_tipo_nota_codigo: payload.tipo_nota_codigo ?? null,
+      p_lineas:           payload.lineas ?? null,
+      p_mto_oper_gravadas: payload.totales?.mto_oper_gravadas ?? null,
+      p_mto_igv:           payload.totales?.mto_igv ?? null,
+      p_mto_imp_venta:     payload.totales?.mto_imp_venta ?? null,
+      p_valor_venta:       payload.totales?.valor_venta ?? null,
+      p_subtotal:          payload.totales?.subtotal ?? null,
+      p_total_impuestos:   payload.totales?.total_impuestos ?? null,
     });
 
     if (rpcError) {
-      const isMissing = rpcError.code === 'PGRST202' || rpcError.message?.includes('crear_nota_credito');
-      if (!isMissing) throw new Error('No se pudo crear la nota de crédito');
-      return facturasService._createNotaCreditoLegacy(payload);
+      throw new Error(`No se pudo crear la nota de crédito: ${rpcError.message}`);
     }
 
     const { data, error } = await supabase
@@ -340,44 +368,4 @@ export const facturasService = {
     }
   },
 
-  async _createNotaCreditoLegacy(payload: {
-    comprobante_id: string;
-    motivo: string;
-    tipo_nota_codigo?: string;
-  }): Promise<Comprobante> {
-    const supabase = createClient();
-
-    const { data: original, error: origErr } = await supabase
-      .from('comprobantes')
-      .select('pedido_id, cliente_id')
-      .eq('id', payload.comprobante_id)
-      .single();
-    if (origErr || !original) throw origErr ?? new Error('Comprobante original no encontrado');
-
-    const { data, error } = await supabase
-      .from('comprobantes')
-      .insert([{
-        pedido_id:                original.pedido_id,
-        cliente_id:               original.cliente_id,
-        tipo_doc_codigo:          '07',
-        serie:                    'NC01',
-        correlativo:              0,
-        serie_numero:             'NC-PENDIENTE',
-        comprobante_referencia_id: payload.comprobante_id,
-        motivo_nota:              payload.motivo,
-        tipo_nota_codigo:         payload.tipo_nota_codigo ?? null,
-        estado_sunat:             'borrador',
-      }])
-      .select()
-      .single();
-    if (error) throw new Error('No se pudo crear la nota de crédito');
-
-    const { error: updateError } = await supabase
-      .from('comprobantes')
-      .update({ estado_sunat: 'anulada' as ComprobanteEstadoSunat })
-      .eq('id', payload.comprobante_id);
-    if (updateError) throw new Error('Nota de crédito creada pero no se pudo anular el comprobante original');
-
-    return data;
-  },
 };

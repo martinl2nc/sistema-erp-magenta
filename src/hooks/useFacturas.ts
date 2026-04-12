@@ -33,6 +33,14 @@ export function useFacturasList(params?: FacturasListParams) {
   });
 }
 
+export function useComprobanteDetalles(comprobanteId?: string) {
+  return useQuery({
+    queryKey: [...facturasKeys.all(), 'detalles', comprobanteId],
+    queryFn: () => facturasService.getDetallesComprobante(comprobanteId!),
+    enabled: !!comprobanteId,
+  });
+}
+
 export function useEmitirComprobante() {
   const queryClient = useQueryClient();
   return useMutation({

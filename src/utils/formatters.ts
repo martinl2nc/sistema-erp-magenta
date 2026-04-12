@@ -22,37 +22,59 @@ export const formatCurrency = (value: number): string => {
 
 /**
  * Formatea una fecha en formato español peruano
+ * Normaliza fechas estáticas (YYYY-MM-DD o medianoche UTC) para evitar el salto de día
  * 
  * @param date - Fecha como string ISO o objeto Date
  * @returns String formateado como "15 ene 2024"
- * 
- * @example
- * formatDate('2024-01-15') // "15 ene 2024"
- * formatDate(new Date()) // Fecha actual formateada
  */
 export const formatDate = (date: string | Date): string => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const { dateObj, isUtc } = parseSafeDate(date);
   return new Intl.DateTimeFormat('es-PE', {
     day: 'numeric',
     month: 'short',
-    year: 'numeric'
+    year: 'numeric',
+    ...(isUtc && { timeZone: 'UTC' })
   }).format(dateObj);
 };
 
 /**
  * Formatea una fecha en formato corto (dd/mm/yyyy)
+ * Normaliza fechas estáticas para evitar el salto de día
  * 
  * @param date - Fecha como string ISO o objeto Date
  * @returns String formateado como "15/01/2024"
  */
 export const formatDateShort = (date: string | Date): string => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const { dateObj, isUtc } = parseSafeDate(date);
   return new Intl.DateTimeFormat('es-PE', {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric'
+    year: 'numeric',
+    ...(isUtc && { timeZone: 'UTC' })
   }).format(dateObj);
 };
+
+/**
+ * Función interna para normalizar si una fecha debe forzarse en UTC
+ * Evita el problema donde "2026-04-09" o "2026-04-09T00:00:00.000Z" (fechas de negocio)
+ * se muestran como "2026-04-08" en zonas horarias negativas (ej. Lima UTC-5).
+ */
+function parseSafeDate(date: string | Date): { dateObj: Date, isUtc: boolean } {
+  if (date instanceof Date) return { dateObj: date, isUtc: false };
+  
+  // Si nos viene estrictamente sin hora ('YYYY-MM-DD')
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { dateObj: new Date(date), isUtc: true };
+  }
+  
+  // Si viene desde Supabase como 'timestamptz' a medianoche UTC exacta 'YYYY-MM-DDT00:00:00'
+  if (date.includes('T00:00:00Z') || date.includes('T00:00:00.000Z') || date.includes('T00:00:00+00:00')) {
+    return { dateObj: new Date(date), isUtc: true };
+  }
+
+  // Cualquier otro timestamp (ej. fecha_creacion real con horas, minutos) usa zona local normal
+  return { dateObj: new Date(date), isUtc: false };
+}
 
 /**
  * Obtiene el nombre para mostrar de un cliente

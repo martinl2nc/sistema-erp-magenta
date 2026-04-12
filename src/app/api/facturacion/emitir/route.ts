@@ -8,6 +8,7 @@ import {
   type ApisPeruResponse,
   type ComprobanteData,
   type ComprobanteDetalle,
+  type ComprobanteReferenciadoData,
   type ClienteData,
   type EmpresaData,
 } from '@/lib/apisperuFacturacion';
@@ -58,11 +59,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Datos incompletos para facturación' }, { status: 400 });
     }
 
+    // ─── Nota de Crédito: cargar comprobante referenciado ────────
+    let comprobanteReferenciado: ComprobanteReferenciadoData | null = null;
+    if (comprobante.tipo_doc_codigo === '07') {
+      if (!comprobante.comprobante_referencia_id) {
+        return NextResponse.json({ success: false, error: 'Nota de crédito sin comprobante de referencia asociado' }, { status: 422 });
+      }
+      const { data: ref, error: refError } = await supabase
+        .from('comprobantes')
+        .select('tipo_doc_codigo, serie_numero, fecha_emision')
+        .eq('id', comprobante.comprobante_referencia_id)
+        .maybeSingle();
+      if (refError || !ref) {
+        return NextResponse.json({ success: false, error: 'Comprobante referenciado no encontrado' }, { status: 404 });
+      }
+      comprobanteReferenciado = ref as ComprobanteReferenciadoData;
+    }
+
     const payload = buildInvoicePayload(
       comprobante as ComprobanteData,
       detalles as ComprobanteDetalle[],
       cliente as ClienteData,
-      empresa as EmpresaData
+      empresa as EmpresaData,
+      comprobanteReferenciado,
     );
 
     const supabaseAdmin = createAdminClient();
@@ -187,7 +206,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'No se encontró el registro para actualizar en la fase final' }, { status: 404 });
     }
 
-    if (comprobante.pedido_id) {
+    if (comprobante.tipo_doc_codigo !== '07' && comprobante.pedido_id) {
       await supabaseAdmin.from('pedidos').update({ estado: 'facturado' }).eq('id', comprobante.pedido_id);
     }
 

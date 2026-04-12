@@ -21,13 +21,13 @@ export interface ApisPeruDetraccion {
 
 export interface ApisPeruInvoicePayload {
   ublVersion: string;
-  tipoOperacion: string;
+  tipoOperacion?: string; // omitido para NC (tipo '07') — no está en el schema de Note de ApisPeru
   tipoDoc: string;
   serie: string;
   correlativo: string;
   fechaEmision: string;
   tipoMoneda: string;
-  formaPago: { moneda: string; tipo: string };
+  formaPago?: { moneda: string; tipo: string }; // omitido para NC (tipo '07')
   client: {
     tipoDoc: string;
     numDoc: string;
@@ -61,6 +61,11 @@ export interface ApisPeruInvoicePayload {
     base: number;
   }[];
   detraccion?: ApisPeruDetraccion;
+  // ─── Nota de Crédito (solo cuando tipoDoc === '07') ───────
+  codMotivo?: string;          // Cat. 09 SUNAT, ej: '01' = Anulación total
+  desMotivo?: string;          // texto libre del motivo (campo ApisPeru: desMotivo)
+  tipDocAfectado?: string;     // '01' | '03' (tipo del comprobante original)
+  numDocfectado?: string;      // serie_numero del original, ej: 'F001-00000001' (campo ApisPeru: numDocfectado)
 }
 
 export interface ApisPeruDetail {
@@ -133,6 +138,10 @@ export interface ComprobanteData {
   detraccion_porcentaje: number | null;
   detraccion_monto: number | null;
   detraccion_cuenta_bn: string | null;
+  // Nota de Crédito (presentes cuando tipo_doc_codigo === '07')
+  comprobante_referencia_id?: string | null;
+  motivo_nota?: string | null;
+  tipo_nota_codigo?: string | null;
 }
 
 export interface ComprobanteDetalle {
@@ -167,6 +176,12 @@ export interface EmpresaData {
   direccion: string | null;
 }
 
+export interface ComprobanteReferenciadoData {
+  tipo_doc_codigo: string; // '01' | '03'
+  serie_numero: string;    // ej: 'F001-00000123'
+  fecha_emision: string;   // 'YYYY-MM-DD' o ISO
+}
+
 // ─── Mapeo tipo_documento local → tipoDoc SUNAT ─────────────
 
 function mapTipoDocCliente(tipo: string | null): string {
@@ -187,23 +202,33 @@ export function buildInvoicePayload(
   detalles: ComprobanteDetalle[],
   cliente: ClienteData,
   empresa: EmpresaData,
+  comprobanteReferenciado?: ComprobanteReferenciadoData | null,
 ): ApisPeruInvoicePayload {
+  if (comprobante.tipo_doc_codigo === '07') {
+    if (!comprobanteReferenciado) throw new Error('Nota de crédito sin comprobante de referencia');
+    if (!comprobante.motivo_nota || !comprobante.tipo_nota_codigo) throw new Error('NC sin motivo o tipo_nota_codigo');
+  }
+
   const clientName = cliente.razon_social?.trim()
     || `${cliente.nombres_contacto || ''} ${cliente.apellidos_contacto || ''}`.trim()
     || 'CLIENTE GENÉRICO';
 
   return {
     ublVersion: '2.1',
-    tipoOperacion: comprobante.tipo_operacion || '0101',
+    // tipoOperacion no aplica para NC — no está en el schema de Note de ApisPeru
+    ...(comprobante.tipo_doc_codigo !== '07' ? { tipoOperacion: comprobante.tipo_operacion || '0101' } : {}),
     tipoDoc: comprobante.tipo_doc_codigo,
     serie: comprobante.serie,
     correlativo: String(comprobante.correlativo),
     fechaEmision: comprobante.fecha_emision.split('T')[0] + 'T00:00:00-05:00',
     tipoMoneda: comprobante.tipo_moneda || 'PEN',
-    formaPago: {
-      moneda: comprobante.tipo_moneda || 'PEN',
-      tipo: comprobante.forma_pago === 'Credito' ? 'Credito' : 'Contado',
-    },
+    // formaPago no aplica para NC (tipo_doc '07') — SUNAT error 3246 si se incluye
+    ...(comprobante.tipo_doc_codigo !== '07' ? {
+      formaPago: {
+        moneda: comprobante.tipo_moneda || 'PEN',
+        tipo: comprobante.forma_pago === 'Credito' ? 'Credito' : 'Contado',
+      },
+    } : {}),
     client: {
       tipoDoc: mapTipoDocCliente(cliente.tipo_documento),
       numDoc: cliente.numero_documento || '00000000',
@@ -223,10 +248,15 @@ export function buildInvoicePayload(
     },
     // ─── Line items (data mapping) ────────────────────────────
     ...(() => {
-      const discountAmount = Number((comprobante.descuento_global_monto || 0).toFixed(2));
+      // Para NCs (tipo '07'): SUNAT no soporta descuentos globales a nivel documento (error 3280).
+      // mtoImpVenta debe ser = mtoOperGravadas + mtoIGV. Se ignora el descuento del header.
+      const discountAmount = comprobante.tipo_doc_codigo === '07'
+        ? 0
+        : Number((comprobante.descuento_global_monto || 0).toFixed(2));
       const descuentoGlobalCodigo = comprobante.descuento_global_codigo || '03';
 
       // Map items — data transformation only, no financial accumulation
+      const isNC = comprobante.tipo_doc_codigo === '07';
       const details = detalles.map((d) => {
         const itemBase = Number(d.mto_base_igv.toFixed(2));
         const itemIgv = Number(d.igv.toFixed(2));
@@ -235,9 +265,16 @@ export function buildInvoicePayload(
         const porcentajeIgv = Number(d.porcentaje_igv ?? (TAX_RATES.IGV * 100));
         const factorImpuesto = (porcentajeIgv / 100) + 1;
 
+        // Para NCs: normalizar mtoValorUnitario a itemBase/cantidad para eliminar descuentos
+        // implícitos de línea. SUNAT valida CreditNoteLine sin aplicar AllowanceCharge
+        // → LineExtensionAmount debe = PriceAmount × Quantity exacto (error 3271 si no).
+        const mtoValorUnitario = isNC
+          ? Number((itemBase / d.cantidad).toFixed(10))
+          : d.mto_valor_unitario;
+
         // Detectar descuento de línea: explícito o implícito
         // cuando mtoValorUnitario × cantidad > itemBase (genera cac:AllowanceCharge, evita error 3271)
-        const grossValue = Number((d.mto_valor_unitario * d.cantidad).toFixed(2));
+        const grossValue = Number((mtoValorUnitario * d.cantidad).toFixed(2));
         const explicitDiscount = d.descuento && d.descuento > 0 ? Number(d.descuento.toFixed(2)) : 0;
         const impliedDiscount = Number((grossValue - itemBase).toFixed(2));
         const descuentoLinea = explicitDiscount > 0 ? explicitDiscount : (impliedDiscount > 0.005 ? impliedDiscount : null);
@@ -251,7 +288,7 @@ export function buildInvoicePayload(
           unidad: d.unidad_codigo || 'NIU',
           descripcion: d.descripcion,
           cantidad: d.cantidad,
-          mtoValorUnitario: d.mto_valor_unitario,
+          mtoValorUnitario,
           mtoValorVenta: itemBase,
           mtoBaseIgv: itemBase,
           porcentajeIgv,
@@ -298,12 +335,12 @@ export function buildInvoicePayload(
           : undefined,
         legends: [
           { code: '1000', value: numeroALetras(totals.mtoImpVenta) },
-          ...(comprobante.detraccion_cod_bien ? [{ code: '2006', value: 'Operación sujeta a detracción' }] : []),
+          ...(comprobante.tipo_doc_codigo !== '07' && comprobante.detraccion_cod_bien ? [{ code: '2006', value: 'Operación sujeta a detracción' }] : []),
         ],
       };
     })(),
-    // Detracción — solo se incluye cuando la operación está sujeta a detracción
-    ...(comprobante.detraccion_cod_bien ? {
+    // Detracción — solo se incluye cuando la operación está sujeta a detracción (nunca en NC)
+    ...(comprobante.tipo_doc_codigo !== '07' && comprobante.detraccion_cod_bien ? {
       detraccion: {
         codBienDetraccion: comprobante.detraccion_cod_bien,
         codMedioPago: comprobante.detraccion_cod_medio_pago ?? '001',
@@ -312,6 +349,13 @@ export function buildInvoicePayload(
         mount: comprobante.detraccion_monto ?? 0,
         valueRef: comprobante.mto_imp_venta,
       } satisfies ApisPeruDetraccion,
+    } : {}),
+    // ─── Nota de Crédito — campos requeridos por SUNAT/ApisPeru ──
+    ...(comprobante.tipo_doc_codigo === '07' && comprobanteReferenciado ? {
+      codMotivo:      comprobante.tipo_nota_codigo!,
+      desMotivo:      comprobante.motivo_nota!,
+      tipDocAfectado: comprobanteReferenciado.tipo_doc_codigo,
+      numDocfectado:  comprobanteReferenciado.serie_numero,
     } : {}),
   } as ApisPeruInvoicePayload;
 }
@@ -329,7 +373,9 @@ export async function sendInvoiceToApisPeru(
   }
 
   // Normalizar URL base (quitar trailing slash)
-  const url = `${baseUrl.replace(/\/+$/, '')}/invoice/send`;
+  // NCs y NDs usan /note/send; facturas y boletas usan /invoice/send
+  const path = ['07', '08'].includes(payload.tipoDoc) ? 'note/send' : 'invoice/send';
+  const url = `${baseUrl.replace(/\/+$/, '')}/${path}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -366,7 +412,9 @@ export async function getPdfFromApisPeru(payload: ApisPeruInvoicePayload): Promi
     throw new Error('Faltan variables APISPERU_FACTURACION_URL o APISPERU_FACTURACION_TOKEN');
   }
 
-  const url = `${baseUrl.replace(/\/+$/, '')}/invoice/pdf`;
+  // NCs y NDs usan /note/pdf; facturas y boletas usan /invoice/pdf
+  const pdfPath = ['07', '08'].includes(payload.tipoDoc) ? 'note/pdf' : 'invoice/pdf';
+  const url = `${baseUrl.replace(/\/+$/, '')}/${pdfPath}`;
 
   const response = await fetch(url, {
     method: 'POST',
