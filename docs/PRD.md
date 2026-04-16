@@ -72,6 +72,13 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 - [x] Verificar estado del comprobante en SUNAT
 - [x] Emitir notas de crédito para rectificaciones
 
+#### Módulo de Cobranzas
+- [x] Dashboard de cuentas por cobrar y seguimiento de saldos
+- [x] Registro de cobros referenciados a comprobantes
+- [x] Identificación automática del estado de pago a nivel comprobante
+- [x] Historial interactivo del progreso de pago con método, referencia y fechas
+- Para un detalle técnico completo, consulta: `@[docs/prd_modulo_cobros.md]`
+
 #### Módulo de Clientes y Vendedores
 - [x] Registro de clientes con RUC/DNI
 - [x] Datos de contacto (nombre, email, teléfono, dirección)
@@ -178,6 +185,9 @@ src/
 | `pedidos_lineas` | Líneas de detalle de pedidos |
 | `comprobantes` | Cabecera de comprobantes emitidos (Facturas/Boletas) |
 | `comprobantes_detalles` | Líneas de detalle de comprobantes |
+| `cobros` | Historial de pagos para cuentas por cobrar |
+| `cat_metodos_pago` | Catálogo de métodos de pago válidos (Cash, Transferencia, Yape...) |
+| `cuentas_bancarias_empresa` | Cuentas bancarias habilitadas con moneda y detracciones |
 | `empresa_configuracion` | Configuración singleton de la empresa |
 
 #### 5.1 Estructura de Tablas Principales
@@ -274,6 +284,30 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | `enlace_cdr` | String | URL de la constancia de recepción |
 | `apisperu_response` | JSONB | Respuesta íntegra del API |
 | `estado_sunat` | Enum | borrador, aceptada_sunat, rechazada, etc. |
+| `estado_pago` | String | (Mantenido por DB Trigger) pendiente, parcial, pagado |
+
+**Tabla: `cobros`**
+| Columna | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `id` | UUID | Identificador único |
+| `comprobante_id` | UUID | Comprobante facturado que se está pagando |
+| `metodo_pago_id` | UUID | Relación con el tipo de pago |
+| `cuenta_bancaria_id` | UUID | (Opcional) A qué cuenta ingresó el dinero |
+| `monto` | Numeric | Monto del abono |
+| `fecha_pago` | Date | Fecha real en la que el cliente pagó |
+| `referencia` | String | Número de operación o voucher |
+| `vendedor_id` | UUID | Quién registró el cobro en el sistema |
+
+**Tabla: `cuentas_bancarias_empresa`**
+| Columna | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `id` | UUID | Identificador único |
+| `banco` | String | Banco de destino |
+| `numero_cuenta` | String | Número de cuenta |
+| `cci` | String | Código de cuenta interbancaria |
+| `moneda` | String | PEN o USD |
+| `es_detraccion` | Boolean | Indica si es cuenta de detracción del BN |
+| `activo` | Boolean | Soft delete |
 
 #### Tablas de Catálogo (SUNAT)
 
