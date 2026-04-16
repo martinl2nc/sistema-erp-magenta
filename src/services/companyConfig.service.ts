@@ -7,7 +7,6 @@ export interface CompanyConfig {
   razon_social: string;
   ruc: string;
   direccion: string | null;
-  cuentas_bancarias: string | null;
   terminos_condiciones: string | null;
   logo_url: string | null;
   detraccion_cuenta_bn: string | null;
@@ -17,7 +16,6 @@ export interface CompanyConfigFormData {
   razon_social: string;
   ruc: string;
   direccion: string;
-  cuentas_bancarias: string;
   terminos_condiciones: string;
   logo_url: string | null;
   detraccion_cuenta_bn: string;
