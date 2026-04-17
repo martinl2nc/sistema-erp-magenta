@@ -2,14 +2,15 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cobrosService } from '@/services/cobros.service';
-import type { RegistrarCobroPayload, CuentaBancaria } from '@/services/cobros.service';
+import type { RegistrarCobroPayload, CuentaBancaria, CuentasPorCobrarParams } from '@/services/cobros.service';
 import { facturasKeys } from './useFacturas';
 
 // ─── Query Key Factories ─────────────────────────────────────
 
 export const cobrosKeys = {
   all: () => ['cobros'] as const,
-  cuentasPorCobrar: () => [...cobrosKeys.all(), 'cuentas-por-cobrar'] as const,
+  cuentasPorCobrar: (params?: CuentasPorCobrarParams) => [...cobrosKeys.all(), 'cuentas-por-cobrar', params] as const,
+  kpis: () => [...cobrosKeys.all(), 'kpis'] as const,
   historial: (comprobanteId: string) => [...cobrosKeys.all(), 'historial', comprobanteId] as const,
 };
 
@@ -23,15 +24,19 @@ export const cuentasBancariasKeys = {
 
 // ─── Query Hooks ─────────────────────────────────────────────
 
-/**
- * Fetches the receivable accounts list from the master view.
- * Keeps previous data while refetching for smooth UX.
- */
-export function useCuentasPorCobrar() {
+export function useCuentasPorCobrar(params?: CuentasPorCobrarParams) {
   return useQuery({
-    queryKey: cobrosKeys.cuentasPorCobrar(),
-    queryFn: () => cobrosService.getCuentasPorCobrar(),
+    queryKey: cobrosKeys.cuentasPorCobrar(params),
+    queryFn: () => cobrosService.getCuentasPorCobrar(params),
     placeholderData: (prev) => prev,
+  });
+}
+
+export function useKpisCuentasPorCobrar() {
+  return useQuery({
+    queryKey: cobrosKeys.kpis(),
+    queryFn: () => cobrosService.getCuentasPorCobrarKpis(),
+    staleTime: 30 * 1000,
   });
 }
 

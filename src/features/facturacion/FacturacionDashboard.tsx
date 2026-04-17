@@ -73,7 +73,7 @@ export default function FacturacionPage() {
   const pedidos = pedidosResult.data;
 
   // Emitidas: paginación server-side (crece indefinidamente)
-  const { data: comprobantesResult, isLoading: loadingComprobantes, isError: errorComprobantes } = useFacturasList({
+  const { data: comprobantesResult, isLoading: loadingComprobantes, isFetching: fetchingComprobantes, isError: errorComprobantes } = useFacturasList({
     page: pageEmitidas,
     pageSize: pageSizeEmitidas,
     search: debouncedSearchEmitidas,
@@ -158,7 +158,7 @@ export default function FacturacionPage() {
             )}
           </div>
           {role === 'admin' && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <button
                 onClick={() => router.push('/facturacion/externa')}
                 className="bg-[#334155] hover:bg-[#475569] text-[#E2E8F0] px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-[#334155] focus:ring-offset-2 focus:ring-offset-[#0F1115] flex items-center justify-center gap-2 whitespace-nowrap"
@@ -379,7 +379,7 @@ export default function FacturacionPage() {
               />
             </div>
           </div>
-          <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
+          <div className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1 transition-opacity duration-150 ${fetchingComprobantes && !loadingComprobantes ? 'opacity-50' : ''}`}>
           {loadingComprobantes && (
             <div className="flex items-center justify-center gap-2 p-8 text-[#94A3B8] text-sm">
               <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>

@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useCuentasPorCobrar } from '@/hooks/useCobros';
+import { useState } from 'react';
+import { useCuentasPorCobrar, useKpisCuentasPorCobrar } from '@/hooks/useCobros';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
+import { PAGINATION } from '@/constants';
+import Pagination from '@/components/ui/Pagination';
 import RegistrarCobroModal from './RegistrarCobroModal';
 import HistorialCobrosDrawer from './HistorialCobrosDrawer';
 import type { CuentaPorCobrar } from '@/services/cobros.service';
@@ -18,59 +21,40 @@ type FormaPagoFilter = '' | 'Contado' | 'Crédito';
 
 export default function CobranzasDashboard() {
   const { role } = useAuth();
-  const { data: cuentas = [], isLoading, isError } = useCuentasPorCobrar();
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [formaPagoFilter, setFormaPagoFilter] = useState<FormaPagoFilter>('');
   const [showPagados, setShowPagados] = useState(false);
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
+
+  const debouncedSearch = useDebounce(searchTerm, 300);
+
+  const { data: result, isLoading, isFetching, isError } = useCuentasPorCobrar({
+    page,
+    pageSize,
+    search: debouncedSearch,
+    formaPago: formaPagoFilter || undefined,
+    showPagados,
+  });
+
+  const cuentas = result?.data ?? [];
+  const totalItems = result?.count ?? 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
+  const { data: kpis } = useKpisCuentasPorCobrar();
+
   // Modal/Drawer state
   const [selectedForPago, setSelectedForPago] = useState<CuentaPorCobrar | null>(null);
   const [selectedForHistorial, setSelectedForHistorial] = useState<CuentaPorCobrar | null>(null);
 
-  // Filtered list
-  const filtered = useMemo(() => {
-    let list = cuentas;
-
-    // Hide fully paid unless toggled
-    if (!showPagados) {
-      list = list.filter((c) => c.saldo_pendiente > 0);
-    }
-
-    // Filter by forma_pago
-    if (formaPagoFilter) {
-      list = list.filter((c) => c.forma_pago === formaPagoFilter);
-    }
-
-    // Search
-    const search = searchTerm.trim().toLowerCase();
-    if (search) {
-      list = list.filter((c) =>
-        [
-          c.serie_numero,
-          c.razon_social || '',
-          c.nombres_contacto || '',
-          c.apellidos_contacto || '',
-        ].some((f) => f.toLowerCase().includes(search))
-      );
-    }
-
-    return list;
-  }, [cuentas, showPagados, formaPagoFilter, searchTerm]);
-
-  // KPIs
-  const kpis = useMemo(() => {
-    const pendientes = cuentas.filter((c) => c.estado_pago === 'Pendiente');
-    const parciales = cuentas.filter((c) => c.estado_pago === 'Parcial');
-    return {
-      totalPendiente: pendientes.reduce((sum, c) => sum + c.saldo_pendiente, 0),
-      totalParcial: parciales.reduce((sum, c) => sum + c.saldo_pendiente, 0),
-      totalCobrado: cuentas.reduce((sum, c) => sum + c.total_cobrado, 0),
-      countPendientes: pendientes.length,
-      countParciales: parciales.length,
-    };
-  }, [cuentas]);
+  const handleFormaPagoChange = (val: FormaPagoFilter) => { setFormaPagoFilter(val); setPage(1); };
+  const handleShowPagadosChange = (val: boolean) => { setShowPagados(val); setPage(1); };
+  const handleSearchChange = (val: string) => { setSearchTerm(val); setPage(1); };
+  const handlePageSizeChange = (size: number) => { setPageSize(size); setPage(1); };
 
   const formatDate = (d: string) => formatDateUtil(new Date(d));
 
@@ -98,11 +82,11 @@ export default function CobranzasDashboard() {
         <h1 className="text-2xl font-semibold tracking-tight text-[#E2E8F0]">Cobranzas</h1>
         <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
           <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
-          {kpis.countPendientes} pendiente{kpis.countPendientes !== 1 ? 's' : ''}
-          {kpis.countParciales > 0 && (
+          {kpis?.countPendientes ?? 0} pendiente{(kpis?.countPendientes ?? 0) !== 1 ? 's' : ''}
+          {(kpis?.countParciales ?? 0) > 0 && (
             <>
               <span className="w-2 h-2 rounded-full bg-orange-400 inline-block ml-2"></span>
-              {kpis.countParciales} parcial{kpis.countParciales !== 1 ? 'es' : ''}
+              {kpis!.countParciales} parcial{kpis!.countParciales !== 1 ? 'es' : ''}
             </>
           )}
         </div>
@@ -112,15 +96,15 @@ export default function CobranzasDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4">
           <p className="text-xs text-[#94A3B8] uppercase tracking-wider mb-1">Por Cobrar (Pendientes)</p>
-          <p className="text-xl font-bold text-yellow-400">{formatCurrency(kpis.totalPendiente)}</p>
+          <p className="text-xl font-bold text-yellow-400">{formatCurrency(kpis?.totalPendiente ?? 0)}</p>
         </div>
         <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4">
           <p className="text-xs text-[#94A3B8] uppercase tracking-wider mb-1">Por Cobrar (Parciales)</p>
-          <p className="text-xl font-bold text-orange-400">{formatCurrency(kpis.totalParcial)}</p>
+          <p className="text-xl font-bold text-orange-400">{formatCurrency(kpis?.totalParcial ?? 0)}</p>
         </div>
         <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4">
           <p className="text-xs text-[#94A3B8] uppercase tracking-wider mb-1">Total Cobrado</p>
-          <p className="text-xl font-bold text-[#10B981]">{formatCurrency(kpis.totalCobrado)}</p>
+          <p className="text-xl font-bold text-[#10B981]">{formatCurrency(kpis?.totalCobrado ?? 0)}</p>
         </div>
       </div>
 
@@ -130,7 +114,7 @@ export default function CobranzasDashboard() {
           <select
             title="Filtrar por forma de pago"
             value={formaPagoFilter}
-            onChange={(e) => setFormaPagoFilter(e.target.value as FormaPagoFilter)}
+            onChange={(e) => handleFormaPagoChange(e.target.value as FormaPagoFilter)}
             className="appearance-none w-full sm:w-48 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
           >
             <option value="">Todas las formas</option>
@@ -149,7 +133,7 @@ export default function CobranzasDashboard() {
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Buscar por serie o cliente..."
             className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
           />
@@ -159,7 +143,7 @@ export default function CobranzasDashboard() {
           <input
             type="checkbox"
             checked={showPagados}
-            onChange={(e) => setShowPagados(e.target.checked)}
+            onChange={(e) => handleShowPagadosChange(e.target.checked)}
             className="w-4 h-4 rounded border-[#334155] bg-[#0F1115] text-[#3B82F6] focus:ring-[#3B82F6] focus:ring-offset-0 cursor-pointer"
           />
           Mostrar pagados
@@ -167,7 +151,7 @@ export default function CobranzasDashboard() {
       </div>
 
       {/* Table Container */}
-      <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
+      <div className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1 transition-opacity duration-150 ${isFetching && !isLoading ? 'opacity-50' : ''}`}>
         {isLoading && (
           <div className="flex items-center justify-center gap-2 p-8 text-[#94A3B8] text-sm">
             <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>
@@ -182,22 +166,22 @@ export default function CobranzasDashboard() {
           </div>
         )}
 
-        {!isLoading && !isError && filtered.length === 0 && (
+        {!isLoading && !isError && cuentas.length === 0 && (
           <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
             <iconify-icon icon="solar:wallet-check-linear" class="text-5xl text-[#10B981]/40"></iconify-icon>
             <p className="text-sm text-[#94A3B8]">
-              {cuentas.length === 0
+              {totalItems === 0 && !debouncedSearch && !formaPagoFilter
                 ? 'No hay comprobantes con saldo pendiente.'
                 : 'No hay resultados con los filtros seleccionados.'}
             </p>
           </div>
         )}
 
-        {!isLoading && !isError && filtered.length > 0 && (
+        {!isLoading && !isError && cuentas.length > 0 && (
           <>
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3 p-4">
-              {filtered.map((c) => (
+              {cuentas.map((c) => (
                 <div key={c.comprobante_id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-[#E2E8F0]">{c.serie_numero}</span>
@@ -260,7 +244,7 @@ export default function CobranzasDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#334155] bg-[#181B21]">
-                  {filtered.map((c) => (
+                  {cuentas.map((c) => (
                     <tr key={c.comprobante_id} className="hover:bg-[#334155]/10 transition-colors">
                       <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium">
                         <div className="flex items-center gap-1.5">
@@ -318,6 +302,17 @@ export default function CobranzasDashboard() {
           </>
         )}
       </div>
+
+      {!isLoading && !isError && totalPages > 0 && (
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      )}
 
       {/* Modals */}
       <RegistrarCobroModal

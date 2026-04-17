@@ -81,21 +81,73 @@ export interface CuentaBancaria {
   _tiene_pagos?: boolean;
 }
 
+export interface CuentasPorCobrarParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  formaPago?: string;
+  showPagados?: boolean;
+}
+
+export interface PaginatedCuentasPorCobrar {
+  data: CuentaPorCobrar[];
+  count: number;
+}
+
+export interface CuentasPorCobrarKpis {
+  totalPendiente: number;
+  totalParcial: number;
+  totalCobrado: number;
+  countPendientes: number;
+  countParciales: number;
+}
+
 // ─── Service Functions ───────────────────────────────────────
 
-/**
- * Fetches all receivable accounts from the master view.
- * The view already handles NC and detraccion calculations.
- */
-export const getCuentasPorCobrar = async (): Promise<CuentaPorCobrar[]> => {
+export const getCuentasPorCobrar = async (
+  params?: CuentasPorCobrarParams
+): Promise<PaginatedCuentasPorCobrar> => {
+  const supabase = createClient();
+  const { page = 1, pageSize = 10, search, formaPago, showPagados } = params ?? {};
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase
+    .from('vista_cuentas_por_cobrar')
+    .select('*', { count: 'exact' })
+    .order('fecha_emision', { ascending: false })
+    .range(from, to);
+
+  if (!showPagados) query = query.gt('saldo_pendiente', 0);
+  if (formaPago) query = query.eq('forma_pago', formaPago);
+  if (search?.trim()) {
+    const term = `%${search.trim()}%`;
+    query = query.or(
+      `serie_numero.ilike.${term},razon_social.ilike.${term},nombres_contacto.ilike.${term},apellidos_contacto.ilike.${term}`
+    );
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw new Error('Error al cargar cuentas por cobrar: ' + error.message);
+  return { data: (data ?? []) as CuentaPorCobrar[], count: count ?? 0 };
+};
+
+export const getCuentasPorCobrarKpis = async (): Promise<CuentasPorCobrarKpis> => {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('vista_cuentas_por_cobrar')
-    .select('*')
-    .order('fecha_emision', { ascending: false });
+    .select('estado_pago, saldo_pendiente, total_cobrado');
 
-  if (error) throw new Error('Error al cargar cuentas por cobrar: ' + error.message);
-  return (data || []) as CuentaPorCobrar[];
+  if (error) throw new Error('Error al cargar KPIs de cobranzas: ' + error.message);
+
+  const rows = (data ?? []) as Pick<CuentaPorCobrar, 'estado_pago' | 'saldo_pendiente' | 'total_cobrado'>[];
+  return {
+    totalPendiente: rows.filter((r) => r.estado_pago === 'Pendiente').reduce((s, r) => s + r.saldo_pendiente, 0),
+    totalParcial: rows.filter((r) => r.estado_pago === 'Parcial').reduce((s, r) => s + r.saldo_pendiente, 0),
+    totalCobrado: rows.reduce((s, r) => s + r.total_cobrado, 0),
+    countPendientes: rows.filter((r) => r.estado_pago === 'Pendiente').length,
+    countParciales: rows.filter((r) => r.estado_pago === 'Parcial').length,
+  };
 };
 
 /**
@@ -252,6 +304,7 @@ export const deleteCuentaBancaria = async (id: string): Promise<void> => {
 // Grouped export for convenient imports
 export const cobrosService = {
   getCuentasPorCobrar,
+  getCuentasPorCobrarKpis,
   getHistorialCobros,
   registrarCobro,
   getMetodosPago,

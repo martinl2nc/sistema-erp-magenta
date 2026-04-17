@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useCompanyConfigFormState } from './useCompanyConfigFormState';
-import { useCuentasBancarias, useCreateCuentaBancaria, useUpdateCuentaBancaria, useDeleteCuentaBancaria, type CuentaBancaria } from '@/hooks/useCobros';
+import { useCuentasBancarias, useCreateCuentaBancaria, useUpdateCuentaBancaria, useDeleteCuentaBancaria } from '@/hooks/useCobros';
+import type { CuentaBancaria } from '@/services/cobros.service';
 import type { CompanyConfig } from '@/services/companyConfig.service';
 
 interface Props {
