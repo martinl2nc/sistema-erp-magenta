@@ -22,6 +22,8 @@ import { formatCurrency, getClientDisplayName } from '@/utils/formatters'
 import { TAX_RATES } from '@/constants'
 import { validateNuevaFactura, validateCuotas } from '@/features/facturacion/nuevaFactura.utils'
 import type { Client } from '@/services/clients.service'
+import DetraccionPanel from '@/features/facturacion/DetraccionPanel'
+import FormaPagoPanel from '@/features/facturacion/FormaPagoPanel'
 
 interface Props {
   initialClients: Client[]
@@ -426,212 +428,34 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
 
           {/* ── Detracción (solo cuando tipo = 1001) ─────────── */}
           {state.tipoOperacion === '1001' && (
-            <section className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-4">
-              <div className="flex items-center gap-2">
-                <iconify-icon
-                  icon="solar:bill-check-linear"
-                  class="text-amber-400 text-base shrink-0"
-                ></iconify-icon>
-                <p className="text-xs font-semibold text-amber-400">
-                  Datos de Detracción
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Bien / Servicio <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    value={state.detraccionCodBien}
-                    onChange={(e) => state.setDetraccionCodBien(e.target.value)}
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  >
-                    <option value="">Seleccionar...</option>
-                    {bienesDetraccion.map((b) => (
-                      <option key={b.codigo} value={b.codigo}>
-                        {b.codigo} – {b.descripcion}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Porcentaje (%) <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={state.detraccionPorcentaje}
-                    onChange={(e) =>
-                      state.setDetraccionPorcentaje(
-                        parseFloat(e.target.value) || 0
-                      )
-                    }
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Monto Detracción
-                    <span className="ml-1 text-[#64748B] font-normal">
-                      (auto-calculado)
-                    </span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={state.detraccionMonto}
-                    onChange={(e) =>
-                      state.setDetraccionMonto(parseFloat(e.target.value) || 0)
-                    }
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-amber-300 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Cuenta Banco de la Nación{' '}
-                    <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={state.detraccionCuentaBn}
-                    onChange={(e) =>
-                      state.setDetraccionCuentaBn(e.target.value)
-                    }
-                    placeholder="Ej. 00-123456-0-01"
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                  Medio de Pago
-                </label>
-                <select
-                  value={state.detraccionCodMedioPago}
-                  onChange={(e) =>
-                    state.setDetraccionCodMedioPago(e.target.value)
-                  }
-                  className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                >
-                  <option value="001">001 – Depósito en cuenta</option>
-                  <option value="002">002 – Giro</option>
-                  <option value="003">003 – Transferencia de fondos</option>
-                </select>
-              </div>
-            </section>
+            <DetraccionPanel
+              bienesDetraccion={bienesDetraccion}
+              codBien={state.detraccionCodBien}
+              onCodBienChange={state.setDetraccionCodBien}
+              porcentaje={state.detraccionPorcentaje}
+              onPorcentajeChange={state.setDetraccionPorcentaje}
+              monto={state.detraccionMonto}
+              onMontoChange={state.setDetraccionMonto}
+              cuentaBn={state.detraccionCuentaBn}
+              onCuentaBnChange={state.setDetraccionCuentaBn}
+              codMedioPago={state.detraccionCodMedioPago}
+              onCodMedioPagoChange={state.setDetraccionCodMedioPago}
+            />
           )}
 
           {/* ── Forma de Pago ────────────────────────────────── */}
-          <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5 space-y-4">
-            <p className="text-xs font-medium text-[#E2E8F0]">Forma de Pago</p>
-            <div className="grid grid-cols-2 gap-2">
-              {(['Contado', 'Credito'] as const).map((tipo) => (
-                <button
-                  key={tipo}
-                  type="button"
-                  onClick={() => state.handleFormaPagoChange(tipo)}
-                  className={`py-2.5 rounded-md text-sm font-medium border transition-colors ${
-                    state.formaPago === tipo
-                      ? 'border-[#3B82F6] bg-[#3B82F6]/10 text-[#3B82F6]'
-                      : 'border-[#334155] text-[#94A3B8] hover:border-[#3B82F6]/50 hover:text-[#E2E8F0]'
-                  }`}
-                >
-                  {tipo === 'Contado' ? 'Contado' : 'Crédito'}
-                </button>
-              ))}
-            </div>
-
-            {state.formaPago === 'Credito' && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                      N° de cuotas
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={24}
-                      value={state.numeroCuotas}
-                      onChange={(e) => state.handleNumeroCuotasChange(parseInt(e.target.value) || 1)}
-                      className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                      Intervalo (días)
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={state.intervaloDias}
-                      onChange={(e) => state.handleIntervaloDiasChange(parseInt(e.target.value) || 30)}
-                      className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6]"
-                    />
-                  </div>
-                </div>
-
-                <div className="border border-[#334155] rounded-lg overflow-hidden">
-                  <table className="w-full text-left">
-                    <thead className="bg-[#0F1115]">
-                      <tr>
-                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-10">#</th>
-                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Monto (PEN)</th>
-                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Vencimiento</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#334155]">
-                      {state.cuotas.map((cuota, i) => (
-                        <tr key={cuota.id} className="bg-[#181B21]">
-                          <td className="px-3 py-2 text-xs text-[#94A3B8]">{i + 1}</td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="number"
-                              min={0.01}
-                              step={0.01}
-                              value={cuota.monto}
-                              onChange={(e) => state.updateCuota(cuota.id, { monto: parseFloat(e.target.value) || 0 })}
-                              className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="date"
-                              value={cuota.fecha}
-                              onChange={(e) => state.updateCuota(cuota.id, { fecha: e.target.value })}
-                              className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {(() => {
-                  const suma = Number(state.cuotas.reduce((s, c) => s + c.monto, 0).toFixed(2))
-                  const diff = Number((suma - state.montoNeto).toFixed(2))
-                  const ok = diff === 0
-                  return (
-                    <div className={`flex justify-between text-xs px-1 ${ok ? 'text-[#10B981]' : 'text-red-400'}`}>
-                      <span>Suma de cuotas: {formatCurrency(suma)}</span>
-                      <span>
-                        {ok ? 'Suma correcta ✓' : `Diferencia: ${diff > 0 ? '+' : ''}${diff.toFixed(2)}`}
-                      </span>
-                    </div>
-                  )
-                })()}
-              </div>
-            )}
+          <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5">
+            <FormaPagoPanel
+              formaPago={state.formaPago}
+              onFormaPagoChange={state.handleFormaPagoChange}
+              cuotas={state.cuotas}
+              onCuotaChange={state.updateCuota}
+              numeroCuotas={state.numeroCuotas}
+              onNumeroCuotasChange={state.handleNumeroCuotasChange}
+              intervaloDias={state.intervaloDias}
+              onIntervaloDiasChange={state.handleIntervaloDiasChange}
+              montoNeto={state.montoNeto}
+            />
           </section>
 
           {/* ── Dirección de Facturación ─────────────────────── */}
