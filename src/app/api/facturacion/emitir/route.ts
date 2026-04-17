@@ -54,6 +54,11 @@ export async function POST(request: Request) {
     const { data: detalles } = await supabase.from('comprobantes_detalles').select('*').eq('comprobante_id', comprobante_id);
     const { data: cliente } = await supabase.from('clientes').select('*').eq('id', comprobante.cliente_id).single();
     const { data: empresa } = await supabase.from('empresa_configuracion').select('*').limit(1).single();
+    const { data: cuotasRaw } = await supabase
+      .from('comprobantes_cuotas')
+      .select('monto, fecha_pago')
+      .eq('comprobante_id', comprobante_id)
+      .order('numero_cuota', { ascending: true });
 
     if (!detalles?.length || !cliente || !empresa) {
       return NextResponse.json({ success: false, error: 'Datos incompletos para facturación' }, { status: 400 });
@@ -76,8 +81,18 @@ export async function POST(request: Request) {
       comprobanteReferenciado = ref as ComprobanteReferenciadoData;
     }
 
+    const cuotas = (cuotasRaw ?? []).map((c) => ({
+      monto: Number(c.monto),
+      fecha: String(c.fecha_pago).replace(' ', 'T').split('T')[0],
+    }));
+
+    const comprobanteConCuotas: ComprobanteData = {
+      ...(comprobante as ComprobanteData),
+      cuotas: cuotas.length > 0 ? cuotas : undefined,
+    };
+
     const payload = buildInvoicePayload(
-      comprobante as ComprobanteData,
+      comprobanteConCuotas,
       detalles as ComprobanteDetalle[],
       cliente as ClienteData,
       empresa as EmpresaData,

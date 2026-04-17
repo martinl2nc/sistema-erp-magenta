@@ -112,6 +112,19 @@ export interface PaginatedPedidos {
 }
 
 export const pedidosService = {
+  async getPedidosElegiblesFacturacion(): Promise<Pedido[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select(
+        `*, cotizaciones ( numero_correlativo ), clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ), perfiles_usuario ( nombre )`
+      )
+      .in('estado', ['pendiente_facturacion', 'error_facturacion'])
+      .order('numero_pedido', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
   async getPedidos(params?: PedidosListParams): Promise<PaginatedPedidos> {
     const supabase = createClient();
     const { page = 1, pageSize = 10, search, estado, vendedor_id } = params ?? {};

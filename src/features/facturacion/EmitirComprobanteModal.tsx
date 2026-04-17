@@ -21,7 +21,8 @@ import { numeroALetras } from '@/utils/numeroALetras'
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service'
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters'
 import { calcularLineaSunat, calcularTotalesSunat } from '@/utils/calculations'
-import { validateNuevaFactura } from '@/features/facturacion/nuevaFactura.utils'
+import { validateNuevaFactura, validateCuotas, distribuirCuotas } from '@/features/facturacion/nuevaFactura.utils'
+import type { CuotaCredito } from '@/features/facturacion/useNuevaFacturaState'
 
 // ─── Tipos ─────────────────────────────────────────────────────
 
@@ -115,6 +116,12 @@ export default function EmitirComprobanteModal({
   const [descuentoMonto, setDescuentoMonto] = useState(0)
   const [descuentoCodigo, setDescuentoCodigo] = useState('03')
 
+  // Forma de pago / cuotas a crédito
+  const [formaPago, setFormaPago] = useState<'Contado' | 'Credito'>('Contado')
+  const [cuotas, setCuotas] = useState<CuotaCredito[]>([])
+  const [numeroCuotas, setNumeroCuotas] = useState(1)
+  const [intervaloDias, setIntervaloDias] = useState(30)
+
   // Tipo de operación y detracción (Cat. 51 / Cat. 54)
   const [tipoOperacion, setTipoOperacion] = useState('0101')
   const [detraccionCodBien, setDetraccionCodBien] = useState('')
@@ -168,6 +175,11 @@ export default function EmitirComprobanteModal({
     [lineas, descuentoMonto]
   )
 
+  const montoNeto = useMemo(
+    () => Number((totales.total - detraccionMonto).toFixed(2)),
+    [totales.total, detraccionMonto]
+  )
+
   // Pre-fill cuenta BN desde configuración de empresa cuando se activa detracción
   useEffect(() => {
     if (tipoOperacion === '1001' && companyConfig?.detraccion_cuenta_bn) {
@@ -186,7 +198,14 @@ export default function EmitirComprobanteModal({
     }
   }, [totales.total, detraccionPorcentaje, tipoOperacion])
 
-  // Reset detracción al cerrar modal
+  // Re-distribuir cuotas al cambiar parámetros
+  useEffect(() => {
+    if (formaPago !== 'Credito' || montoNeto <= 0) return
+    const fechaHoy = new Date().toISOString().split('T')[0]
+    setCuotas(distribuirCuotas(montoNeto, numeroCuotas, fechaHoy, intervaloDias))
+  }, [formaPago, numeroCuotas, intervaloDias, montoNeto])
+
+  // Reset al cerrar modal
   useEffect(() => {
     if (!isOpen) {
       setTipoOperacion('0101')
@@ -195,6 +214,10 @@ export default function EmitirComprobanteModal({
       setDetraccionPorcentaje(0)
       setDetraccionMonto(0)
       setDetraccionCuentaBn('')
+      setFormaPago('Contado')
+      setCuotas([])
+      setNumeroCuotas(1)
+      setIntervaloDias(30)
       setHasUnsavedChanges(false)
     }
   }, [isOpen])
@@ -273,7 +296,8 @@ export default function EmitirComprobanteModal({
   }
 
   const handleSubmit = async () => {
-    // Validación centralizada usando la misma función que NuevaFacturaForm
+    const fechaHoy = new Date().toISOString().split('T')[0]
+
     const validationError = validateNuevaFactura({
       clienteId: cliente?.id ?? null,
       lineas: lineas.map(l => ({
@@ -305,10 +329,16 @@ export default function EmitirComprobanteModal({
       return;
     }
 
+    if (formaPago === 'Credito') {
+      const cuotasError = validateCuotas(cuotas, montoNeto, fechaHoy)
+      if (cuotasError) {
+        toast.error(cuotasError)
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0]
-
       const comprobanteId = await emitirComprobante.mutateAsync({
         pedido_id: pedido.id,
         tipo_doc_codigo: tipoDocCodigo,
@@ -344,7 +374,9 @@ export default function EmitirComprobanteModal({
                 monto: detraccionMonto,
                 cuenta_bn: detraccionCuentaBn
               }
-            : undefined
+            : undefined,
+        forma_pago: formaPago,
+        cuotas: formaPago === 'Credito' ? cuotas.map((c) => ({ monto: c.monto, fecha: c.fecha })) : undefined,
       })
 
       // Enviar a SUNAT via API Route interna (no-fatal: el comprobante ya está en BD)
@@ -708,6 +740,107 @@ export default function EmitirComprobanteModal({
             </div>
           )}
 
+          {/* Forma de Pago */}
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-[#E2E8F0]">Forma de Pago</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(['Contado', 'Credito'] as const).map((tipo) => (
+                <button
+                  key={tipo}
+                  type="button"
+                  onClick={() => {
+                    setFormaPago(tipo)
+                    if (tipo === 'Contado') setCuotas([])
+                  }}
+                  className={`py-2.5 rounded-md text-sm font-medium border transition-colors ${
+                    formaPago === tipo
+                      ? 'border-[#3B82F6] bg-[#3B82F6]/10 text-[#3B82F6]'
+                      : 'border-[#334155] text-[#94A3B8] hover:border-[#3B82F6]/50 hover:text-[#E2E8F0]'
+                  }`}
+                >
+                  {tipo === 'Contado' ? 'Contado' : 'Crédito'}
+                </button>
+              ))}
+            </div>
+
+            {formaPago === 'Credito' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">N° de cuotas</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={numeroCuotas}
+                      onChange={(e) => setNumeroCuotas(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">Intervalo (días)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={intervaloDias}
+                      onChange={(e) => setIntervaloDias(Math.max(1, parseInt(e.target.value) || 30))}
+                      className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                    />
+                  </div>
+                </div>
+
+                <div className="border border-[#334155] rounded-lg overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead className="bg-[#0F1115]">
+                      <tr>
+                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-10">#</th>
+                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Monto (PEN)</th>
+                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Vencimiento</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#334155]">
+                      {cuotas.map((cuota, i) => (
+                        <tr key={cuota.id} className="bg-[#181B21]">
+                          <td className="px-3 py-2 text-xs text-[#94A3B8]">{i + 1}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min={0.01}
+                              step={0.01}
+                              value={cuota.monto}
+                              onChange={(e) => setCuotas((prev) => prev.map((c) => c.id === cuota.id ? { ...c, monto: parseFloat(e.target.value) || 0 } : c))}
+                              className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="date"
+                              value={cuota.fecha}
+                              onChange={(e) => setCuotas((prev) => prev.map((c) => c.id === cuota.id ? { ...c, fecha: e.target.value } : c))}
+                              className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {(() => {
+                  const suma = Number(cuotas.reduce((s, c) => s + c.monto, 0).toFixed(2))
+                  const diff = Number((suma - montoNeto).toFixed(2))
+                  const ok = diff === 0
+                  return (
+                    <div className={`flex justify-between text-xs px-1 ${ok ? 'text-[#10B981]' : 'text-red-400'}`}>
+                      <span>Suma de cuotas: {formatCurrency(suma)}</span>
+                      <span>{ok ? 'Suma correcta ✓' : `Diferencia: ${diff > 0 ? '+' : ''}${diff.toFixed(2)}`}</span>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+
           {/* Dirección de facturación */}
           <div>
             <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
@@ -961,7 +1094,7 @@ export default function EmitirComprobanteModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !serie}
+            disabled={isSubmitting || !serie || (formaPago === 'Credito' && validateCuotas(cuotas, montoNeto, new Date().toISOString().split('T')[0]) !== null)}
             className="flex-1 bg-[#10B981] text-white text-sm font-medium py-2.5 rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSubmitting ? (

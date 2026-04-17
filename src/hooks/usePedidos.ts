@@ -20,6 +20,13 @@ export function usePedidosList(params?: PedidosListParams) {
   });
 }
 
+export function usePedidosElegiblesFacturacion() {
+  return useQuery({
+    queryKey: [...pedidosKeys.all(), 'elegibles-facturacion'] as const,
+    queryFn: () => pedidosService.getPedidosElegiblesFacturacion(),
+  });
+}
+
 export function useCreatePedido() {
   const queryClient = useQueryClient();
   return useMutation({

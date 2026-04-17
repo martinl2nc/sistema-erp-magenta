@@ -51,6 +51,11 @@ export interface DetraccionPayload {
   cuenta_bn: string;
 }
 
+export interface CuotaPayload {
+  monto: number;
+  fecha: string; // 'YYYY-MM-DD'
+}
+
 export interface EmitirComprobantePayload {
   pedido_id: string | null;
   tipo_doc_codigo: string; // '01' | '03'
@@ -64,6 +69,8 @@ export interface EmitirComprobantePayload {
   direccion_facturacion?: string;
   tipo_operacion?: string; // Cat. 51 — default '0101'
   detraccion?: DetraccionPayload;
+  forma_pago?: 'Contado' | 'Credito'; // default 'Contado'
+  cuotas?: CuotaPayload[];
   lineas: {
     producto_id: string | null;
     sku: string | null;
@@ -269,8 +276,10 @@ export const facturasService = {
       p_detraccion_porcentaje:     payload.detraccion?.porcentaje ?? null,
       p_detraccion_monto:          payload.detraccion?.monto ?? null,
       p_detraccion_cuenta_bn:      payload.detraccion?.cuenta_bn ?? null,
+      p_forma_pago:                payload.forma_pago ?? 'Contado',
+      p_cuotas:                    payload.cuotas ?? null,
     });
-    
+
     if (error) {
       // Traducir errores de FK a mensajes user-friendly
       if (error.message?.includes('comprobantes_detraccion_cod_bien_fkey')) {

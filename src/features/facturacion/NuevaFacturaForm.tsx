@@ -20,7 +20,7 @@ import {
 } from '@/hooks/useCatalogos'
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters'
 import { TAX_RATES } from '@/constants'
-import { validateNuevaFactura } from '@/features/facturacion/nuevaFactura.utils'
+import { validateNuevaFactura, validateCuotas } from '@/features/facturacion/nuevaFactura.utils'
 import type { Client } from '@/services/clients.service'
 
 interface Props {
@@ -79,6 +79,8 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
   // ─── Submit ──────────────────────────────────────────────────
 
   const handleSubmit = async () => {
+    const fechaHoy = new Date().toISOString().split('T')[0]
+
     const error = validateNuevaFactura({
       clienteId: state.selectedClienteId,
       lineas: state.lineas,
@@ -98,11 +100,17 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
       return
     }
 
+    if (state.formaPago === 'Credito') {
+      const cuotasError = validateCuotas(state.cuotas, state.montoNeto, fechaHoy)
+      if (cuotasError) {
+        setValidationError(cuotasError)
+        return
+      }
+    }
+
     setValidationError(null)
     setIsSubmitting(true)
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0]
-
       const comprobanteId = await emitirComprobante.mutateAsync({
         pedido_id: state.selectedPedidoId,
         tipo_doc_codigo: state.tipoDocCodigo,
@@ -138,7 +146,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 monto: state.detraccionMonto,
                 cuenta_bn: state.detraccionCuentaBn
               }
-            : undefined
+            : undefined,
+        forma_pago: state.formaPago,
+        cuotas: state.formaPago === 'Credito' ? state.cuotas.map((c) => ({ monto: c.monto, fecha: c.fecha })) : undefined,
       })
 
       try {
@@ -170,6 +180,11 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
 
   // ─── Render ──────────────────────────────────────────────────
 
+  const fechaHoyForValidation = new Date().toISOString().split('T')[0]
+  const cuotasInvalid =
+    state.formaPago === 'Credito' &&
+    validateCuotas(state.cuotas, state.montoNeto, fechaHoyForValidation) !== null
+
   const isPedidoMode = !!state.selectedPedidoId
   const pedidoCliente = state.selectedPedido?.clientes
 
@@ -199,7 +214,7 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
           )}
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || cuotasInvalid}
             className="flex items-center gap-2 bg-[#3B82F6] hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             {isSubmitting ? (
@@ -515,6 +530,110 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
             </section>
           )}
 
+          {/* ── Forma de Pago ────────────────────────────────── */}
+          <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5 space-y-4">
+            <p className="text-xs font-medium text-[#E2E8F0]">Forma de Pago</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(['Contado', 'Credito'] as const).map((tipo) => (
+                <button
+                  key={tipo}
+                  type="button"
+                  onClick={() => state.handleFormaPagoChange(tipo)}
+                  className={`py-2.5 rounded-md text-sm font-medium border transition-colors ${
+                    state.formaPago === tipo
+                      ? 'border-[#3B82F6] bg-[#3B82F6]/10 text-[#3B82F6]'
+                      : 'border-[#334155] text-[#94A3B8] hover:border-[#3B82F6]/50 hover:text-[#E2E8F0]'
+                  }`}
+                >
+                  {tipo === 'Contado' ? 'Contado' : 'Crédito'}
+                </button>
+              ))}
+            </div>
+
+            {state.formaPago === 'Credito' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                      N° de cuotas
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={state.numeroCuotas}
+                      onChange={(e) => state.handleNumeroCuotasChange(parseInt(e.target.value) || 1)}
+                      className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
+                      Intervalo (días)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={state.intervaloDias}
+                      onChange={(e) => state.handleIntervaloDiasChange(parseInt(e.target.value) || 30)}
+                      className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6]"
+                    />
+                  </div>
+                </div>
+
+                <div className="border border-[#334155] rounded-lg overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead className="bg-[#0F1115]">
+                      <tr>
+                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase w-10">#</th>
+                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Monto (PEN)</th>
+                        <th className="px-3 py-2 text-[10px] font-medium text-[#94A3B8] uppercase">Vencimiento</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#334155]">
+                      {state.cuotas.map((cuota, i) => (
+                        <tr key={cuota.id} className="bg-[#181B21]">
+                          <td className="px-3 py-2 text-xs text-[#94A3B8]">{i + 1}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min={0.01}
+                              step={0.01}
+                              value={cuota.monto}
+                              onChange={(e) => state.updateCuota(cuota.id, { monto: parseFloat(e.target.value) || 0 })}
+                              className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="date"
+                              value={cuota.fecha}
+                              onChange={(e) => state.updateCuota(cuota.id, { fecha: e.target.value })}
+                              className="w-full bg-[#0F1115] border border-[#334155] rounded px-2 py-1.5 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {(() => {
+                  const suma = Number(state.cuotas.reduce((s, c) => s + c.monto, 0).toFixed(2))
+                  const diff = Number((suma - state.montoNeto).toFixed(2))
+                  const ok = diff === 0
+                  return (
+                    <div className={`flex justify-between text-xs px-1 ${ok ? 'text-[#10B981]' : 'text-red-400'}`}>
+                      <span>Suma de cuotas: {formatCurrency(suma)}</span>
+                      <span>
+                        {ok ? 'Suma correcta ✓' : `Diferencia: ${diff > 0 ? '+' : ''}${diff.toFixed(2)}`}
+                      </span>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </section>
+
           {/* ── Dirección de Facturación ─────────────────────── */}
           <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5">
             <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
@@ -797,7 +916,7 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
             )}
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || cuotasInvalid}
               className="w-full flex items-center justify-center gap-2 bg-[#10B981] hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-medium py-3 rounded-lg transition-colors"
             >
               {isSubmitting ? (

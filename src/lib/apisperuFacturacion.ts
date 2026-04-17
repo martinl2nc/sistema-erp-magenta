@@ -27,7 +27,12 @@ export interface ApisPeruInvoicePayload {
   correlativo: string;
   fechaEmision: string;
   tipoMoneda: string;
-  formaPago?: { moneda: string; tipo: string }; // omitido para NC (tipo '07')
+  formaPago?: {
+    moneda: string;
+    tipo: 'Contado' | 'Credito';
+    monto?: number;
+  }; // omitido para NC (tipo '07')
+  cuotas?: { moneda: string; monto: number; fechaPago: string }[];
   client: {
     tipoDoc: string;
     numDoc: string;
@@ -142,6 +147,8 @@ export interface ComprobanteData {
   comprobante_referencia_id?: string | null;
   motivo_nota?: string | null;
   tipo_nota_codigo?: string | null;
+  // Cuotas (presentes cuando forma_pago === 'Credito')
+  cuotas?: { monto: number; fecha: string }[];
 }
 
 export interface ComprobanteDetalle {
@@ -224,11 +231,29 @@ export function buildInvoicePayload(
     tipoMoneda: comprobante.tipo_moneda || 'PEN',
     // formaPago no aplica para NC (tipo_doc '07') — SUNAT error 3246 si se incluye
     ...(comprobante.tipo_doc_codigo !== '07' ? {
-      formaPago: {
-        moneda: comprobante.tipo_moneda || 'PEN',
-        tipo: comprobante.forma_pago === 'Credito' ? 'Credito' : 'Contado',
-      },
+      formaPago: comprobante.forma_pago === 'Credito' && comprobante.cuotas?.length
+        ? {
+            moneda: comprobante.tipo_moneda || 'PEN',
+            tipo: 'Credito' as const,
+            monto: Number(
+              (comprobante.mto_imp_venta - (comprobante.detraccion_monto ?? 0)).toFixed(2)
+            ),
+          }
+        : {
+            moneda: comprobante.tipo_moneda || 'PEN',
+            tipo: 'Contado' as const,
+          },
     } : {}),
+    // cuotas va al nivel superior del payload (no dentro de formaPago) — spec ApisPeru
+    ...(comprobante.tipo_doc_codigo !== '07' && comprobante.forma_pago === 'Credito' && comprobante.cuotas?.length
+      ? {
+          cuotas: comprobante.cuotas.map((c) => ({
+            moneda: comprobante.tipo_moneda || 'PEN',
+            monto: c.monto,
+            fechaPago: c.fecha + 'T00:00:00-05:00',
+          })),
+        }
+      : {}),
     client: {
       tipoDoc: mapTipoDocCliente(cliente.tipo_documento),
       numDoc: cliente.numero_documento || '00000000',
