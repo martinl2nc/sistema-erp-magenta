@@ -167,7 +167,7 @@ export const quotesService = {
           `razon_social.ilike.%${term}%,nombres_contacto.ilike.%${term}%,apellidos_contacto.ilike.%${term}%,numero_documento.ilike.%${term}%`
         );
 
-      const clientIds = (matchingClients ?? []).map((c) => c.id);
+      const clientIds = (matchingClients ?? []).map((c: { id: string }) => c.id);
 
       if (isNumeric && clientIds.length > 0) {
         query = query.or(`numero_correlativo.eq.${correlativoNum},cliente_id.in.(${clientIds.join(',')})`);
@@ -207,6 +207,20 @@ export const quotesService = {
 
   async saveQuote(quoteData: QuoteFormData): Promise<Quote> {
     const supabase = createClient();
+
+    // Validar que no tenga un pedido asociado antes de modificar
+    if (quoteData.id) {
+      const { count, error: countErr } = await supabase
+        .from('pedidos')
+        .select('*', { count: 'exact', head: true })
+        .eq('cotizacion_id', quoteData.id);
+
+      if (countErr) throw countErr;
+      if (count && count > 0) {
+        throw new Error('No se puede modificar la cotización porque ya ha sido convertida a pedido.');
+      }
+    }
+
     const headData = buildHeadPayload(quoteData);
     const lineas = normalizeLineItems(quoteData.lineas || []);
 
@@ -239,11 +253,28 @@ export const quotesService = {
       .delete()
       .eq('id', id);
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23503') {
+        throw new Error('No se puede eliminar la cotización porque ya ha sido convertida a pedido o facturada.');
+      }
+      throw error;
+    }
   },
 
   async updateQuoteStatus(id: string, status: QuoteStatus): Promise<Quote> {
     const supabase = createClient();
+    
+    // Validar que no tenga un pedido asociado
+    const { count, error: countErr } = await supabase
+      .from('pedidos')
+      .select('*', { count: 'exact', head: true })
+      .eq('cotizacion_id', id);
+
+    if (countErr) throw countErr;
+    if (count && count > 0) {
+      throw new Error('No se puede modificar el estado de la cotización porque ya ha sido convertida a pedido.');
+    }
+
     const { data, error } = await supabase
       .from('cotizaciones')
       .update({ estado: status })

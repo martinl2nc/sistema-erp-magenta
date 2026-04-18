@@ -33,7 +33,7 @@ export default function PedidosPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEstado, setSelectedEstado] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
 
   const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);

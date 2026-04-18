@@ -23,7 +23,8 @@ interface Props {
 export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
   const queryClient = useQueryClient();
   const createPedido = useCreatePedido();
-  const { data: products = [] } = useProductsList();
+  const { data: rawData } = useProductsList({ pageSize: 1000 }); // Or whatever
+  const products = rawData?.data || [];
 
   const [nroOc, setNroOc] = useState('');
   const [direccionFacturacion, setDireccionFacturacion] = useState('');

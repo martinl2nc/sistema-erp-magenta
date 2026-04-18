@@ -56,13 +56,13 @@ export default function FacturacionPage() {
   const [searchPendientes, setSearchPendientes] = useState('');
   const [filterEstadoPendiente, setFilterEstadoPendiente] = useState('');
   const [pagePendientes, setPagePendientes] = useState(1);
-  const [pageSizePendientes, setPageSizePendientes] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [pageSizePendientes, setPageSizePendientes] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
 
   // Filtros y paginación tab emitidas
   const [searchEmitidas, setSearchEmitidas] = useState('');
   const [filterTipoDoc, setFilterTipoDoc] = useState('');
   const [pageEmitidas, setPageEmitidas] = useState(1);
-  const [pageSizeEmitidas, setPageSizeEmitidas] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [pageSizeEmitidas, setPageSizeEmitidas] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
 
   const debouncedSearchEmitidas = useDebounce(searchEmitidas, TIMEOUTS.SEARCH_DEBOUNCE);
 

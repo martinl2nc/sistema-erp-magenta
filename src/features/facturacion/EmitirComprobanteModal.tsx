@@ -356,7 +356,7 @@ export default function EmitirComprobanteModal({
       const comprobanteId = await emitirComprobante.mutateAsync({
         pedido_id: pedido.id,
         tipo_doc_codigo: tipoDocCodigo,
-        cliente_id: cliente.id,
+        cliente_id: pedido.cliente_id,
         fecha_emision: fechaHoy,
         subtotal: totales.subtotal,
         igv_monto: totales.igv,

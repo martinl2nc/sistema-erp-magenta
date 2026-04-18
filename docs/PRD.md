@@ -67,10 +67,11 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 - [x] Emitir Factura Electrónica (tipo 01)
 - [x] Emitir Boleta Electrónica (tipo 03)
 - [x] Seleccionar tipo de operación (gravado, exonerado, inafecto)
+- [x] Facturación al Crédito con configuración y distribución automática de cuotas
 - [x] Configurar detracciones para servicios sujetos
 - [x] Envío automático a SUNAT via API ApisPeru
 - [x] Verificar estado del comprobante en SUNAT
-- [x] Emitir notas de crédito para rectificaciones
+- [x] Emitir notas de crédito (Anulaciones totales, parciales por ítem y descuentos globales)
 
 #### Módulo de Cobranzas
 - [x] Dashboard de cuentas por cobrar y seguimiento de saldos
@@ -97,7 +98,7 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 - [x] Logo para PDFs
 - [x] Cuentas bancarias para pagos
 - [x] Cuenta del Banco de la Nación para detracciones
-- [x] Términos y condiciones padrão
+- [x] Términos y condiciones
 
 #### Dashboard
 - [x] Métricas de cotizaciones por estado
@@ -185,6 +186,7 @@ src/
 | `pedidos_lineas` | Líneas de detalle de pedidos |
 | `comprobantes` | Cabecera de comprobantes emitidos (Facturas/Boletas) |
 | `comprobantes_detalles` | Líneas de detalle de comprobantes |
+| `comprobantes_cuotas` | Cuotas de pago para comprobantes emitidos al crédito |
 | `cobros` | Historial de pagos para cuentas por cobrar |
 | `cat_metodos_pago` | Catálogo de métodos de pago válidos (Cash, Transferencia, Yape...) |
 | `cuentas_bancarias_empresa` | Cuentas bancarias habilitadas con moneda y detracciones |
@@ -285,6 +287,16 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | `apisperu_response` | JSONB | Respuesta íntegra del API |
 | `estado_sunat` | Enum | borrador, aceptada_sunat, rechazada, etc. |
 | `estado_pago` | String | (Mantenido por DB Trigger) pendiente, parcial, pagado |
+
+**Tabla: `comprobantes_cuotas`**
+| Columna | Tipo | Descripción |
+| :--- | :--- | :--- |
+| `id` | UUID | Identificador único |
+| `comprobante_id` | UUID | Relación con el comprobante relacionado |
+| `numero_cuota` | Integer | Número correlativo de la cuota |
+| `moneda` | String | PEN o USD |
+| `monto` | Numeric | Monto a pagar en la cuota |
+| `fecha_pago` | Date | Fecha de vencimiento de la cuota |
 
 **Tabla: `cobros`**
 | Columna | Tipo | Descripción |
@@ -388,6 +400,7 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 
 ### Usabilidad
 - Interfaz intuitiva basada en modales
+- Paginación soportada de principio a fin en todas las tablas de datos
 - Feedback visual inmediato (toast notifications)
 - Diseño responsive (mobile-friendly)
 - Tema oscuro por defecto
@@ -494,4 +507,4 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 
 ---
 
-*Documento generado el 6 de abril de 2026*
+*Documento generado el 16 de abril de 2026*

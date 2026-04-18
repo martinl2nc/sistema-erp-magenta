@@ -232,7 +232,7 @@ export const facturasService = {
           `razon_social.ilike.%${term}%,nombres_contacto.ilike.%${term}%,numero_documento.ilike.%${term}%`
         );
 
-      const clientIds = (matchingClients ?? []).map((c) => c.id);
+      const clientIds = (matchingClients ?? []).map((c: any) => c.id);
       const orParts: string[] = [`serie_numero.ilike.%${term}%`];
       if (clientIds.length > 0) orParts.push(`cliente_id.in.(${clientIds.join(',')})`);
 

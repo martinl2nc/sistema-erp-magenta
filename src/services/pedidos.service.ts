@@ -54,6 +54,9 @@ export interface Pedido {
   estado: PedidoEstado;
   fecha_creacion: string;
   ultima_actualizacion: string;
+  motivo_anulacion?: string | null;
+  anulado_por?: string | null;
+  fecha_anulacion?: string | null;
   // Relations
   cotizaciones?: {
     numero_correlativo: number;
@@ -70,7 +73,8 @@ export interface Pedido {
     comprobante_preferido: string;
     ubigueo: string;
   };
-  perfiles_usuario?: { nombre: string };
+  vendedor?: { nombre: string } | null;
+  anulador?: { nombre: string } | null;
 }
 
 export interface CreatePedidoPayload {
@@ -117,7 +121,7 @@ export const pedidosService = {
     const { data, error } = await supabase
       .from('pedidos')
       .select(
-        `*, cotizaciones ( numero_correlativo ), clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ), perfiles_usuario ( nombre )`
+        `*, cotizaciones ( numero_correlativo ), clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ), vendedor:perfiles_usuario!vendedor_id ( nombre ), anulador:perfiles_usuario!anulado_por ( nombre )`
       )
       .in('estado', ['pendiente_facturacion', 'error_facturacion'])
       .order('numero_pedido', { ascending: false });
@@ -134,7 +138,7 @@ export const pedidosService = {
     let query = supabase
       .from('pedidos')
       .select(
-        `*, cotizaciones ( numero_correlativo ), clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ), perfiles_usuario ( nombre )`,
+        `*, cotizaciones ( numero_correlativo ), clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ), vendedor:perfiles_usuario!vendedor_id ( nombre ), anulador:perfiles_usuario!anulado_por ( nombre )`,
         { count: 'exact' }
       )
       .order('fecha_creacion', { ascending: false })
@@ -152,7 +156,7 @@ export const pedidosService = {
           `razon_social.ilike.%${term}%,nombres_contacto.ilike.%${term}%,numero_documento.ilike.%${term}%`
         );
 
-      const clientIds = (matchingClients ?? []).map((c) => c.id);
+      const clientIds = (matchingClients ?? []).map((c: any) => c.id);
       const orParts: string[] = [`nro_oc_cliente.ilike.%${term}%`];
       if (isNumeric) orParts.push(`numero_pedido.eq.${pedidoNum}`);
       if (clientIds.length > 0) orParts.push(`cliente_id.in.(${clientIds.join(',')})`);
@@ -238,11 +242,22 @@ export const pedidosService = {
     if (error) throw error;
   },
 
-  async updateEstado(id: string, estado: PedidoEstado): Promise<void> {
+  async updateEstado(id: string, payload: { estado: PedidoEstado; motivo_anulacion?: string }): Promise<void> {
     const supabase = createClient();
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updates: any = { estado: payload.estado };
+    
+    if (payload.estado === 'anulado' && payload.motivo_anulacion) {
+      const { data: { user } } = await supabase.auth.getUser();
+      updates.motivo_anulacion = payload.motivo_anulacion;
+      updates.anulado_por = user?.id;
+      updates.fecha_anulacion = new Date().toISOString();
+    }
+
     const { error } = await supabase
       .from('pedidos')
-      .update({ estado })
+      .update(updates)
       .eq('id', id);
     if (error) throw error;
   },
