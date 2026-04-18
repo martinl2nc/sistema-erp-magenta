@@ -344,10 +344,26 @@ export interface AllCobrosParams {
   fechaHasta?: string;
   cuentaBancariaId?: string;
   metodoPagoCodigo?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
 }
 
-export const getAllCobros = async (params?: AllCobrosParams): Promise<CobroListado[]> => {
+export interface PaginatedCobros {
+  data: CobroListado[];
+  count: number;
+}
+
+export interface AllCobrosTotales {
+  count: number;
+  monto: number;
+}
+
+export const getAllCobros = async (params?: AllCobrosParams): Promise<PaginatedCobros> => {
   const supabase = createClient();
+  const { page = 1, pageSize = 10, search, fechaDesde, fechaHasta, cuentaBancariaId, metodoPagoCodigo } = params ?? {};
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
   let query = supabase
     .from('cobros')
@@ -360,18 +376,54 @@ export const getAllCobros = async (params?: AllCobrosParams): Promise<CobroLista
       cat_metodos_pago ( codigo, descripcion ),
       cuentas_bancarias_empresa ( banco, numero_cuenta ),
       perfiles_usuario:registrado_por ( nombre )
-    `)
+    `, { count: 'exact' })
     .order('fecha_pago', { ascending: false })
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .range(from, to);
 
-  if (params?.fechaDesde) query = query.gte('fecha_pago', params.fechaDesde);
-  if (params?.fechaHasta) query = query.lte('fecha_pago', params.fechaHasta);
-  if (params?.cuentaBancariaId) query = query.eq('cuenta_bancaria_id', params.cuentaBancariaId);
-  if (params?.metodoPagoCodigo) query = query.eq('metodo_pago_codigo', params.metodoPagoCodigo);
+  if (fechaDesde) query = query.gte('fecha_pago', fechaDesde);
+  if (fechaHasta) query = query.lte('fecha_pago', fechaHasta);
+  if (cuentaBancariaId) query = query.eq('cuenta_bancaria_id', cuentaBancariaId);
+  if (metodoPagoCodigo) query = query.eq('metodo_pago_codigo', metodoPagoCodigo);
+  if (search?.trim()) {
+    const term = search.trim();
+    query = query.or(
+      `referencia_operacion.ilike.%${term}%,comprobantes.serie_numero.ilike.%${term}%`
+    );
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw new Error('Error al cargar transacciones: ' + error.message);
+  return { data: (data ?? []) as CobroListado[], count: count ?? 0 };
+};
+
+export const getAllCobrosTotales = async (
+  params?: Omit<AllCobrosParams, 'page' | 'pageSize'>
+): Promise<AllCobrosTotales> => {
+  const supabase = createClient();
+  const { fechaDesde, fechaHasta, cuentaBancariaId, metodoPagoCodigo, search } = params ?? {};
+
+  let query = supabase
+    .from('cobros')
+    .select('monto_cobrado, anulado');
+
+  if (fechaDesde) query = query.gte('fecha_pago', fechaDesde);
+  if (fechaHasta) query = query.lte('fecha_pago', fechaHasta);
+  if (cuentaBancariaId) query = query.eq('cuenta_bancaria_id', cuentaBancariaId);
+  if (metodoPagoCodigo) query = query.eq('metodo_pago_codigo', metodoPagoCodigo);
+  if (search?.trim()) {
+    query = query.ilike('referencia_operacion', `%${search.trim()}%`);
+  }
 
   const { data, error } = await query;
-  if (error) throw new Error('Error al cargar transacciones: ' + error.message);
-  return (data ?? []) as CobroListado[];
+  if (error) throw new Error('Error al cargar totales: ' + error.message);
+
+  const rows = (data ?? []) as { monto_cobrado: number; anulado: boolean }[];
+  const vigentes = rows.filter((c) => !c.anulado);
+  return {
+    count: vigentes.length,
+    monto: vigentes.reduce((s, c) => s + c.monto_cobrado, 0),
+  };
 };
 
 export interface AnularCobroPayload {
@@ -424,5 +476,6 @@ export const cobrosService = {
   getCuotasComprobante,
   anularCobro,
   getAllCobros,
+  getAllCobrosTotales,
   uploadVoucherCobro,
 };

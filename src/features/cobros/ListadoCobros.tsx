@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { useAllCobros, useMetodosPago, useCuentasBancarias, useAnularCobro } from '@/hooks/useCobros';
+import { useAllCobros, useAllCobrosTotales, useMetodosPago, useCuentasBancarias, useAnularCobro } from '@/hooks/useCobros';
+import { useDebounce } from '@/hooks/useDebounce';
+import Pagination from '@/components/ui/Pagination';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
+import { PAGINATION, TIMEOUTS } from '@/constants';
 import type { CobroListado } from '@/services/cobros.service';
 
 // ─── Date preset helpers ──────────────────────────────────────
@@ -108,29 +111,43 @@ export default function ListadoCobros() {
   const [customHasta, setCustomHasta] = useState('');
   const [cuentaFilter, setCuentaFilter] = useState('');
   const [metodoFilter, setMetodoFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
   const [anulando, setAnulando] = useState<string | null>(null);
+
+  const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);
 
   const dateRange = preset === 'custom'
     ? { desde: customDesde, hasta: customHasta }
     : getPresetRange(preset);
 
-  const { data: cobros = [], isLoading, isError, error } = useAllCobros({
+  const filterParams = {
     fechaDesde:       dateRange.desde || undefined,
     fechaHasta:       dateRange.hasta || undefined,
     cuentaBancariaId: cuentaFilter   || undefined,
     metodoPagoCodigo: metodoFilter   || undefined,
+    search:           debouncedSearch || undefined,
+  };
+
+  const { data: result, isLoading, isFetching, isError, error } = useAllCobros({
+    ...filterParams,
+    page,
+    pageSize,
   });
+  const { data: totales } = useAllCobrosTotales(filterParams);
+
+  const cobros = result?.data ?? [];
+  const totalItems = result?.count ?? 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
 
   const { data: metodos = [] } = useMetodosPago();
   const { data: cuentas = [] } = useCuentasBancarias();
 
-  const totales = useMemo(() => {
-    const vigentes = cobros.filter((c) => !c.anulado);
-    return {
-      count: vigentes.length,
-      monto: vigentes.reduce((s, c) => s + c.monto_cobrado, 0),
-    };
-  }, [cobros]);
+  const handleFilterChange = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    setPage(1);
+  };
 
   const getCliente = (c: CobroListado) => {
     const cl = c.comprobantes?.clientes;
@@ -152,7 +169,7 @@ export default function ListadoCobros() {
   ];
 
   return (
-    <div className="max-w-7xl w-full mx-auto flex flex-col gap-6">
+    <div className="max-w-7xl w-full mx-auto flex flex-col gap-6 md:h-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -169,7 +186,7 @@ export default function ListadoCobros() {
         </div>
 
         {/* Totales */}
-        {!isLoading && (
+        {totales && (
           <div className="flex items-center gap-4 text-sm">
             <div className="text-right">
               <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Cobros vigentes</p>
@@ -190,7 +207,7 @@ export default function ListadoCobros() {
           {PRESETS.map(({ key, label }) => (
             <button
               key={key}
-              onClick={() => setPreset(key)}
+              onClick={() => { setPreset(key); setPage(1); }}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 preset === key
                   ? 'bg-[#3B82F6] text-white'
@@ -210,7 +227,7 @@ export default function ListadoCobros() {
               <input
                 type="date"
                 value={customDesde}
-                onChange={(e) => setCustomDesde(e.target.value)}
+                onChange={(e) => { setCustomDesde(e.target.value); setPage(1); }}
                 className="bg-[#0F1115] border border-[#334155] rounded-md py-1.5 px-3 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
               />
             </div>
@@ -219,51 +236,65 @@ export default function ListadoCobros() {
               <input
                 type="date"
                 value={customHasta}
-                onChange={(e) => setCustomHasta(e.target.value)}
+                onChange={(e) => { setCustomHasta(e.target.value); setPage(1); }}
                 className="bg-[#0F1115] border border-[#334155] rounded-md py-1.5 px-3 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
               />
             </div>
           </div>
         )}
 
-        {/* Dropdowns */}
+        {/* Search + Dropdowns */}
         <div className="flex flex-wrap gap-3">
+          {/* Buscador */}
+          <div className="relative flex-1 min-w-[200px]">
+            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-[#94A3B8]">
+              <iconify-icon icon="solar:magnifer-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+            </div>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+              placeholder="Buscar por comprobante o Nro. Op..."
+              className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
+            />
+          </div>
+
           <div className="relative">
             <select
               value={cuentaFilter}
-              onChange={(e) => setCuentaFilter(e.target.value)}
-              className="appearance-none bg-[#0F1115] border border-[#334155] rounded-md py-1.5 pl-3 pr-8 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] cursor-pointer"
+              onChange={(e) => handleFilterChange(setCuentaFilter)(e.target.value)}
+              className="appearance-none bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
             >
               <option value="">Todas las cuentas</option>
               {cuentas.map((cb) => (
                 <option key={cb.id} value={cb.id}>{cb.banco} — {cb.numero_cuenta}</option>
               ))}
             </select>
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-[#94A3B8]">
-              <iconify-icon icon="solar:alt-arrow-down-linear" class="text-sm"></iconify-icon>
+            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-[#94A3B8]">
+              <iconify-icon icon="solar:alt-arrow-down-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
             </div>
           </div>
 
           <div className="relative">
             <select
               value={metodoFilter}
-              onChange={(e) => setMetodoFilter(e.target.value)}
-              className="appearance-none bg-[#0F1115] border border-[#334155] rounded-md py-1.5 pl-3 pr-8 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] cursor-pointer"
+              onChange={(e) => handleFilterChange(setMetodoFilter)(e.target.value)}
+              className="appearance-none bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
             >
               <option value="">Todos los métodos</option>
               {metodos.map((m) => (
                 <option key={m.codigo} value={m.codigo}>{m.descripcion}</option>
               ))}
             </select>
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-[#94A3B8]">
-              <iconify-icon icon="solar:alt-arrow-down-linear" class="text-sm"></iconify-icon>
+            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-[#94A3B8]">
+              <iconify-icon icon="solar:alt-arrow-down-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tabla */}
-      <div className="bg-[#181B21] border border-[#334155] rounded-lg overflow-hidden">
+      <div className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm md:flex-1 transition-opacity duration-150 ${isFetching && !isLoading ? 'opacity-50' : ''}`}>
         {isLoading && (
           <div className="flex items-center justify-center gap-2 p-12 text-[#94A3B8] text-sm">
             <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>
@@ -287,68 +318,70 @@ export default function ListadoCobros() {
         )}
 
         {!isLoading && !isError && cobros.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-y-auto flex-1">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-[#334155]">
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Fecha</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Comprobante</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Cliente</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Método</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Cuenta</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Nro. Op.</th>
-                  <th className="text-right px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Monto</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Registrado por</th>
-                  <th className="text-center px-4 py-3 text-[10px] font-semibold text-[#94A3B8] uppercase tracking-wider">Acciones</th>
+                <tr className="border-b border-[#334155] bg-[#0F1115]">
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase whitespace-nowrap">Fecha</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase whitespace-nowrap">Comprobante</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase">Cliente</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase whitespace-nowrap">Pago</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase whitespace-nowrap">Nro. Op.</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase text-right whitespace-nowrap">Monto</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase whitespace-nowrap">Registrado por</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase text-center whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#334155]/50">
+              <tbody className="divide-y divide-[#334155] bg-[#181B21]">
                 {cobros.map((cobro) => (
                   <tr
                     key={cobro.id}
                     className={`transition-colors ${
                       cobro.anulado
                         ? 'opacity-50 bg-red-500/5'
-                        : 'hover:bg-[#0F1115]/60'
+                        : 'hover:bg-[#334155]/20'
                     }`}
                   >
-                    <td className="px-4 py-3 text-[#94A3B8] whitespace-nowrap text-xs">
+                    <td className="px-4 py-3.5 text-sm text-[#94A3B8] whitespace-nowrap">
                       {formatDate(cobro.fecha_pago)}
                     </td>
 
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="text-xs font-mono text-[#3B82F6]">
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className="text-sm font-mono text-[#3B82F6]">
                         {cobro.comprobantes?.serie_numero ?? '—'}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 max-w-[160px]">
-                      <span className="text-xs text-[#E2E8F0] truncate block" title={getCliente(cobro)}>
+                    <td className="px-4 py-3.5 max-w-[180px]">
+                      <span className="text-sm text-[#E2E8F0] truncate block" title={getCliente(cobro)}>
                         {getCliente(cobro)}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 text-xs text-[#E2E8F0]">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-1.5">
                         <iconify-icon
                           icon={getMetodoIcon(cobro.metodo_pago_codigo)}
-                          class="text-sm text-[#94A3B8] shrink-0"
+                          class="text-base text-[#94A3B8] shrink-0"
                         ></iconify-icon>
-                        {cobro.cat_metodos_pago?.descripcion ?? cobro.metodo_pago_codigo}
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm text-[#E2E8F0] whitespace-nowrap">
+                            {cobro.cat_metodos_pago?.descripcion ?? cobro.metodo_pago_codigo}
+                          </span>
+                          {cobro.cuentas_bancarias_empresa && (
+                            <span className="text-xs text-[#94A3B8] whitespace-nowrap">
+                              {cobro.cuentas_bancarias_empresa.banco} — {cobro.cuentas_bancarias_empresa.numero_cuenta}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
 
-                    <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
-                      {cobro.cuentas_bancarias_empresa
-                        ? `${cobro.cuentas_bancarias_empresa.banco} — ${cobro.cuentas_bancarias_empresa.numero_cuenta}`
-                        : '—'}
-                    </td>
-
-                    <td className="px-4 py-3 text-xs text-[#94A3B8] font-mono">
+                    <td className="px-4 py-3.5 text-sm text-[#94A3B8] font-mono">
                       {cobro.referencia_operacion ?? '—'}
                     </td>
 
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
                       <span className={`text-sm font-bold ${cobro.anulado ? 'line-through text-[#94A3B8]' : 'text-[#10B981]'}`}>
                         {formatCurrency(cobro.monto_cobrado)}
                       </span>
@@ -359,11 +392,11 @@ export default function ListadoCobros() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3 text-xs text-[#94A3B8]">
+                    <td className="px-4 py-3.5 text-sm text-[#94A3B8]">
                       {cobro.perfiles_usuario?.nombre ?? '—'}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <div className="flex items-center justify-center gap-2">
                         {cobro.comprobante_img_url && (
                           <a
@@ -399,6 +432,17 @@ export default function ListadoCobros() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!isLoading && !isError && totalPages > 0 && (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          />
         )}
       </div>
     </div>

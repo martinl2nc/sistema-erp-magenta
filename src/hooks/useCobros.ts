@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cobrosService } from '@/services/cobros.service';
 import type { RegistrarCobroPayload, AnularCobroPayload, CuentaBancaria, CuentasPorCobrarParams, CuotaComprobante, AllCobrosParams } from '@/services/cobros.service';
+import type { PaginatedCobros, AllCobrosTotales } from '@/services/cobros.service';
 import { facturasKeys } from './useFacturas';
 
 // ─── Query Key Factories ─────────────────────────────────────
@@ -14,6 +15,7 @@ export const cobrosKeys = {
   historial: (comprobanteId: string) => [...cobrosKeys.all(), 'historial', comprobanteId] as const,
   cuotas: (comprobanteId: string) => [...cobrosKeys.all(), 'cuotas', comprobanteId] as const,
   listado: (params?: AllCobrosParams) => [...cobrosKeys.all(), 'listado', params] as const,
+  totales: (params?: Omit<AllCobrosParams, 'page' | 'pageSize'>) => [...cobrosKeys.all(), 'totales', params] as const,
 };
 
 export const metodosPagoKeys = {
@@ -138,9 +140,17 @@ export function useUpdateCuentaBancaria() {
 }
 
 export function useAllCobros(params?: AllCobrosParams) {
-  return useQuery({
+  return useQuery<PaginatedCobros>({
     queryKey: cobrosKeys.listado(params),
     queryFn: () => cobrosService.getAllCobros(params),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useAllCobrosTotales(params?: Omit<AllCobrosParams, 'page' | 'pageSize'>) {
+  return useQuery<AllCobrosTotales>({
+    queryKey: cobrosKeys.totales(params),
+    queryFn: () => cobrosService.getAllCobrosTotales(params),
     placeholderData: (prev) => prev,
   });
 }
@@ -153,6 +163,8 @@ export function useAnularCobro(comprobanteId: string) {
       queryClient.invalidateQueries({ queryKey: cobrosKeys.historial(comprobanteId) });
       queryClient.invalidateQueries({ queryKey: cobrosKeys.kpis() });
       queryClient.invalidateQueries({ queryKey: cobrosKeys.cuentasPorCobrar() });
+      queryClient.invalidateQueries({ queryKey: cobrosKeys.listado() });
+      queryClient.invalidateQueries({ queryKey: cobrosKeys.totales() });
       queryClient.invalidateQueries({ queryKey: facturasKeys.lists() });
     },
   });
