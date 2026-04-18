@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useRegistrarCobro, useMetodosPago, useCuentasBancarias } from '@/hooks/useCobros';
 import { useAuth } from '@/context/AuthContext';
+import { useFileUpload } from '@/hooks/useFileUpload';
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
 import { validateCobroForm, initialCobroFormData } from './cobros.utils';
+import { cobrosService } from '@/services/cobros.service';
 import type { CobroFormData } from './cobros.utils';
 import type { CuentaPorCobrar } from '@/services/cobros.service';
 
@@ -29,6 +31,19 @@ export default function RegistrarCobroModal({
 
   const [form, setForm] = useState<CobroFormData>({ ...initialCobroFormData });
   const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const {
+    file: voucherFile,
+    fileInputRef,
+    handleFileChange,
+    handleDrop,
+    handleDragOver,
+    handleDragLeave,
+    isDragging,
+    clearFile,
+    openFileDialog,
+  } = useFileUpload();
 
   // Reset form when modal opens or changes comprobante
   useEffect(() => {
@@ -38,6 +53,7 @@ export default function RegistrarCobroModal({
         fecha_pago: new Date().toISOString().split('T')[0],
       });
       setError(null);
+      clearFile();
     }
   }, [isOpen, comprobante]);
 
@@ -46,6 +62,7 @@ export default function RegistrarCobroModal({
     () => metodosPago.find((m) => m.codigo === form.metodo_pago_codigo),
     [metodosPago, form.metodo_pago_codigo]
   );
+
 
   const handleChange = (field: keyof CobroFormData, value: string | number) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -67,13 +84,26 @@ export default function RegistrarCobroModal({
     }
 
     try {
+      let voucherUrl: string | undefined;
+
+      if (voucherFile) {
+        setIsUploading(true);
+        try {
+          voucherUrl = await cobrosService.uploadVoucherCobro(voucherFile, comprobante.comprobante_id);
+        } finally {
+          setIsUploading(false);
+        }
+      }
+
       await registrarCobro({
         comprobante_id: comprobante.comprobante_id,
         metodo_pago_codigo: form.metodo_pago_codigo,
         cuenta_bancaria_id: form.cuenta_bancaria_id || null,
         monto_cobrado: Number(form.monto_cobrado),
+        moneda: 'PEN',
         fecha_pago: form.fecha_pago,
         referencia_operacion: form.referencia_operacion || undefined,
+        comprobante_img_url: voucherUrl,
         notas: form.notas || undefined,
         registrado_por: user?.id,
       });
@@ -243,6 +273,55 @@ export default function RegistrarCobroModal({
             </div>
           )}
 
+          {/* Voucher */}
+          <div>
+            <label className="block text-sm font-medium text-[#E2E8F0] mb-1.5">
+              Voucher / Comprobante (opcional)
+            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,application/pdf"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            {voucherFile ? (
+              <div className="flex items-center justify-between bg-[#0F1115] border border-[#10B981]/30 rounded-md px-3 py-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <iconify-icon
+                    icon={voucherFile.type === 'application/pdf' ? 'solar:file-pdf-linear' : 'solar:gallery-linear'}
+                    class="text-lg text-[#10B981] shrink-0"
+                  ></iconify-icon>
+                  <span className="text-xs text-[#E2E8F0] truncate">{voucherFile.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearFile}
+                  className="text-[#94A3B8] hover:text-red-400 transition-colors shrink-0 ml-2"
+                >
+                  <iconify-icon icon="solar:close-circle-linear" class="text-base"></iconify-icon>
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={openFileDialog}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                className={`flex items-center gap-3 border border-dashed rounded-md px-3 py-3 cursor-pointer transition-colors ${
+                  isDragging
+                    ? 'border-[#3B82F6] bg-[#3B82F6]/5'
+                    : 'border-[#334155] hover:border-[#3B82F6]/50 hover:bg-[#0F1115]'
+                }`}
+              >
+                <iconify-icon icon="solar:upload-linear" class="text-lg text-[#94A3B8] shrink-0"></iconify-icon>
+                <span className="text-xs text-[#94A3B8]">
+                  Arrastrá o <span className="text-[#3B82F6]">seleccioná</span> imagen o PDF
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Notas */}
           <div>
             <label className="block text-sm font-medium text-[#E2E8F0] mb-1.5">Notas (opcional)</label>
@@ -275,10 +354,15 @@ export default function RegistrarCobroModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isPending}
+            disabled={isPending || isUploading}
             className="bg-[#10B981] hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            {isPending ? (
+            {isUploading ? (
+              <>
+                <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base"></iconify-icon>
+                Subiendo voucher...
+              </>
+            ) : isPending ? (
               <>
                 <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base"></iconify-icon>
                 Registrando...

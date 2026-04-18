@@ -75,10 +75,12 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 
 #### Módulo de Cobranzas
 - [x] Dashboard de cuentas por cobrar y seguimiento de saldos
-- [x] Registro de cobros referenciados a comprobantes
+- [x] Registro de cobros referenciados a comprobantes con upload de voucher (imagen/PDF)
 - [x] Identificación automática del estado de pago a nivel comprobante
 - [x] Historial interactivo del progreso de pago con método, referencia y fechas
 - [x] Visualización del cronograma de cuotas en el historial (facturas a crédito): estado Pagado/Vencida/Pendiente calculado por lógica waterfall acumulativa
+- [x] Anulación de cobros (soft-delete auditado, solo admin): con motivo, fecha y usuario registrado
+- [x] Listado general de transacciones (`/cobranzas/transacciones`) para conciliación bancaria con filtros por fecha, cuenta y método
 - Para un detalle técnico completo, consulta: `@[docs/prd_modulo_cobros.md]`
 
 #### Módulo de Clientes y Vendedores
@@ -323,12 +325,17 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | `metodo_pago_codigo` | String | Relación con `cat_metodos_pago` |
 | `cuenta_bancaria_id` | UUID | (Opcional) A qué cuenta ingresó el dinero |
 | `monto_cobrado` | Numeric | Monto del abono |
+| `moneda` | String | Moneda del cobro: `PEN` o `USD` (frontend actual solo usa PEN) |
 | `fecha_pago` | Date | Fecha real en la que el cliente pagó |
 | `referencia_operacion` | String | Número de operación o voucher |
-| `comprobante_img_url` | String | URL de la imagen del voucher en Supabase Storage |
+| `comprobante_img_url` | String | URL del voucher en Storage (bucket `vouchers_cobros`) |
 | `notas` | Text | Observaciones adicionales del cobro |
 | `registrado_por` | UUID | Quién registró el cobro (perfiles_usuario) |
 | `created_at` | Timestamp | Fecha de registro en sistema |
+| `anulado` | Boolean | Soft-delete: `true` si el cobro fue anulado |
+| `anulado_por` | UUID | Admin que realizó la anulación (perfiles_usuario) |
+| `fecha_anulacion` | Timestamp | Momento de la anulación |
+| `motivo_anulacion` | Text | Razón obligatoria ingresada por el admin |
 
 **Tabla: `cuentas_bancarias_empresa`**
 | Columna | Tipo | Descripción |
@@ -509,6 +516,7 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | 1.0.0 | 2025 | Lanzamiento inicial con cotizaciones, pedidos y facturación básica |
 | 1.1.0 | 2026 | Añadido módulo de detracciones y notas de crédito |
 | 1.2.0 | 2026-04-18 | Cronograma de cuotas en historial de cobranzas (waterfall acumulativo) |
+| 1.3.0 | 2026-04-18 | Anulación auditada de cobros (soft-delete), campo moneda en cobros, upload de vouchers, listado general de transacciones para conciliación bancaria |
 
 ---
 

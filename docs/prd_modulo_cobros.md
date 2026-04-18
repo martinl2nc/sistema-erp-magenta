@@ -21,11 +21,18 @@ Implementar un sistema de control de caja que separe matemáticamente las obliga
 | `cat_metodos_pago` | Tabla nueva | Catálogo de métodos de pago |
 | `cuentas_bancarias_empresa` | Tabla nueva | Cuentas bancarias normalizadas (reemplaza campo texto) |
 | `cobros` | Tabla nueva | Registro de pagos reales |
+| `cobros.moneda` | Columna nueva | Moneda del cobro: `PEN` o `USD`. Frontend actual usa solo PEN; preparado para multimoneda futuro |
+| `cobros.anulado` | Columna nueva | Soft-delete: `true` si el cobro fue anulado (nunca se borra físicamente) |
+| `cobros.anulado_por` | Columna nueva | FK a `perfiles_usuario` — admin que realizó la anulación |
+| `cobros.fecha_anulacion` | Columna nueva | Timestamp de la anulación |
+| `cobros.motivo_anulacion` | Columna nueva | Motivo obligatorio ingresado por el admin |
 | `comprobantes.estado_pago` | Columna nueva | Estado denormalizado: Pendiente / Parcial / Pagado |
-| `trg_actualizar_estado_pago` | Trigger | Mantiene `estado_pago` sincronizado automáticamente |
-| `vista_cuentas_por_cobrar` | Vista SQL | Calcula saldos considerando NCs y detracciones |
-| `registrar_cobro` | RPC | Operación atómica: inserta cobro + valida saldo |
-| RLS Policies | Seguridad | Políticas para las 3 tablas nuevas |
+| `trg_actualizar_estado_pago` | Trigger | Mantiene `estado_pago` sincronizado automáticamente. Excluye cobros con `anulado = true` |
+| `vista_cuentas_por_cobrar` | Vista SQL | Calcula saldos considerando NCs, detracciones y cobros vigentes (excluye anulados) |
+| `registrar_cobro` | RPC | Operación atómica: inserta cobro + valida saldo (excluye anulados del cálculo). Acepta `p_moneda` |
+| `anular_cobro` | RPC nueva | Soft-delete auditado: setea `anulado=true` + campos de auditoría. Dispara trigger automáticamente |
+| `vouchers_cobros` | Storage bucket nuevo | Bucket público para vouchers de cobros (imágenes/PDF). Path: `{comprobante_id}/{timestamp}.{ext}` |
+| RLS Policies | Seguridad | Políticas para las 3 tablas nuevas + bucket |
 
 ### 2.2 Script de Migración SQL
 
@@ -292,7 +299,16 @@ TO authenticated WITH CHECK (
 
 ### 2.3 Storage (Almacenamiento de Vouchers)
 
-Crear un **Bucket privado** en Supabase Storage: `vouchers_pago`. Se usa para subir capturas de los depósitos/transferencias.
+Bucket **público** en Supabase Storage: `vouchers_cobros`. Se usa para subir capturas de los depósitos/transferencias.
+
+- **Tipos permitidos**: `image/jpeg`, `image/jpg`, `image/png`, `application/pdf`
+- **Tamaño máximo**: 10 MB
+- **Path**: `{comprobante_id}/{timestamp}.{ext}`
+- **Políticas RLS**: usuarios autenticados pueden INSERT, SELECT y DELETE
+- **Upload**: desde `RegistrarCobroModal` usando `useFileUpload()` + `cobrosService.uploadVoucherCobro()`
+- **Visualización**: ícono "Ver voucher" en `HistorialCobrosDrawer` y en `ListadoCobros` (solo aparece cuando `comprobante_img_url` está cargada)
+
+> ⚠️ El PRD original especificaba bucket `vouchers_pago`. El bucket creado se llama `vouchers_cobros`.
 
 ### 2.4 Migración de Cuentas Bancarias
 
@@ -325,19 +341,21 @@ El sistema sigue estrictamente la arquitectura por capas:
 Page (Server Component) → Client Component → Hook (TanStack Query) → Service → Supabase
 ```
 
-**Archivos a crear:**
+**Archivos creados:**
 
 | Capa | Archivo | Descripción |
 |------|---------|-------------|
-| Service | `src/services/cobros.service.ts` | CRUD cobros + consulta vista + llamada RPC |
+| Service | `src/services/cobros.service.ts` | CRUD cobros + consulta vista + RPCs + upload voucher |
 | Hook | `src/hooks/useCobros.ts` | Query key factory + hooks TanStack Query |
-| Feature | `src/features/cobros/CobranzasDashboard.tsx` | Componente principal con tabla |
-| Feature | `src/features/cobros/RegistrarCobroModal.tsx` | Modal de registro de pago |
-| Feature | `src/features/cobros/HistorialCobrosDrawer.tsx` | Panel lateral con timeline |
+| Feature | `src/features/cobros/CobranzasDashboard.tsx` | Dashboard cuentas por cobrar con link a Transacciones |
+| Feature | `src/features/cobros/RegistrarCobroModal.tsx` | Modal de registro de pago con upload de voucher |
+| Feature | `src/features/cobros/HistorialCobrosDrawer.tsx` | Panel lateral con timeline + botón anulación (admin) |
+| Feature | `src/features/cobros/ListadoCobros.tsx` | Listado general de transacciones para conciliación |
 | Feature | `src/features/cobros/cobros.utils.ts` | Validación manual del formulario |
 | Page | `src/app/(app)/cobranzas/page.tsx` | Server Component |
 | Page | `src/app/(app)/cobranzas/loading.tsx` | Skeleton de carga |
 | Page | `src/app/(app)/cobranzas/error.tsx` | Manejo de errores |
+| Page | `src/app/(app)/cobranzas/transacciones/page.tsx` | Listado general de cobros (conciliación bancaria) |
 
 **Archivos a modificar (migración cuentas bancarias):**
 
@@ -404,11 +422,15 @@ export const cuentasBancariasKeys = {
 ```
 
 **Hooks disponibles:**
-- `useCuentasPorCobrar()` — lista principal
-- `useHistorialCobros(comprobanteId)` — timeline de pagos
+- `useCuentasPorCobrar(params)` — lista principal paginada
+- `useKpisCuentasPorCobrar()` — KPIs del dashboard
+- `useHistorialCobros(comprobanteId)` — timeline de pagos por comprobante
+- `useAllCobros(params)` — listado general de transacciones (sin filtro por comprobante)
 - `useRegistrarCobro()` — mutation con invalidación de `cobrosKeys.all()` + `facturasKeys.lists()`
+- `useAnularCobro(comprobanteId)` — soft-delete auditado; invalida historial, KPIs, cuentas y facturas
 - `useMetodosPago()` — dropdown
 - `useCuentasBancarias()` — dropdown
+- `useCuotasComprobante(comprobanteId, isOpen)` — cronograma de cuotas crédito
 
 ### 3.4 Pantalla Principal: `/dashboard/cobranzas`
 
@@ -444,10 +466,11 @@ export const cuentasBancariasKeys = {
 |-------|------|--------|
 | `monto_cobrado` | number | Obligatorio. > 0. **max = saldo_pendiente** |
 | `metodo_pago_codigo` | select | Obligatorio. Dropdown desde `useMetodosPago()` |
-| `cuenta_bancaria_id` | select | Obligatorio. Dropdown desde `useCuentasBancarias()` |
+| `cuenta_bancaria_id` | select | Opcional. Dropdown desde `useCuentasBancarias()`. Sin selección = efectivo |
+| `moneda` | hardcoded | Siempre `'PEN'`. Campo existe en DB para multimoneda futuro |
 | `fecha_pago` | date | Default hoy. No futuro. |
 | `referencia_operacion` | text | Obligatorio si `metodo_pago.requiere_referencia === true` |
-| `comprobante_img` | file | Opcional. Upload al bucket `vouchers_pago` via `useFileUpload()` |
+| `comprobante_img_url` | file | Opcional. Upload al bucket `vouchers_cobros` via `useFileUpload()` + `cobrosService.uploadVoucherCobro()`. Acepta JPG, PNG, PDF (máx 10MB). Drag & drop soportado |
 | `notas` | textarea | Opcional |
 
 **Header del modal**: Mostrar resumen del comprobante (serie, cliente, total, saldo actual).
@@ -462,14 +485,38 @@ Panel lateral deslizable (Sheet/Drawer) que muestra:
 
 - **Header**: Serie del comprobante, Total Facturado, Monto Cobrable, Total Cobrado, Saldo Actual
 - **Barra de progreso visual**: `(total_cobrado / monto_cobrable) * 100`
+- **Cronograma de cuotas** (solo comprobantes a crédito): estado Pagado/Vencida/Pendiente con waterfall acumulativo
 - **Timeline**: Lista cronológica de cobros registrados con:
   - Fecha del pago
-  - Monto cobrado (usar `formatCurrency()`)
-  - Método de pago
+  - Monto cobrado (`formatCurrency()`) — tachado y opaco si anulado
+  - Badge `ANULADO` + motivo de anulación (cuando aplica)
+  - Método de pago (con ícono)
   - Banco de destino
   - Nro. de operación
-  - Botón "Ver Voucher" → abre URL de la imagen en nueva pestaña
+  - Botón "Ver Voucher" → abre URL en nueva pestaña (solo si tiene voucher)
   - Quién registró el cobro
+  - **Botón "Anular"** (solo admin, solo cobros vigentes): panel inline con campo motivo obligatorio → llama RPC `anular_cobro`
+
+### 3.7 Listado General de Transacciones (`ListadoCobros.tsx`)
+
+Ruta: `/cobranzas/transacciones`. Accesible desde botón "Transacciones" en header del dashboard.
+
+**Propósito**: conciliación bancaria — ver todos los cobros registrados independientemente del comprobante.
+
+**Filtros**:
+- Preset de fecha: Hoy / Esta semana / Mes actual / Personalizado (rango custom)
+- Dropdown cuenta bancaria
+- Dropdown método de pago
+
+**Columnas**: Fecha | Comprobante | Cliente | Método (con ícono) | Cuenta destino | Nro. Operación | Monto | Registrado por | Acciones
+
+**Acciones por fila**:
+- Ver voucher (ícono, solo si tiene `comprobante_img_url`)
+- Anular (ícono trash, solo admin, solo vigentes): panel inline con motivo obligatorio
+
+**Totales** en header: cantidad de cobros vigentes + suma del período seleccionado.
+
+> Paginación: pendiente de implementar (roadmap).
 
 ---
 
@@ -514,15 +561,18 @@ Comprobantes ◄──── comprobantes (NCs via comprobante_referencia_id)
 ## ✅ 6. Criterios de Aceptación
 
 ### Módulo de Cobros
-- [ ] Cobro total: pago completo → `estado_pago = 'Pagado'`, `saldo_pendiente = 0`
-- [ ] Cobro parcial: 2+ pagos → `estado_pago = 'Parcial'`, saldo refleja diferencia
-- [ ] Prevención de sobrecobro: monto > saldo → error de la RPC
-- [ ] Notas de crédito: NC aceptada reduce saldo automáticamente
-- [ ] Detracciones: factura con detracción muestra monto cobrable correcto
-- [ ] Historial: drawer muestra timeline con todos los pagos y vouchers
-- [ ] RLS: vendedor puede ver cobros pero no puede registrarlos
-- [ ] Trigger: `estado_pago` se actualiza automáticamente sin intervención de la app
-- [ ] Storage: vouchers se suben correctamente al bucket `vouchers_pago`
+- [x] Cobro total: pago completo → `estado_pago = 'Pagado'`, `saldo_pendiente = 0`
+- [x] Cobro parcial: 2+ pagos → `estado_pago = 'Parcial'`, saldo refleja diferencia
+- [x] Prevención de sobrecobro: monto > saldo → error de la RPC
+- [x] Notas de crédito: NC aceptada reduce saldo automáticamente
+- [x] Detracciones: factura con detracción muestra monto cobrable correcto
+- [x] Historial: drawer muestra timeline con todos los pagos, vouchers y estado de anulación
+- [x] RLS: vendedor puede ver cobros pero no puede registrarlos
+- [x] Trigger: `estado_pago` se actualiza automáticamente. Excluye cobros anulados del cálculo
+- [x] Storage: vouchers se suben correctamente al bucket `vouchers_cobros`
+- [x] Anulación: soft-delete auditado con motivo, no DELETE físico. Vista y trigger excluyen anulados
+- [x] Listado general de transacciones: vista maestro para conciliación bancaria con filtros
+- [ ] Paginación en listado de transacciones (roadmap)
 
 ### Migración Cuentas Bancarias
 - [ ] Formulario de admin: cuentas bancarias se gestionan como tabla CRUD (agregar/eliminar), no como textarea

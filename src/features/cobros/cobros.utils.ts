@@ -42,10 +42,6 @@ export function validateCobroForm(
     return 'Seleccioná un método de pago.';
   }
 
-  if (!form.cuenta_bancaria_id) {
-    return 'Seleccioná una cuenta bancaria de destino.';
-  }
-
   if (!form.fecha_pago) {
     return 'La fecha de pago es obligatoria.';
   }

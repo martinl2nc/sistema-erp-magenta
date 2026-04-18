@@ -1,6 +1,9 @@
 'use client';
 
-import { useHistorialCobros, useCuotasComprobante } from '@/hooks/useCobros';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { useHistorialCobros, useCuotasComprobante, useAnularCobro } from '@/hooks/useCobros';
+import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatDate as formatDateUtil } from '@/utils/formatters';
 import type { CuentaPorCobrar } from '@/services/cobros.service';
 
@@ -15,6 +18,29 @@ export default function HistorialCobrosDrawer({
   onClose,
   comprobante,
 }: HistorialCobrosDrawerProps) {
+  const { role, user } = useAuth();
+  const [anulando, setAnulando] = useState<string | null>(null); // cobro id being confirmed
+  const [motivo, setMotivo] = useState('');
+
+  const { mutateAsync: anularCobro, isPending: isAnulando } = useAnularCobro(
+    comprobante?.comprobante_id ?? ''
+  );
+
+  const handleAnular = async (cobroId: string) => {
+    if (!motivo.trim()) {
+      toast.error('Ingresá un motivo para la anulación.');
+      return;
+    }
+    try {
+      await anularCobro({ cobro_id: cobroId, anulado_por: user!.id, motivo });
+      toast.success('Cobro anulado correctamente.');
+      setAnulando(null);
+      setMotivo('');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al anular cobro');
+    }
+  };
+
   const { data: cobros = [], isLoading, isError: isErrorCobros, error: cobrosError } = useHistorialCobros(
     isOpen ? comprobante?.comprobante_id : undefined
   );
@@ -212,17 +238,28 @@ export default function HistorialCobrosDrawer({
                     <div key={cobro.id} className="relative pl-9">
                       {/* Timeline dot */}
                       <div className={`absolute left-1.5 top-1 w-3 h-3 rounded-full border-2 ${
-                        index === 0
+                        cobro.anulado
+                          ? 'bg-red-500/40 border-red-500/40'
+                          : index === 0
                           ? 'bg-[#10B981] border-[#10B981]/40'
                           : 'bg-[#334155] border-[#334155]'
                       }`}></div>
 
-                      <div className="bg-[#0F1115] border border-[#334155] rounded-lg p-3.5 space-y-2">
+                      <div className={`bg-[#0F1115] border rounded-lg p-3.5 space-y-2 ${
+                        cobro.anulado ? 'border-red-500/20 opacity-60' : 'border-[#334155]'
+                      }`}>
                         {/* Amount and date header */}
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-bold text-[#10B981]">
-                            +{formatCurrency(cobro.monto_cobrado)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-bold ${cobro.anulado ? 'line-through text-[#94A3B8]' : 'text-[#10B981]'}`}>
+                              +{formatCurrency(cobro.monto_cobrado)}
+                            </span>
+                            {cobro.anulado && (
+                              <span className="text-[10px] font-bold bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full">
+                                ANULADO
+                              </span>
+                            )}
+                          </div>
                           <span className="text-xs text-[#94A3B8]">
                             {formatDate(cobro.fecha_pago)}
                           </span>
@@ -261,18 +298,66 @@ export default function HistorialCobrosDrawer({
                             </a>
                           )}
 
-                          {cobro.notas && (
+                          {cobro.anulado && cobro.motivo_anulacion && (
+                            <p className="text-red-400/80 italic pt-1 border-t border-red-500/20">
+                              Motivo: {cobro.motivo_anulacion}
+                            </p>
+                          )}
+
+                          {!cobro.anulado && cobro.notas && (
                             <p className="text-[#94A3B8] italic pt-1 border-t border-[#334155]/50">
                               {cobro.notas}
                             </p>
                           )}
                         </div>
 
-                        {/* Footer: who registered */}
-                        {cobro.perfiles_usuario && (
-                          <p className="text-[10px] text-[#94A3B8]/60 pt-1">
-                            Registrado por {cobro.perfiles_usuario.nombre}
-                          </p>
+                        {/* Footer: who registered + anular button */}
+                        <div className="flex items-center justify-between pt-1">
+                          {cobro.perfiles_usuario && (
+                            <p className="text-[10px] text-[#94A3B8]/60">
+                              Registrado por {cobro.perfiles_usuario.nombre}
+                            </p>
+                          )}
+                          {role === 'admin' && !cobro.anulado && (
+                            <button
+                              type="button"
+                              onClick={() => { setAnulando(cobro.id); setMotivo(''); }}
+                              className="text-[10px] text-red-400/70 hover:text-red-400 transition-colors"
+                            >
+                              Anular
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Inline confirm panel */}
+                        {anulando === cobro.id && (
+                          <div className="border-t border-red-500/20 pt-3 space-y-2">
+                            <p className="text-xs text-red-400 font-medium">¿Confirmar anulación?</p>
+                            <input
+                              type="text"
+                              value={motivo}
+                              onChange={(e) => setMotivo(e.target.value)}
+                              placeholder="Motivo (obligatorio)"
+                              className="w-full bg-[#181B21] border border-red-500/30 rounded-md py-1.5 px-3 text-xs text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleAnular(cobro.id)}
+                                disabled={isAnulando}
+                                className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                {isAnulando ? 'Anulando...' : 'Confirmar'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAnulando(null)}
+                                className="flex-1 text-[#94A3B8] hover:text-[#E2E8F0] text-xs py-1.5 rounded-md transition-colors"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>

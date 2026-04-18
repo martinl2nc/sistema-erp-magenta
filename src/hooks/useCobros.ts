@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cobrosService } from '@/services/cobros.service';
-import type { RegistrarCobroPayload, CuentaBancaria, CuentasPorCobrarParams, CuotaComprobante } from '@/services/cobros.service';
+import type { RegistrarCobroPayload, AnularCobroPayload, CuentaBancaria, CuentasPorCobrarParams, CuotaComprobante, AllCobrosParams } from '@/services/cobros.service';
 import { facturasKeys } from './useFacturas';
 
 // ─── Query Key Factories ─────────────────────────────────────
@@ -13,6 +13,7 @@ export const cobrosKeys = {
   kpis: () => [...cobrosKeys.all(), 'kpis'] as const,
   historial: (comprobanteId: string) => [...cobrosKeys.all(), 'historial', comprobanteId] as const,
   cuotas: (comprobanteId: string) => [...cobrosKeys.all(), 'cuotas', comprobanteId] as const,
+  listado: (params?: AllCobrosParams) => [...cobrosKeys.all(), 'listado', params] as const,
 };
 
 export const metodosPagoKeys = {
@@ -132,6 +133,27 @@ export function useUpdateCuentaBancaria() {
       cobrosService.updateCuentaBancaria(id, cuenta),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: cuentasBancariasKeys.all() });
+    },
+  });
+}
+
+export function useAllCobros(params?: AllCobrosParams) {
+  return useQuery({
+    queryKey: cobrosKeys.listado(params),
+    queryFn: () => cobrosService.getAllCobros(params),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useAnularCobro(comprobanteId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AnularCobroPayload) => cobrosService.anularCobro(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: cobrosKeys.historial(comprobanteId) });
+      queryClient.invalidateQueries({ queryKey: cobrosKeys.kpis() });
+      queryClient.invalidateQueries({ queryKey: cobrosKeys.cuentasPorCobrar() });
+      queryClient.invalidateQueries({ queryKey: facturasKeys.lists() });
     },
   });
 }

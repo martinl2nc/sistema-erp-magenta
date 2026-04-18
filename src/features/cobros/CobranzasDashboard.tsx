@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useCuentasPorCobrar, useKpisCuentasPorCobrar } from '@/hooks/useCobros';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/context/AuthContext';
@@ -80,6 +81,15 @@ export default function CobranzasDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-[#E2E8F0]">Cobranzas</h1>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/cobranzas/transacciones"
+            className="flex items-center gap-1.5 text-xs text-[#94A3B8] hover:text-[#3B82F6] transition-colors border border-[#334155] hover:border-[#3B82F6]/40 rounded-md px-3 py-1.5"
+          >
+            <iconify-icon icon="solar:transfer-horizontal-linear" class="text-sm"></iconify-icon>
+            Transacciones
+          </Link>
+        </div>
         <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
           <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>
           {kpis?.countPendientes ?? 0} pendiente{(kpis?.countPendientes ?? 0) !== 1 ? 's' : ''}

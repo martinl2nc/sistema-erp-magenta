@@ -29,12 +29,17 @@ export interface Cobro {
   metodo_pago_codigo: string;
   cuenta_bancaria_id: string | null;
   monto_cobrado: number;
+  moneda: 'PEN' | 'USD';
   fecha_pago: string;
   referencia_operacion: string | null;
   comprobante_img_url: string | null;
   notas: string | null;
   registrado_por: string | null;
   created_at: string;
+  anulado: boolean;
+  anulado_por: string | null;
+  fecha_anulacion: string | null;
+  motivo_anulacion: string | null;
   // Joined relations
   cat_metodos_pago?: {
     codigo: string;
@@ -54,6 +59,7 @@ export interface RegistrarCobroPayload {
   metodo_pago_codigo: string;
   cuenta_bancaria_id: string | null;
   monto_cobrado: number;
+  moneda: 'PEN' | 'USD';
   fecha_pago: string;
   referencia_operacion?: string;
   comprobante_img_url?: string;
@@ -194,6 +200,7 @@ export const registrarCobro = async (payload: RegistrarCobroPayload): Promise<st
     p_comprobante_img_url: payload.comprobante_img_url || null,
     p_notas: payload.notas || null,
     p_registrado_por: payload.registrado_por || null,
+    p_moneda: payload.moneda,
   });
 
   if (error) {
@@ -321,6 +328,88 @@ export const getCuotasComprobante = async (comprobanteId: string): Promise<Cuota
   return (data ?? []) as CuotaComprobante[];
 };
 
+export interface CobroListado extends Cobro {
+  comprobantes?: {
+    serie_numero: string;
+    clientes?: {
+      razon_social: string | null;
+      nombres_contacto: string;
+      apellidos_contacto: string;
+    } | null;
+  } | null;
+}
+
+export interface AllCobrosParams {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  cuentaBancariaId?: string;
+  metodoPagoCodigo?: string;
+}
+
+export const getAllCobros = async (params?: AllCobrosParams): Promise<CobroListado[]> => {
+  const supabase = createClient();
+
+  let query = supabase
+    .from('cobros')
+    .select(`
+      *,
+      comprobantes!cobros_comprobante_id_fkey (
+        serie_numero,
+        clientes ( razon_social, nombres_contacto, apellidos_contacto )
+      ),
+      cat_metodos_pago ( codigo, descripcion ),
+      cuentas_bancarias_empresa ( banco, numero_cuenta ),
+      perfiles_usuario:registrado_por ( nombre )
+    `)
+    .order('fecha_pago', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (params?.fechaDesde) query = query.gte('fecha_pago', params.fechaDesde);
+  if (params?.fechaHasta) query = query.lte('fecha_pago', params.fechaHasta);
+  if (params?.cuentaBancariaId) query = query.eq('cuenta_bancaria_id', params.cuentaBancariaId);
+  if (params?.metodoPagoCodigo) query = query.eq('metodo_pago_codigo', params.metodoPagoCodigo);
+
+  const { data, error } = await query;
+  if (error) throw new Error('Error al cargar transacciones: ' + error.message);
+  return (data ?? []) as CobroListado[];
+};
+
+export interface AnularCobroPayload {
+  cobro_id: string;
+  anulado_por: string;
+  motivo: string;
+}
+
+export const uploadVoucherCobro = async (file: File, comprobanteId: string): Promise<string> => {
+  const supabase = createClient();
+  const ext = file.name.split('.').pop() ?? 'jpg';
+  const path = `${comprobanteId}/${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from('vouchers_cobros')
+    .upload(path, file, { upsert: false });
+
+  if (error) throw new Error('Error al subir el voucher: ' + error.message);
+
+  const { data } = supabase.storage.from('vouchers_cobros').getPublicUrl(path);
+  return data.publicUrl;
+};
+
+export const anularCobro = async (payload: AnularCobroPayload): Promise<void> => {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('anular_cobro', {
+    p_cobro_id:    payload.cobro_id,
+    p_anulado_por: payload.anulado_por,
+    p_motivo:      payload.motivo,
+  });
+
+  if (error) {
+    const alreadyAnulado = error.message.includes('ya estaba anulado');
+    if (alreadyAnulado) throw new Error('Este cobro ya fue anulado anteriormente.');
+    throw new Error('Error al anular cobro: ' + error.message);
+  }
+};
+
 // Grouped export for convenient imports
 export const cobrosService = {
   getCuentasPorCobrar,
@@ -333,4 +422,7 @@ export const cobrosService = {
   updateCuentaBancaria,
   deleteCuentaBancaria,
   getCuotasComprobante,
+  anularCobro,
+  getAllCobros,
+  uploadVoucherCobro,
 };
