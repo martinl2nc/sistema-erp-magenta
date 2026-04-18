@@ -1,6 +1,6 @@
 'use client';
 
-import { useHistorialCobros } from '@/hooks/useCobros';
+import { useHistorialCobros, useCuotasComprobante } from '@/hooks/useCobros';
 import { formatCurrency, formatDate as formatDateUtil } from '@/utils/formatters';
 import type { CuentaPorCobrar } from '@/services/cobros.service';
 
@@ -15,13 +15,27 @@ export default function HistorialCobrosDrawer({
   onClose,
   comprobante,
 }: HistorialCobrosDrawerProps) {
-  const { data: cobros = [], isLoading } = useHistorialCobros(
+  const { data: cobros = [], isLoading, isError: isErrorCobros, error: cobrosError } = useHistorialCobros(
     isOpen ? comprobante?.comprobante_id : undefined
+  );
+
+  const esCreditoYAbierto = isOpen && (comprobante?.forma_pago === 'Credito' || comprobante?.forma_pago === 'Crédito');
+  const { data: cuotas = [], isLoading: isLoadingCuotas, isError: isErrorCuotas } = useCuotasComprobante(
+    esCreditoYAbierto ? comprobante?.comprobante_id : undefined,
+    esCreditoYAbierto
   );
 
   if (!isOpen || !comprobante) return null;
 
   const formatDate = (d: string) => formatDateUtil(new Date(d));
+
+  const startOfToday = () => new Date(new Date().setHours(0, 0, 0, 0));
+  const getCuotaEstado = (cuotaIndex: number): 'Pagado' | 'Vencida' | 'Pendiente' => {
+    if (comprobante.saldo_pendiente === 0) return 'Pagado';
+    const acumulado = cuotas.slice(0, cuotaIndex + 1).reduce((s, c) => s + c.monto, 0);
+    if (comprobante.total_cobrado >= acumulado) return 'Pagado';
+    return new Date(cuotas[cuotaIndex].fecha_pago) < startOfToday() ? 'Vencida' : 'Pendiente';
+  };
 
   const progressPercent = comprobante.monto_cobrable > 0
     ? Math.min(100, (comprobante.total_cobrado / comprobante.monto_cobrable) * 100)
@@ -109,6 +123,60 @@ export default function HistorialCobrosDrawer({
           )}
         </div>
 
+        {/* Cuotas Programadas */}
+        {esCreditoYAbierto && (
+          <div className="border-b border-[#334155] px-5 py-4">
+            <h3 className="text-xs font-medium text-[#94A3B8] uppercase tracking-wider mb-3">
+              Cronograma de cuotas
+            </h3>
+
+            {isLoadingCuotas && (
+              <div className="flex items-center gap-2 text-[#94A3B8] text-xs">
+                <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base text-[#3B82F6]"></iconify-icon>
+                Cargando cuotas...
+              </div>
+            )}
+
+            {!isLoadingCuotas && isErrorCuotas && (
+              <p className="text-xs text-red-400">Error al cargar las cuotas.</p>
+            )}
+
+            {!isLoadingCuotas && !isErrorCuotas && cuotas.length === 0 && (
+              <p className="text-xs text-[#94A3B8]">No hay cuotas registradas.</p>
+            )}
+
+            {!isLoadingCuotas && !isErrorCuotas && cuotas.length > 0 && (
+              <div className="space-y-2">
+                {cuotas.map((cuota, index) => {
+                  const estado = getCuotaEstado(index);
+                  return (
+                    <div key={`${cuota.comprobante_id}-${cuota.numero_cuota}`} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 text-[#94A3B8]">
+                        <span className="text-[#E2E8F0] font-medium">
+                          Cuota {cuota.numero_cuota} de {cuotas.length}
+                        </span>
+                        <span>{formatDate(cuota.fecha_pago)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#E2E8F0] font-medium">{formatCurrency(cuota.monto)}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          estado === 'Pagado'
+                            ? 'bg-[#10B981]/10 text-[#10B981]'
+                            : estado === 'Vencida'
+                            ? 'bg-red-500/10 text-red-400'
+                            : 'bg-yellow-500/10 text-yellow-400'
+                        }`}>
+                          {estado}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Timeline */}
         <div className="flex-1 overflow-y-auto">
           {isLoading && (
@@ -118,14 +186,22 @@ export default function HistorialCobrosDrawer({
             </div>
           )}
 
-          {!isLoading && cobros.length === 0 && (
+          {!isLoading && isErrorCobros && (
+            <div className="flex flex-col items-center justify-center gap-2 p-8 text-center">
+              <iconify-icon icon="solar:danger-triangle-linear" class="text-3xl text-[#EF4444]"></iconify-icon>
+              <p className="text-sm text-[#EF4444]">Error al cargar cobros</p>
+              <p className="text-xs text-[#94A3B8]">{(cobrosError as Error)?.message}</p>
+            </div>
+          )}
+
+          {!isLoading && !isErrorCobros && cobros.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
               <iconify-icon icon="solar:wallet-2-linear" class="text-4xl text-[#334155]"></iconify-icon>
               <p className="text-sm text-[#94A3B8]">No se han registrado cobros aún.</p>
             </div>
           )}
 
-          {!isLoading && cobros.length > 0 && (
+          {!isLoading && !isErrorCobros && cobros.length > 0 && (
             <div className="p-5">
               <div className="relative">
                 {/* Timeline line */}
@@ -195,7 +271,7 @@ export default function HistorialCobrosDrawer({
                         {/* Footer: who registered */}
                         {cobro.perfiles_usuario && (
                           <p className="text-[10px] text-[#94A3B8]/60 pt-1">
-                            Registrado por {cobro.perfiles_usuario.nombre} {cobro.perfiles_usuario.apellido}
+                            Registrado por {cobro.perfiles_usuario.nombre}
                           </p>
                         )}
                       </div>

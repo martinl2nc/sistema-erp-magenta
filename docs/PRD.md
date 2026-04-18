@@ -78,6 +78,7 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 - [x] Registro de cobros referenciados a comprobantes
 - [x] Identificación automática del estado de pago a nivel comprobante
 - [x] Historial interactivo del progreso de pago con método, referencia y fechas
+- [x] Visualización del cronograma de cuotas en el historial (facturas a crédito): estado Pagado/Vencida/Pendiente calculado por lógica waterfall acumulativa
 - Para un detalle técnico completo, consulta: `@[docs/prd_modulo_cobros.md]`
 
 #### Módulo de Clientes y Vendedores
@@ -240,7 +241,7 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | `id` | UUID | Identificador único |
 | `cotizacion_id` | UUID | Referencia a la cotización origen |
 | `cliente_id` | UUID | Relación con tabla `clientes` |
-| `vendedor_id` | UUID | Relación con `perfiles_usuario` |
+| `vendedor_id` | UUID | Relación con `perfiles_usuario` (vendedor que atendió) |
 | `numero_pedido` | Integer | Número autoincremental de pedido |
 | `nro_oc_cliente` | String | Orden de compra del cliente |
 | `sustento_url` | String | Link al archivo de sustento (PDF/IMG) |
@@ -251,9 +252,13 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | `aplica_igv` | Boolean | Si el pedido incluye IGV |
 | `subtotal` | Numeric | Monto neto |
 | `descuento_global_monto` | Numeric | Descuento total |
+| `descuento_global_codigo` | String | Código de cargo/descuento SUNAT |
 | `igv_monto` | Numeric | Impuesto total |
 | `total_final` | Numeric | Total a facturar |
-| `estado` | Enum | pendiente_facturacion, procesando, facturado, etc. |
+| `estado` | Enum | pendiente_facturacion, procesando, facturado, error_facturacion, anulado |
+| `motivo_anulacion` | Text | Razón por la cual se anuló el pedido |
+| `anulado_por` | UUID | Relación con `perfiles_usuario` (quién anuló el pedido) |
+| `fecha_anulacion` | Timestamp | Fecha y hora de la anulación |
 | `fecha_creacion` | Timestamp | Timestamp de sistema |
 | `ultima_actualizacion` | Timestamp | Último cambio |
 
@@ -268,25 +273,37 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | `correlativo` | Integer | Número correlativo |
 | `serie_numero` | String | Formato completo (EJ: F001-00000001) |
 | `comprobante_referencia_id` | UUID | ID del comprobante que rectifica (para NC) |
-| `motivo_nota` | String | Razón de la nota de crédito |
+| `motivo_nota` | String | Razón de la nota de crédito (texto explicativo) |
+| `tipo_nota_codigo` | String | Código SUNAT del tipo de nota de crédito (01, 02, etc.) |
+| `tipo_nota_debito_codigo` | String | Código SUNAT del tipo de nota de débito |
 | `fecha_emision` | Date | Fecha de emisión SUNAT |
 | `fecha_vencimiento` | Date | Fecha de vencimiento de pago |
 | `tipo_moneda` | String | PEN, USD |
 | `forma_pago` | String | Contado, Crédito |
+| `total_final` | Numeric | Monto final pagado (mto_imp_venta) |
 | `mto_oper_gravadas` | Numeric | Base imponible gravada |
 | `mto_oper_exoneradas` | Numeric | Base exonerada |
 | `mto_oper_inafectas` | Numeric | Base inafecta |
 | `mto_igv` | Numeric | Impuesto general a las ventas |
+| `icbper` | Numeric | Impuesto a las bolsas plásticas |
+| `mto_isc` | Numeric | Impuesto selectivo al consumo |
 | `total_impuestos` | Numeric | Suma de impuestos |
 | `valor_venta` | Numeric | Valor total sin impuestos |
 | `subtotal` | Numeric | Monto antes de impuestos |
-| `mto_imp_venta` | Numeric | Precio final de venta |
+| `descuento_global_monto` | Numeric | Descuento aplicado al total del comprobante |
+| `descuento_global_codigo` | String | Código de cargo/descuento SUNAT |
 | `enlace_pdf` | String | URL del PDF generado |
 | `enlace_xml` | String | URL del XML firmado |
 | `enlace_cdr` | String | URL de la constancia de recepción |
 | `apisperu_response` | JSONB | Respuesta íntegra del API |
-| `estado_sunat` | Enum | borrador, aceptada_sunat, rechazada, etc. |
-| `estado_pago` | String | (Mantenido por DB Trigger) pendiente, parcial, pagado |
+| `estado_sunat` | Enum | borrador, aceptada_sunat, rechazada_sunat, etc. |
+| `estado_pago` | String | (Gestionado por DB Trigger) Pendiente, Parcial, Pagado |
+| `detraccion_monto` | Numeric | Monto de la detracción calculada |
+| `detraccion_porcentaje` | Numeric | Porcentaje de detracción aplicado |
+| `detraccion_cod_bien` | String | Código SUNAT de bien/servicio sujeto a detracción |
+| `detraccion_cuenta_bn` | String | Cuenta del BN para el depósito |
+| `origen_emision` | String | Manual, WooCommerce, Interno |
+| `cod_establecimiento_anexo` | String | Código de establecimiento SUNAT (por defecto 0000) |
 
 **Tabla: `comprobantes_cuotas`**
 | Columna | Tipo | Descripción |
@@ -303,12 +320,15 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | :--- | :--- | :--- |
 | `id` | UUID | Identificador único |
 | `comprobante_id` | UUID | Comprobante facturado que se está pagando |
-| `metodo_pago_id` | UUID | Relación con el tipo de pago |
+| `metodo_pago_codigo` | String | Relación con `cat_metodos_pago` |
 | `cuenta_bancaria_id` | UUID | (Opcional) A qué cuenta ingresó el dinero |
-| `monto` | Numeric | Monto del abono |
+| `monto_cobrado` | Numeric | Monto del abono |
 | `fecha_pago` | Date | Fecha real en la que el cliente pagó |
-| `referencia` | String | Número de operación o voucher |
-| `vendedor_id` | UUID | Quién registró el cobro en el sistema |
+| `referencia_operacion` | String | Número de operación o voucher |
+| `comprobante_img_url` | String | URL de la imagen del voucher en Supabase Storage |
+| `notas` | Text | Observaciones adicionales del cobro |
+| `registrado_por` | UUID | Quién registró el cobro (perfiles_usuario) |
+| `created_at` | Timestamp | Fecha de registro en sistema |
 
 **Tabla: `cuentas_bancarias_empresa`**
 | Columna | Tipo | Descripción |
@@ -488,6 +508,7 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 |---------|-------|-------------|
 | 1.0.0 | 2025 | Lanzamiento inicial con cotizaciones, pedidos y facturación básica |
 | 1.1.0 | 2026 | Añadido módulo de detracciones y notas de crédito |
+| 1.2.0 | 2026-04-18 | Cronograma de cuotas en historial de cobranzas (waterfall acumulativo) |
 
 ---
 

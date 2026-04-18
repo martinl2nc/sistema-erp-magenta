@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cobrosService } from '@/services/cobros.service';
-import type { RegistrarCobroPayload, CuentaBancaria, CuentasPorCobrarParams } from '@/services/cobros.service';
+import type { RegistrarCobroPayload, CuentaBancaria, CuentasPorCobrarParams, CuotaComprobante } from '@/services/cobros.service';
 import { facturasKeys } from './useFacturas';
 
 // ─── Query Key Factories ─────────────────────────────────────
@@ -12,6 +12,7 @@ export const cobrosKeys = {
   cuentasPorCobrar: (params?: CuentasPorCobrarParams) => [...cobrosKeys.all(), 'cuentas-por-cobrar', params] as const,
   kpis: () => [...cobrosKeys.all(), 'kpis'] as const,
   historial: (comprobanteId: string) => [...cobrosKeys.all(), 'historial', comprobanteId] as const,
+  cuotas: (comprobanteId: string) => [...cobrosKeys.all(), 'cuotas', comprobanteId] as const,
 };
 
 export const metodosPagoKeys = {
@@ -49,6 +50,19 @@ export function useHistorialCobros(comprobanteId?: string) {
     queryKey: cobrosKeys.historial(comprobanteId!),
     queryFn: () => cobrosService.getHistorialCobros(comprobanteId!),
     enabled: !!comprobanteId,
+  });
+}
+
+/**
+ * Fetches the scheduled installments for a credit comprobante.
+ * Only enabled when comprobanteId is provided and the drawer is open.
+ */
+export function useCuotasComprobante(comprobanteId?: string, isOpen: boolean = false) {
+  return useQuery<CuotaComprobante[]>({
+    queryKey: cobrosKeys.cuotas(comprobanteId ?? ''),
+    queryFn: () => cobrosService.getCuotasComprobante(comprobanteId!),
+    enabled: !!comprobanteId && isOpen,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

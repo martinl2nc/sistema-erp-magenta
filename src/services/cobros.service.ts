@@ -46,7 +46,6 @@ export interface Cobro {
   } | null;
   perfiles_usuario?: {
     nombre: string;
-    apellido: string;
   } | null;
 }
 
@@ -79,6 +78,13 @@ export interface CuentaBancaria {
   activo: boolean;
   created_at: string;
   _tiene_pagos?: boolean;
+}
+
+export interface CuotaComprobante {
+  comprobante_id: string;
+  numero_cuota: number;
+  monto: number;
+  fecha_pago: string;
 }
 
 export interface CuentasPorCobrarParams {
@@ -162,7 +168,7 @@ export const getHistorialCobros = async (comprobanteId: string): Promise<Cobro[]
       *,
       cat_metodos_pago ( codigo, descripcion ),
       cuentas_bancarias_empresa ( banco, numero_cuenta ),
-      perfiles_usuario:registrado_por ( nombre, apellido )
+      perfiles_usuario:registrado_por ( nombre )
     `)
     .eq('comprobante_id', comprobanteId)
     .order('fecha_pago', { ascending: false });
@@ -301,6 +307,20 @@ export const deleteCuentaBancaria = async (id: string): Promise<void> => {
   if (error) throw new Error('Error al eliminar cuenta bancaria: ' + error.message);
 };
 
+/**
+ * Fetches the scheduled installments for a credit comprobante.
+ */
+export const getCuotasComprobante = async (comprobanteId: string): Promise<CuotaComprobante[]> => {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('comprobantes_cuotas')
+    .select('comprobante_id, numero_cuota, monto, fecha_pago')
+    .eq('comprobante_id', comprobanteId)
+    .order('numero_cuota', { ascending: true });
+  if (error) throw new Error('Error al cargar cuotas del comprobante: ' + error.message);
+  return (data ?? []) as CuotaComprobante[];
+};
+
 // Grouped export for convenient imports
 export const cobrosService = {
   getCuentasPorCobrar,
@@ -312,4 +332,5 @@ export const cobrosService = {
   createCuentaBancaria,
   updateCuentaBancaria,
   deleteCuentaBancaria,
+  getCuotasComprobante,
 };

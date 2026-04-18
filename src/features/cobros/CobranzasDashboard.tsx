@@ -17,7 +17,7 @@ const ESTADO_PAGO_STYLES: Record<string, string> = {
   Pagado: 'bg-[#10B981]/10 text-[#10B981]',
 };
 
-type FormaPagoFilter = '' | 'Contado' | 'Crédito';
+type FormaPagoFilter = '' | 'Contado' | 'Credito';
 
 export default function CobranzasDashboard() {
   const { role } = useAuth();
@@ -119,7 +119,7 @@ export default function CobranzasDashboard() {
           >
             <option value="">Todas las formas</option>
             <option value="Contado">Contado</option>
-            <option value="Crédito">Crédito</option>
+            <option value="Credito">Crédito</option>
           </select>
           <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-[#94A3B8]">
             <iconify-icon icon="solar:alt-arrow-down-linear" class="text-lg"></iconify-icon>
