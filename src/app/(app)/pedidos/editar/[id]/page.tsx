@@ -30,7 +30,8 @@ export default async function EditarPedidoPage({ params }: { params: Promise<{ i
         *,
         cotizaciones ( numero_correlativo ),
         clientes ( id, razon_social, nombres_contacto, apellidos_contacto, numero_documento, tipo_documento, email, direccion, comprobante_preferido, ubigueo ),
-        perfiles_usuario ( nombre )
+        vendedor:perfiles_usuario!vendedor_id ( nombre ),
+        anulador:perfiles_usuario!anulado_por ( nombre )
       `)
       .eq('id', id)
       .single(),
