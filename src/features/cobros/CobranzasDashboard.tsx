@@ -89,6 +89,13 @@ export default function CobranzasDashboard() {
             <iconify-icon icon="solar:transfer-horizontal-linear" class="text-sm"></iconify-icon>
             Transacciones
           </Link>
+          <Link
+            href="/cobranzas/aging"
+            className="flex items-center gap-1.5 text-xs text-[#94A3B8] hover:text-[#3B82F6] transition-colors border border-[#334155] hover:border-[#3B82F6]/40 rounded-md px-3 py-1.5"
+          >
+            <iconify-icon icon="solar:chart-2-linear" class="text-sm"></iconify-icon>
+            Antigüedad
+          </Link>
         </div>
         <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
           <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>

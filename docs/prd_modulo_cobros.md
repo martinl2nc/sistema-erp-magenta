@@ -518,6 +518,60 @@ Ruta: `/cobranzas/transacciones`. Accesible desde botón "Transacciones" en head
 
 > Paginación: pendiente de implementar (roadmap).
 
+### 3.8 Reporte de Antigüedad de Deuda — `/cobranzas/aging`
+
+Ruta: `/cobranzas/aging`. Accesible desde botón "Antigüedad" en el header del dashboard de cobranzas.
+
+**Propósito**: Priorizar la gestión de cobranza B2B identificando qué clientes tienen deuda más atrasada.
+
+#### Lógica de fecha efectiva de vencimiento (por comprobante)
+
+| Condición | Fecha usada |
+|-----------|-------------|
+| Tiene cuotas en `comprobantes_cuotas` con `fecha_pago < hoy` | `MIN(cuota.fecha_pago)` vencida |
+| No tiene cuotas vencidas pero tiene `fecha_vencimiento` | `comprobantes.fecha_vencimiento` |
+| Sin cuotas ni fecha de vencimiento | `comprobantes.fecha_emision` (fallback) |
+
+#### Buckets de antigüedad
+
+| Bucket | Condición (`dias_vencido`) | Color UI |
+|--------|---------------------------|----------|
+| Por Vencer | `<= 0` | Verde `#10B981` |
+| 1 - 30 días | `1 a 30` | Amarillo |
+| 31 - 60 días | `31 a 60` | Naranja |
+| 61 - 90 días | `61 a 90` | Rojo claro |
+| + 90 días | `> 90` | Rojo intenso |
+
+#### RPCs de base de datos
+
+| RPC | Descripción |
+|-----|-------------|
+| `get_aging_report()` | Una fila por cliente con 5 buckets pre-calculados y `count_comprobantes`. Ordenado por `deuda_total DESC` |
+| `get_aging_detalle(p_cliente_id uuid)` | Una fila por comprobante del cliente con `dias_vencido` y `bucket`. Carga lazy al expandir |
+
+**Notas de implementación:**
+- `comprobantes_cuotas.fecha_pago` es `timestamptz` → se castea a `::date` con `MIN(fecha_pago::date)` en el CTE
+- Los alias internos del CTE evitan ambigüedad con columnas del `RETURNS TABLE` en PL/pgSQL
+- `GRANT EXECUTE TO authenticated, anon` + `NOTIFY pgrst, 'reload schema'` requeridos tras crear los RPCs
+
+#### Archivos
+
+| Archivo | Descripción |
+|---------|-------------|
+| `src/features/cobros/AgingReport.tsx` | Componente principal: KPI cards + tabla expandible |
+| `src/app/(app)/cobranzas/aging/page.tsx` | Server Component — ruta `/cobranzas/aging` |
+| `src/services/cobros.service.ts` | Tipos `AgingReportRow`, `AgingDetalleRow` + funciones `getAgingReport()`, `getAgingDetalle()` |
+| `src/hooks/useCobros.ts` | `agingKeys` factory + hooks `useAgingReport()`, `useAgingDetalle(clienteId)` |
+
+#### Criterios de aceptación
+
+- [x] Tabla muestra un cliente por fila con deuda total y los 5 buckets de mora
+- [x] Click en una fila expande los comprobantes individuales de ese cliente (lazy load)
+- [x] KPI cards muestran totales globales de cada bucket + % de deuda vencida
+- [x] Footer de tabla con sumas de cada columna
+- [x] Comprobantes sin `fecha_vencimiento` usan `fecha_emision` como fallback
+- [x] Comprobantes a crédito con cuotas usan la cuota vencida más antigua como referencia
+
 ---
 
 ## 📐 4. Diagrama de Relaciones
@@ -572,6 +626,7 @@ Comprobantes ◄──── comprobantes (NCs via comprobante_referencia_id)
 - [x] Storage: vouchers se suben correctamente al bucket `vouchers_cobros`
 - [x] Anulación: soft-delete auditado con motivo, no DELETE físico. Vista y trigger excluyen anulados
 - [x] Listado general de transacciones: vista maestro para conciliación bancaria con filtros
+- [x] Reporte de antigüedad de deuda: tabla por cliente con 5 buckets de mora y detalle expandible
 - [ ] Paginación en listado de transacciones (roadmap)
 
 ### Migración Cuentas Bancarias

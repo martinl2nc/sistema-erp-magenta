@@ -432,6 +432,32 @@ export interface AnularCobroPayload {
   motivo: string;
 }
 
+export interface AgingReportRow {
+  cliente_id: string;
+  razon_social: string | null;
+  nombres_contacto: string;
+  apellidos_contacto: string;
+  deuda_total: number;
+  por_vencer: number;
+  vencido_1_30: number;
+  vencido_31_60: number;
+  vencido_61_90: number;
+  vencido_mas_90: number;
+  count_comprobantes: number;
+}
+
+export interface AgingDetalleRow {
+  comprobante_id: string;
+  serie_numero: string;
+  fecha_emision: string;
+  fecha_vencimiento: string | null;
+  forma_pago: string;
+  total_facturado: number;
+  saldo_pendiente: number;
+  dias_vencido: number;
+  bucket: 'por_vencer' | 'vencido_1_30' | 'vencido_31_60' | 'vencido_61_90' | 'vencido_mas_90';
+}
+
 export const uploadVoucherCobro = async (file: File, comprobanteId: string): Promise<string> => {
   const supabase = createClient();
   const ext = file.name.split('.').pop() ?? 'jpg';
@@ -445,6 +471,20 @@ export const uploadVoucherCobro = async (file: File, comprobanteId: string): Pro
 
   const { data } = supabase.storage.from('vouchers_cobros').getPublicUrl(path);
   return data.publicUrl;
+};
+
+export const getAgingReport = async (): Promise<AgingReportRow[]> => {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('get_aging_report');
+  if (error) throw new Error('Error al cargar reporte de antigüedad: ' + error.message);
+  return (data ?? []) as AgingReportRow[];
+};
+
+export const getAgingDetalle = async (clienteId: string): Promise<AgingDetalleRow[]> => {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('get_aging_detalle', { p_cliente_id: clienteId });
+  if (error) throw new Error('Error al cargar detalle de antigüedad: ' + error.message);
+  return (data ?? []) as AgingDetalleRow[];
 };
 
 export const anularCobro = async (payload: AnularCobroPayload): Promise<void> => {
@@ -478,4 +518,6 @@ export const cobrosService = {
   getAllCobros,
   getAllCobrosTotales,
   uploadVoucherCobro,
+  getAgingReport,
+  getAgingDetalle,
 };

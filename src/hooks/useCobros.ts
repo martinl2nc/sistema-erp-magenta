@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cobrosService } from '@/services/cobros.service';
-import type { RegistrarCobroPayload, AnularCobroPayload, CuentaBancaria, CuentasPorCobrarParams, CuotaComprobante, AllCobrosParams } from '@/services/cobros.service';
+import type { RegistrarCobroPayload, AnularCobroPayload, CuentaBancaria, CuentasPorCobrarParams, CuotaComprobante, AllCobrosParams, AgingReportRow, AgingDetalleRow } from '@/services/cobros.service';
 import type { PaginatedCobros, AllCobrosTotales } from '@/services/cobros.service';
 import { facturasKeys } from './useFacturas';
 
@@ -16,6 +16,12 @@ export const cobrosKeys = {
   cuotas: (comprobanteId: string) => [...cobrosKeys.all(), 'cuotas', comprobanteId] as const,
   listado: (params?: AllCobrosParams) => [...cobrosKeys.all(), 'listado', params] as const,
   totales: (params?: Omit<AllCobrosParams, 'page' | 'pageSize'>) => [...cobrosKeys.all(), 'totales', params] as const,
+};
+
+export const agingKeys = {
+  all: () => ['aging'] as const,
+  report: () => [...agingKeys.all(), 'report'] as const,
+  detalle: (clienteId: string) => [...agingKeys.all(), 'detalle', clienteId] as const,
 };
 
 export const metodosPagoKeys = {
@@ -174,6 +180,23 @@ export function useAnularCobro(comprobanteId: string) {
  * Soft-deletes a bank account (sets activo = false).
  * Invalidates the bank accounts cache.
  */
+export function useAgingReport() {
+  return useQuery<AgingReportRow[]>({
+    queryKey: agingKeys.report(),
+    queryFn: () => cobrosService.getAgingReport(),
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function useAgingDetalle(clienteId?: string) {
+  return useQuery<AgingDetalleRow[]>({
+    queryKey: agingKeys.detalle(clienteId ?? ''),
+    queryFn: () => cobrosService.getAgingDetalle(clienteId!),
+    enabled: !!clienteId,
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
 export function useDeleteCuentaBancaria() {
   const queryClient = useQueryClient();
   return useMutation({

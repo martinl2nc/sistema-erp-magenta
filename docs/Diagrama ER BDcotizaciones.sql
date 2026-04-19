@@ -534,6 +534,19 @@ ALTER TABLE "configuracion_series" ADD FOREIGN KEY ("tipo_doc_codigo") REFERENCE
 --   Soft-delete auditado: setea anulado=true + campos de auditoría
 --   Dispara el trigger UPDATE que recalcula estado_pago automáticamente
 
+-- get_aging_report()
+--   Devuelve una fila por cliente con deuda agrupada en 5 buckets de mora:
+--   por_vencer (días <= 0), vencido_1_30, vencido_31_60, vencido_61_90, vencido_mas_90
+--   Fecha efectiva de vencimiento: MIN(cuota vencida) → fecha_vencimiento → fecha_emision
+--   Solo incluye comprobantes con saldo_pendiente > 0
+--   GRANT EXECUTE TO authenticated, anon
+
+-- get_aging_detalle(p_cliente_id uuid)
+--   Devuelve una fila por comprobante para un cliente específico con:
+--   serie_numero, fechas, saldo_pendiente, dias_vencido, bucket (text)
+--   Uso: carga lazy cuando el usuario expande un cliente en AgingReport.tsx
+--   GRANT EXECUTE TO authenticated, anon
+
 -- ==========================================
 -- STORAGE BUCKETS
 -- ==========================================

@@ -81,6 +81,7 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 - [x] Visualización del cronograma de cuotas en el historial (facturas a crédito): estado Pagado/Vencida/Pendiente calculado por lógica waterfall acumulativa
 - [x] Anulación de cobros (soft-delete auditado, solo admin): con motivo, fecha y usuario registrado
 - [x] Listado general de transacciones (`/cobranzas/transacciones`) para conciliación bancaria con filtros por fecha, cuenta y método
+- [x] Reporte de Antigüedad de Deuda (`/cobranzas/aging`): tabla agrupada por cliente con buckets Por Vencer / 1-30 / 31-60 / 61-90 / +90 días, detalle de comprobantes expandible por cliente
 - Para un detalle técnico completo, consulta: `@[docs/prd_modulo_cobros.md]`
 
 #### Módulo de Clientes y Vendedores
@@ -517,6 +518,7 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | 1.1.0 | 2026 | Añadido módulo de detracciones y notas de crédito |
 | 1.2.0 | 2026-04-18 | Cronograma de cuotas en historial de cobranzas (waterfall acumulativo) |
 | 1.3.0 | 2026-04-18 | Anulación auditada de cobros (soft-delete), campo moneda en cobros, upload de vouchers, listado general de transacciones para conciliación bancaria |
+| 1.4.0 | 2026-04-19 | Reporte de Antigüedad de Deuda (Aging Report): RPCs `get_aging_report` y `get_aging_detalle`, vista `/cobranzas/aging` con tabla expandible por cliente y 5 buckets de mora |
 
 ---
 
