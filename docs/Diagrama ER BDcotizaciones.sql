@@ -77,33 +77,22 @@ CREATE TABLE "empresa_configuracion" (
   "nombre_comercial" varchar,
   "direccion" text,
   "ubigueo" varchar DEFAULT '150101',
+  "departamento" varchar,
+  "provincia" varchar,
+  "distrito" varchar,
   "cod_establecimiento_anexo" varchar DEFAULT '0000',
   "cuentas_bancarias" text,
   "terminos_condiciones" text,
   "logo_url" text,
-  "detraccion_cuenta_bn" varchar
-);
-
-CREATE TABLE "configuracion_empresa" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  "ruc" varchar NOT NULL,
-  "razon_social" varchar NOT NULL,
-  "nombre_comercial" varchar,
-  "direccion" text,
-  "ubigueo" varchar DEFAULT '150101',
-  "departamento" varchar,
-  "provincia" varchar,
-  "distrito" varchar,
-  "cod_establecimiento" varchar DEFAULT '0000',
+  "detraccion_cuenta_bn" varchar,
   "apisperu_token" text,
   "apisperu_environment" varchar DEFAULT 'beta' CHECK (apisperu_environment IN ('beta', 'produccion')),
   "sol_user" text,
   "sol_pass" text,
   "certificado_pem" text,
-  "activo" boolean DEFAULT true,
-  "created_at" timestamp with time zone DEFAULT now(),
-  "updated_at" timestamp with time zone DEFAULT now()
+  "activo" boolean DEFAULT true
 );
+
 
 CREATE TABLE "configuracion_series" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
