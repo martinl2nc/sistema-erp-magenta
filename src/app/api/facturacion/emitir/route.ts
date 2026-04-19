@@ -51,6 +51,24 @@ export async function POST(request: Request) {
     // Permitir re-intento si faltan los archivos, incluso si está aceptada
     const yaAceptado = comprobante.estado_sunat === 'aceptada_sunat';
 
+    // Nota de Venta (código '80'): comprobante interno — no viaja a ApisPeru
+    if (comprobante.tipo_doc_codigo === '80') {
+      const supabaseAdmin = createAdminClient();
+      const serieNumero = `${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}`;
+      await supabaseAdmin
+        .from('comprobantes')
+        .update({ estado_sunat: 'interno' })
+        .eq('id', comprobante_id);
+      return NextResponse.json({
+        success: true,
+        message: 'Nota de Venta registrada',
+        serie_numero: serieNumero,
+        enlacePdf: null,
+        enlaceXml: null,
+        enlaceCdr: null,
+      });
+    }
+
     const { data: detalles } = await supabase.from('comprobantes_detalles').select('*').eq('comprobante_id', comprobante_id);
     const { data: cliente } = await supabase.from('clientes').select('*').eq('id', comprobante.cliente_id).single();
     const { data: empresa } = await supabase.from('empresa_configuracion').select('*').limit(1).single();
@@ -86,8 +104,19 @@ export async function POST(request: Request) {
       fecha: String(c.fecha_pago).replace(' ', 'T').split('T')[0],
     }));
 
+    let detraccionDescBien: string | null = null;
+    if (comprobante.detraccion_cod_bien) {
+      const { data: bienData } = await supabase
+        .from('cat_bien_servicio_detraccion')
+        .select('descripcion')
+        .eq('codigo', comprobante.detraccion_cod_bien)
+        .maybeSingle();
+      detraccionDescBien = bienData?.descripcion ?? null;
+    }
+
     const comprobanteConCuotas: ComprobanteData = {
       ...(comprobante as ComprobanteData),
+      detraccion_desc_bien: detraccionDescBien,
       cuotas: cuotas.length > 0 ? cuotas : undefined,
     };
 

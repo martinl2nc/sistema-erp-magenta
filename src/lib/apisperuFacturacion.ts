@@ -139,6 +139,7 @@ export interface ComprobanteData {
   descuento_global_codigo?: string;
   // Detracción
   detraccion_cod_bien: string | null;
+  detraccion_desc_bien?: string | null;
   detraccion_cod_medio_pago: string | null;
   detraccion_porcentaje: number | null;
   detraccion_monto: number | null;
@@ -188,6 +189,15 @@ export interface ComprobanteReferenciadoData {
   serie_numero: string;    // ej: 'F001-00000123'
   fecha_emision: string;   // 'YYYY-MM-DD' o ISO
 }
+
+// ─── Mapeo código medio de pago detracción → descripción ────
+const MEDIO_PAGO_DESC: Record<string, string> = {
+  '001': 'Depósito en cuenta',
+  '002': 'Giro',
+  '003': 'Transferencia de fondos',
+  '004': 'Orden de pago',
+  '005': 'Tarjeta de débito',
+};
 
 // ─── Mapeo tipo_documento local → tipoDoc SUNAT ─────────────
 
@@ -360,7 +370,12 @@ export function buildInvoicePayload(
           : undefined,
         legends: [
           { code: '1000', value: numeroALetras(totals.mtoImpVenta) },
-          ...(comprobante.tipo_doc_codigo !== '07' && comprobante.detraccion_cod_bien ? [{ code: '2006', value: 'Operación sujeta a detracción' }] : []),
+          ...(comprobante.tipo_doc_codigo !== '07' && comprobante.detraccion_cod_bien ? [
+            { code: '2006', value: 'Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central' },
+            { code: '2006', value: `Bien o Servicio: ${comprobante.detraccion_cod_bien}${comprobante.detraccion_desc_bien ? '  ' + comprobante.detraccion_desc_bien : ''}` },
+            { code: '2006', value: `Medio de pago: ${comprobante.detraccion_cod_medio_pago ?? '001'}  ${MEDIO_PAGO_DESC[comprobante.detraccion_cod_medio_pago ?? '001'] ?? ''}` },
+            { code: '2006', value: `Nro. Cta. Banco de la Nación: ${comprobante.detraccion_cuenta_bn ?? ''}   Porcentaje de detracción: ${Number(comprobante.detraccion_porcentaje ?? 0).toFixed(2)}   Monto detracción: S/ ${Number(comprobante.detraccion_monto ?? 0).toFixed(2)}` },
+          ] : []),
         ],
       };
     })(),

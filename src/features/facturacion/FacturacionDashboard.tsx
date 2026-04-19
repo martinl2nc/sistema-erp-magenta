@@ -414,7 +414,7 @@ export default function FacturacionPage() {
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">SOL</span>
                         )}
                       </div>
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : f.estado_sunat === 'interno' ? 'bg-[#334155]/40 text-[#64748B]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
                         {f.estado_sunat}
                       </span>
                     </div>
@@ -474,7 +474,7 @@ export default function FacturacionPage() {
                           <iconify-icon icon="solar:pen-linear" class="text-base"></iconify-icon>
                         </button>
                       )}
-                      {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
+                      {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && f.tipo_doc_codigo !== '80' && (
                         <button onClick={() => setSelectedComprobante(f)}
                           className="ml-auto text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
                           <iconify-icon icon="solar:document-add-linear" class="text-base"></iconify-icon>
@@ -516,7 +516,7 @@ export default function FacturacionPage() {
                         <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{formatDate(f.fecha_emision)}</td>
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium text-right">{formatCurrency(f.mto_imp_venta)}</td>
                         <td className="px-5 py-3.5">
-                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : f.estado_sunat === 'interno' ? 'bg-[#334155]/40 text-[#64748B]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
                             {f.estado_sunat}
                           </span>
                         </td>
@@ -572,7 +572,7 @@ export default function FacturacionPage() {
                                 <iconify-icon icon="solar:pen-linear" class="text-xs"></iconify-icon>
                               </button>
                             )}
-                            {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
+                            {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && f.tipo_doc_codigo !== '80' && (
                               <button
                                 onClick={() => setSelectedComprobante(f)}
                                 className="border border-red-500/30 text-red-400 text-xs font-medium px-2 py-1.5 rounded-md hover:bg-red-500/10 transition-colors"

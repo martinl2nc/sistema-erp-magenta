@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import {
   useQuotesList,
@@ -81,7 +82,9 @@ export default function QuotesList() {
       '¿Estás seguro de que deseas eliminar esta cotización?'
     )
     if (!confirmed) return
-    deleteMutation.mutate(id)
+    deleteMutation.mutate(id, {
+      onError: (err) => toast.error(err instanceof Error ? err.message : 'Error al eliminar la cotización'),
+    })
   }
 
   const formatDate = (dateString: string) => {

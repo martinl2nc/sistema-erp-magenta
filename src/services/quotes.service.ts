@@ -264,15 +264,17 @@ export const quotesService = {
   async updateQuoteStatus(id: string, status: QuoteStatus): Promise<Quote> {
     const supabase = createClient();
     
-    // Validar que no tenga un pedido asociado
-    const { count, error: countErr } = await supabase
-      .from('pedidos')
-      .select('*', { count: 'exact', head: true })
-      .eq('cotizacion_id', id);
+    // Solo bloquear si ya tiene pedido y no se está aprobando (convertir a pedido es el único flujo válido)
+    if (status !== 'Aprobada') {
+      const { count, error: countErr } = await supabase
+        .from('pedidos')
+        .select('*', { count: 'exact', head: true })
+        .eq('cotizacion_id', id);
 
-    if (countErr) throw countErr;
-    if (count && count > 0) {
-      throw new Error('No se puede modificar el estado de la cotización porque ya ha sido convertida a pedido.');
+      if (countErr) throw countErr;
+      if (count && count > 0) {
+        throw new Error('No se puede modificar el estado de la cotización porque ya ha sido convertida a pedido.');
+      }
     }
 
     const { data, error } = await supabase

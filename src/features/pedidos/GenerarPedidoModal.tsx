@@ -143,7 +143,7 @@ export default function GenerarPedidoModal({ isOpen, onClose, quote }: Props) {
       );
 
       await quotesService.updateQuoteStatus(quote.id, 'Aprobada');
-      queryClient.invalidateQueries({ queryKey: quotesKeys.list() });
+      queryClient.invalidateQueries({ queryKey: quotesKeys.lists() });
       toast.success('Pedido generado correctamente');
       handleClose();
     } catch (err) {
