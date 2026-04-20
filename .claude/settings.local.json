@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk tsc *)",
+      "Bash(npx tsc *)",
+      "Bash(/c/Users/Carlos/AppData/Local/fnm_multishells/28552_1776453102593/node ./node_modules/.bin/tsc --noEmit)",
+      "Bash(C:/Users/Carlos/AppData/Local/fnm_multishells/28552_1776453102593/node.exe \"D:/Personal_Projects/sistema-cotizaciones-v2/node_modules/.bin/tsc\" --noEmit)",
+      "Bash(C:/Users/Carlos/AppData/Local/fnm_multishells/28552_1776453102593/node.exe \"D:/Personal_Projects/sistema-cotizaciones-v2/node_modules/typescript/bin/tsc\" --noEmit --project \"D:/Personal_Projects/sistema-cotizaciones-v2/tsconfig.json\")"
+    ]
+  }
+}

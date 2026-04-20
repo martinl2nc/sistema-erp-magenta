@@ -59,6 +59,13 @@ CREATE TABLE "cat_cargos_descuentos" (
   "created_at" timestamp with time zone DEFAULT now()
 );
 
+CREATE TABLE "cat_metodos_pago" (
+  "codigo" varchar PRIMARY KEY,
+  "descripcion" varchar NOT NULL,
+  "requiere_referencia" boolean DEFAULT false,
+  "activo" boolean DEFAULT true
+);
+
 -- ==========================================
 -- CONFIGURATION TABLES
 -- ==========================================
@@ -70,33 +77,22 @@ CREATE TABLE "empresa_configuracion" (
   "nombre_comercial" varchar,
   "direccion" text,
   "ubigueo" varchar DEFAULT '150101',
+  "departamento" varchar,
+  "provincia" varchar,
+  "distrito" varchar,
   "cod_establecimiento_anexo" varchar DEFAULT '0000',
   "cuentas_bancarias" text,
   "terminos_condiciones" text,
   "logo_url" text,
-  "detraccion_cuenta_bn" varchar
-);
-
-CREATE TABLE "configuracion_empresa" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  "ruc" varchar NOT NULL,
-  "razon_social" varchar NOT NULL,
-  "nombre_comercial" varchar,
-  "direccion" text,
-  "ubigueo" varchar DEFAULT '150101',
-  "departamento" varchar,
-  "provincia" varchar,
-  "distrito" varchar,
-  "cod_establecimiento" varchar DEFAULT '0000',
+  "detraccion_cuenta_bn" varchar,
   "apisperu_token" text,
   "apisperu_environment" varchar DEFAULT 'beta' CHECK (apisperu_environment IN ('beta', 'produccion')),
   "sol_user" text,
   "sol_pass" text,
   "certificado_pem" text,
-  "activo" boolean DEFAULT true,
-  "created_at" timestamp with time zone DEFAULT now(),
-  "updated_at" timestamp with time zone DEFAULT now()
+  "activo" boolean DEFAULT true
 );
+
 
 CREATE TABLE "configuracion_series" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -106,6 +102,17 @@ CREATE TABLE "configuracion_series" (
   "prefijo_esperado" varchar,
   "activo" boolean DEFAULT true,
   "fecha_creacion" timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE "cuentas_bancarias_empresa" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "banco" varchar NOT NULL,
+  "numero_cuenta" varchar NOT NULL,
+  "cci" varchar,
+  "moneda" varchar DEFAULT 'PEN',
+  "es_detraccion" boolean DEFAULT false,
+  "activo" boolean DEFAULT true,
+  "created_at" timestamp with time zone DEFAULT timezone('utc'::text, now())
 );
 
 -- ==========================================
@@ -222,6 +229,9 @@ CREATE TABLE "pedidos" (
   "igv_monto" numeric(10,2) DEFAULT 0,
   "total_final" numeric(10,2) DEFAULT 0,
   "estado" varchar DEFAULT 'pendiente_facturacion' CHECK (estado IN ('pendiente_facturacion', 'procesando_facturacion', 'facturado', 'error_facturacion', 'anulado')),
+  "motivo_anulacion" text,
+  "anulado_por" uuid,
+  "fecha_anulacion" timestamp with time zone,
   "fecha_creacion" timestamp with time zone DEFAULT now(),
   "ultima_actualizacion" timestamp with time zone DEFAULT now()
 );
@@ -283,7 +293,9 @@ CREATE TABLE "comprobantes" (
   "detraccion_cod_medio_pago" varchar,
   "detraccion_porcentaje" numeric(10,2),
   "detraccion_monto" numeric(10,2),
-  "detraccion_cuenta_bn" varchar
+  "detraccion_cuenta_bn" varchar,
+  "origen_emision" varchar,
+  "estado_pago" varchar DEFAULT 'Pendiente'
 );
 
 CREATE TABLE "comprobantes_detalles" (
@@ -322,6 +334,26 @@ CREATE TABLE "comprobantes_cuotas" (
   "monto" numeric NOT NULL,
   "fecha_pago" timestamp with time zone NOT NULL,
   "created_at" timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE "cobros" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "comprobante_id" uuid NOT NULL,
+  "metodo_pago_codigo" varchar NOT NULL,
+  "cuenta_bancaria_id" uuid,
+  "monto_cobrado" numeric NOT NULL CHECK (monto_cobrado > 0),
+  "moneda" varchar(3) NOT NULL DEFAULT 'PEN' CHECK (moneda IN ('PEN', 'USD')),
+  "fecha_pago" date DEFAULT CURRENT_DATE,
+  "referencia_operacion" varchar,
+  "comprobante_img_url" text,
+  "notas" text,
+  "registrado_por" uuid,
+  "created_at" timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  -- Soft-delete / anulación auditada
+  "anulado" boolean NOT NULL DEFAULT false,
+  "anulado_por" uuid,
+  "fecha_anulacion" timestamp with time zone,
+  "motivo_anulacion" text
 );
 
 -- ==========================================
@@ -428,6 +460,7 @@ ALTER TABLE "cotizacion_envios" ADD FOREIGN KEY ("cotizacion_id") REFERENCES "co
 ALTER TABLE "pedidos" ADD FOREIGN KEY ("cotizacion_id") REFERENCES "cotizaciones" ("id");
 ALTER TABLE "pedidos" ADD FOREIGN KEY ("cliente_id") REFERENCES "clientes" ("id");
 ALTER TABLE "pedidos" ADD FOREIGN KEY ("vendedor_id") REFERENCES "perfiles_usuario" ("id");
+ALTER TABLE "pedidos" ADD FOREIGN KEY ("anulado_por") REFERENCES "perfiles_usuario" ("id");
 
 ALTER TABLE "pedidos_lineas" ADD FOREIGN KEY ("pedido_id") REFERENCES "pedidos" ("id") ON DELETE CASCADE;
 ALTER TABLE "pedidos_lineas" ADD FOREIGN KEY ("producto_id") REFERENCES "productos" ("id");
@@ -449,6 +482,12 @@ ALTER TABLE "comprobantes_detalles" ADD FOREIGN KEY ("tipo_sis_isc_codigo") REFE
 
 ALTER TABLE "comprobantes_cuotas" ADD FOREIGN KEY ("comprobante_id") REFERENCES "comprobantes" ("id") ON DELETE CASCADE;
 
+ALTER TABLE "cobros" ADD FOREIGN KEY ("comprobante_id") REFERENCES "comprobantes" ("id") ON DELETE CASCADE;
+ALTER TABLE "cobros" ADD FOREIGN KEY ("metodo_pago_codigo") REFERENCES "cat_metodos_pago" ("codigo");
+ALTER TABLE "cobros" ADD FOREIGN KEY ("cuenta_bancaria_id") REFERENCES "cuentas_bancarias_empresa" ("id");
+ALTER TABLE "cobros" ADD FOREIGN KEY ("registrado_por") REFERENCES "perfiles_usuario" ("id");
+ALTER TABLE "cobros" ADD FOREIGN KEY ("anulado_por") REFERENCES "perfiles_usuario" ("id");
+
 ALTER TABLE "comunicacion_baja_items" ADD FOREIGN KEY ("comunicacion_baja_id") REFERENCES "comunicacion_baja" ("id") ON DELETE CASCADE;
 ALTER TABLE "comunicacion_baja_items" ADD FOREIGN KEY ("comprobante_id") REFERENCES "comprobantes" ("id");
 
@@ -459,3 +498,49 @@ ALTER TABLE "apisperu_logs" ADD FOREIGN KEY ("comprobante_id") REFERENCES "compr
 ALTER TABLE "apisperu_logs" ADD FOREIGN KEY ("emisor_user_id") REFERENCES "perfiles_usuario" ("id");
 
 ALTER TABLE "configuracion_series" ADD FOREIGN KEY ("tipo_doc_codigo") REFERENCES "cat_tipo_documento" ("codigo");
+
+-- ==========================================
+-- VIEWS
+-- ==========================================
+
+-- Vista maestra de cuentas por cobrar
+-- Excluye cobros anulados del cálculo de total_cobrado y saldo_pendiente
+-- CREATE OR REPLACE VIEW vista_cuentas_por_cobrar AS ...
+
+-- ==========================================
+-- FUNCTIONS & TRIGGERS
+-- ==========================================
+
+-- fn_actualizar_estado_pago(): trigger AFTER INSERT/UPDATE/DELETE en cobros
+--   Recalcula estado_pago en comprobantes excluyendo cobros con anulado = true
+
+-- registrar_cobro(p_comprobante_id, p_metodo_pago_codigo, p_cuenta_bancaria_id,
+--                 p_monto_cobrado, p_fecha_pago, p_referencia_operacion,
+--                 p_comprobante_img_url, p_notas, p_registrado_por, p_moneda)
+--   RPC atómica: valida saldo (excluye anulados), inserta cobro
+
+-- anular_cobro(p_cobro_id, p_anulado_por, p_motivo)
+--   Soft-delete auditado: setea anulado=true + campos de auditoría
+--   Dispara el trigger UPDATE que recalcula estado_pago automáticamente
+
+-- get_aging_report()
+--   Devuelve una fila por cliente con deuda agrupada en 5 buckets de mora:
+--   por_vencer (días <= 0), vencido_1_30, vencido_31_60, vencido_61_90, vencido_mas_90
+--   Fecha efectiva de vencimiento: MIN(cuota vencida) → fecha_vencimiento → fecha_emision
+--   Solo incluye comprobantes con saldo_pendiente > 0
+--   GRANT EXECUTE TO authenticated, anon
+
+-- get_aging_detalle(p_cliente_id uuid)
+--   Devuelve una fila por comprobante para un cliente específico con:
+--   serie_numero, fechas, saldo_pendiente, dias_vencido, bucket (text)
+--   Uso: carga lazy cuando el usuario expande un cliente en AgingReport.tsx
+--   GRANT EXECUTE TO authenticated, anon
+
+-- ==========================================
+-- STORAGE BUCKETS
+-- ==========================================
+
+-- vouchers_cobros: bucket público, 10MB máx
+--   Tipos permitidos: image/jpeg, image/jpg, image/png, application/pdf
+--   Path: {comprobante_id}/{timestamp}.{ext}
+--   Políticas: authenticated can INSERT, SELECT, DELETE

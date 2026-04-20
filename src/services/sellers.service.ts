@@ -19,17 +19,52 @@ export interface CreateSellerData {
   password: string;
 }
 
+export interface SellersListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
+export interface PaginatedSellers {
+  data: Seller[];
+  count: number;
+}
+
 export const sellersService = {
-  async getSellers(): Promise<Seller[]> {
+  async getSellers(params?: SellersListParams): Promise<PaginatedSellers> {
+    const supabase = createClient();
+    const { page = 1, pageSize = 10, search } = params ?? {};
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('perfiles_usuario')
+      .select('*', { count: 'exact' })
+      .eq('rol', 'vendedor')
+      .order('nombre', { ascending: true })
+      .range(from, to);
+
+    if (search?.trim()) {
+      const term = `%${search.trim()}%`;
+      query = query.or(`nombre.ilike.${term},email.ilike.${term}`);
+    }
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+    return { data: (data ?? []) as Seller[], count: count ?? 0 };
+  },
+
+  async getSellersActive(): Promise<Seller[]> {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('perfiles_usuario')
-      .select('*')
+      .select('id, nombre, email, activo')
       .eq('rol', 'vendedor')
+      .eq('activo', true)
       .order('nombre', { ascending: true });
 
     if (error) throw error;
-    return data || [];
+    return (data ?? []) as Seller[];
   },
 
   async createSeller(seller: CreateSellerData): Promise<Seller> {

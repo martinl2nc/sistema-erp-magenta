@@ -14,7 +14,7 @@ import { PAGINATION, TIMEOUTS } from '@/constants';
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [categoryDrawerOpen, setCategoryDrawerOpen] = useState(false);
@@ -22,7 +22,7 @@ export default function ProductsPage() {
   const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);
 
   // ─── Server State (Capa 2) ──────────────────────────────────
-  const { data: result, isLoading, isError, error } = useProductsList({
+  const { data: result, isLoading, isFetching, isError, error } = useProductsList({
     page,
     pageSize,
     search: debouncedSearch,
@@ -141,7 +141,7 @@ export default function ProductsPage() {
         </div>
 
         {/* Table / Cards */}
-        <div className="md:flex-1 md:overflow-y-auto">
+        <div className={`md:flex-1 md:overflow-y-auto transition-opacity duration-150 ${isFetching && !isLoading ? 'opacity-50' : ''}`}>
           {isLoading ? (
             <div className="p-8 space-y-4 animate-pulse">
               {[...Array(4)].map((_, i) => (
@@ -274,18 +274,19 @@ export default function ProductsPage() {
               </div>
             </>
           )}
-          {!isLoading && !isError && totalPages > 0 && (
-            <Pagination
-              currentPage={page}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={handlePageSizeChange}
-            />
-          )}
         </div>
       </div>
+
+      {!isLoading && !isError && totalPages > 0 && (
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      )}
 
       {/* Drawer */}
       <ProductDrawer

@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { pedidosService } from '@/services/pedidos.service';
-import { useUpdatePedidoBasic } from '@/hooks/usePedidos';
+import { useUpdatePedidoBasic, useUpdatePedidoEstado } from '@/hooks/usePedidos';
 import type { Pedido, PedidoEstado } from '@/services/pedidos.service';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
 
@@ -33,14 +33,21 @@ const ESTADO_STYLES: Record<PedidoEstado, string> = {
 export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
   const { role } = useAuth();
   const updateMutation = useUpdatePedidoBasic();
+  const updateEstadoMutation = useUpdatePedidoEstado();
 
-  const canEdit = role === 'vendedor' && pedido?.estado === 'pendiente_facturacion';
+  // Allow admin and vendor to edit/cancel if not billed
+  const canEdit = (role === 'admin' || role === 'vendedor') && 
+                  (pedido?.estado === 'pendiente_facturacion' || pedido?.estado === 'error_facturacion');
+  
+  const canAnular = canEdit;
 
-  // Form state
+  // Sync form fields when pedido changes
   const [localOc, setLocalOc] = useState('');
   const [localObs, setLocalObs] = useState('');
   const [localFecha, setLocalFecha] = useState('');
   const [localDireccion, setLocalDireccion] = useState('');
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [motivoAnulacion, setMotivoAnulacion] = useState('');
 
   // Sync form fields when pedido changes
   useEffect(() => {
@@ -98,6 +105,30 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
     setLocalObs(pedido.observaciones ?? '');
     setLocalFecha(pedido.fecha_pedido ? pedido.fecha_pedido.slice(0, 10) : '');
     setLocalDireccion(pedido.direccion_facturacion ?? '');
+  };
+
+  const handleAnularClick = () => {
+    setIsCanceling(true);
+  };
+
+  const confirmAnular = () => {
+    if (!pedido || !motivoAnulacion.trim()) {
+      toast.error('Debe ingresar un motivo para anular el pedido.');
+      return;
+    }
+    
+    updateEstadoMutation.mutate(
+      { id: pedido.id, estado: 'anulado', motivo_anulacion: motivoAnulacion.trim() },
+      {
+        onSuccess: () => {
+          toast.success('Pedido anulado exitosamente.');
+          setIsCanceling(false);
+          setMotivoAnulacion('');
+          onClose();
+        },
+        onError: (err) => toast.error(err.message),
+      }
+    );
   };
 
   const formatDate = (d: string | null) => {
@@ -158,7 +189,7 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
             <div className="bg-[#0F1115] border border-[#334155] rounded-lg divide-y divide-[#334155]">
 
               <InfoRow label="Cliente" value={getClienteName(pedido)} />
-              <InfoRow label="Vendedor" value={pedido.perfiles_usuario?.nombre ?? '—'} />
+              <InfoRow label="Vendedor" value={pedido.vendedor?.nombre ?? '—'} />
               <InfoRow label="Fecha creación" value={formatDate(pedido.fecha_creacion)} />
 
               {/* Fecha pedido */}
@@ -223,6 +254,23 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                   <span className="text-sm text-[#E2E8F0]">{pedido.observaciones || '—'}</span>
                 )}
               </div>
+              
+              {/* Auditoría de Anulación */}
+              {pedido.estado === 'anulado' && (
+                <div className="flex items-start gap-3 px-4 py-3 bg-red-500/5">
+                  <span className="text-xs text-red-400 w-32 shrink-0 pt-0.5 font-medium">Motivo de Anulación</span>
+                  <div className="flex-1 space-y-1">
+                    <span className="text-sm text-[#E2E8F0] block">
+                      {pedido.motivo_anulacion || 'Motivo no registrado'}
+                    </span>
+                    {pedido.fecha_anulacion && (
+                      <span className="text-xs text-[#94A3B8] block">
+                        Cancelado el {formatDate(pedido.fecha_anulacion)} {pedido.anulador?.nombre ? `por ${pedido.anulador.nombre}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
             </div>
           </section>
@@ -334,25 +382,71 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
         {/* Footer */}
         <div className="p-6 border-t border-[#334155]">
           {canEdit ? (
-            <div className="flex gap-3">
-              <button
-                onClick={handleSave}
-                disabled={!isDirty || updateMutation.isPending}
-                className="flex-1 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4 transition-colors flex items-center justify-center gap-2"
-              >
-                {updateMutation.isPending && (
-                  <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base" />
+            isCanceling ? (
+              <div className="flex flex-col gap-3 bg-red-500/5 border border-red-500/20 p-4 rounded-lg">
+                <label className="text-xs font-medium text-red-400">Motivo de la anulación (Requerido)</label>
+                <textarea
+                  value={motivoAnulacion}
+                  onChange={(e) => setMotivoAnulacion(e.target.value)}
+                  placeholder="Especifique por qué se anula este pedido..."
+                  rows={2}
+                  className="w-full bg-[#181B21] border border-[#334155] rounded-md px-3 py-2 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 resize-none"
+                  autoFocus
+                />
+                <div className="flex gap-2.5 mt-1">
+                  <button
+                    onClick={confirmAnular}
+                    disabled={updateEstadoMutation.isPending || !motivoAnulacion.trim()}
+                    className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {updateEstadoMutation.isPending ? 'Anulando...' : 'Confirmar Anulación'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsCanceling(false);
+                      setMotivoAnulacion('');
+                    }}
+                    disabled={updateEstadoMutation.isPending}
+                    className="w-1/3 border border-[#334155] hover:bg-[#334155]/50 text-[#E2E8F0] text-sm font-medium rounded-lg py-2 transition-colors"
+                  >
+                    Volver
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSave}
+                    disabled={!isDirty || updateMutation.isPending || updateEstadoMutation.isPending}
+                    className="flex-1 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {updateMutation.isPending && (
+                      <iconify-icon icon="solar:spinner-linear" class="animate-spin text-base" />
+                    )}
+                    Guardar cambios
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    disabled={!isDirty || updateMutation.isPending || updateEstadoMutation.isPending}
+                    className="w-1/3 border border-[#334155] hover:bg-[#334155]/50 disabled:opacity-50 text-[#E2E8F0] text-sm font-medium rounded-lg py-2.5 px-4 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                {canAnular && (
+                  <button
+                    onClick={handleAnularClick}
+                    disabled={updateMutation.isPending || updateEstadoMutation.isPending}
+                    className="w-full border border-red-500/50 hover:bg-red-500/10 text-red-500 text-sm font-medium rounded-lg py-2 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <iconify-icon icon="solar:trash-bin-trash-linear" class="text-base" />
+                    Anular Pedido
+                  </button>
                 )}
-                Guardar cambios
-              </button>
-              <button
-                onClick={handleCancel}
-                disabled={!isDirty || updateMutation.isPending}
-                className="border border-[#334155] hover:bg-[#334155]/50 disabled:opacity-50 text-[#E2E8F0] text-sm font-medium rounded-lg py-2.5 px-4 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
+              </div>
+            )
+
           ) : (
             <button
               onClick={onClose}

@@ -27,7 +27,12 @@ export interface ApisPeruInvoicePayload {
   correlativo: string;
   fechaEmision: string;
   tipoMoneda: string;
-  formaPago?: { moneda: string; tipo: string }; // omitido para NC (tipo '07')
+  formaPago?: {
+    moneda: string;
+    tipo: 'Contado' | 'Credito';
+    monto?: number;
+  }; // omitido para NC (tipo '07')
+  cuotas?: { moneda: string; monto: number; fechaPago: string }[];
   client: {
     tipoDoc: string;
     numDoc: string;
@@ -134,6 +139,7 @@ export interface ComprobanteData {
   descuento_global_codigo?: string;
   // Detracción
   detraccion_cod_bien: string | null;
+  detraccion_desc_bien?: string | null;
   detraccion_cod_medio_pago: string | null;
   detraccion_porcentaje: number | null;
   detraccion_monto: number | null;
@@ -142,6 +148,8 @@ export interface ComprobanteData {
   comprobante_referencia_id?: string | null;
   motivo_nota?: string | null;
   tipo_nota_codigo?: string | null;
+  // Cuotas (presentes cuando forma_pago === 'Credito')
+  cuotas?: { monto: number; fecha: string }[];
 }
 
 export interface ComprobanteDetalle {
@@ -181,6 +189,15 @@ export interface ComprobanteReferenciadoData {
   serie_numero: string;    // ej: 'F001-00000123'
   fecha_emision: string;   // 'YYYY-MM-DD' o ISO
 }
+
+// ─── Mapeo código medio de pago detracción → descripción ────
+const MEDIO_PAGO_DESC: Record<string, string> = {
+  '001': 'Depósito en cuenta',
+  '002': 'Giro',
+  '003': 'Transferencia de fondos',
+  '004': 'Orden de pago',
+  '005': 'Tarjeta de débito',
+};
 
 // ─── Mapeo tipo_documento local → tipoDoc SUNAT ─────────────
 
@@ -224,11 +241,29 @@ export function buildInvoicePayload(
     tipoMoneda: comprobante.tipo_moneda || 'PEN',
     // formaPago no aplica para NC (tipo_doc '07') — SUNAT error 3246 si se incluye
     ...(comprobante.tipo_doc_codigo !== '07' ? {
-      formaPago: {
-        moneda: comprobante.tipo_moneda || 'PEN',
-        tipo: comprobante.forma_pago === 'Credito' ? 'Credito' : 'Contado',
-      },
+      formaPago: comprobante.forma_pago === 'Credito' && comprobante.cuotas?.length
+        ? {
+            moneda: comprobante.tipo_moneda || 'PEN',
+            tipo: 'Credito' as const,
+            monto: Number(
+              (comprobante.mto_imp_venta - (comprobante.detraccion_monto ?? 0)).toFixed(2)
+            ),
+          }
+        : {
+            moneda: comprobante.tipo_moneda || 'PEN',
+            tipo: 'Contado' as const,
+          },
     } : {}),
+    // cuotas va al nivel superior del payload (no dentro de formaPago) — spec ApisPeru
+    ...(comprobante.tipo_doc_codigo !== '07' && comprobante.forma_pago === 'Credito' && comprobante.cuotas?.length
+      ? {
+          cuotas: comprobante.cuotas.map((c) => ({
+            moneda: comprobante.tipo_moneda || 'PEN',
+            monto: c.monto,
+            fechaPago: c.fecha + 'T00:00:00-05:00',
+          })),
+        }
+      : {}),
     client: {
       tipoDoc: mapTipoDocCliente(cliente.tipo_documento),
       numDoc: cliente.numero_documento || '00000000',
@@ -335,7 +370,12 @@ export function buildInvoicePayload(
           : undefined,
         legends: [
           { code: '1000', value: numeroALetras(totals.mtoImpVenta) },
-          ...(comprobante.tipo_doc_codigo !== '07' && comprobante.detraccion_cod_bien ? [{ code: '2006', value: 'Operación sujeta a detracción' }] : []),
+          ...(comprobante.tipo_doc_codigo !== '07' && comprobante.detraccion_cod_bien ? [
+            { code: '2006', value: 'Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central' },
+            { code: '2006', value: `Bien o Servicio: ${comprobante.detraccion_cod_bien}${comprobante.detraccion_desc_bien ? '  ' + comprobante.detraccion_desc_bien : ''}` },
+            { code: '2006', value: `Medio de pago: ${comprobante.detraccion_cod_medio_pago ?? '001'}  ${MEDIO_PAGO_DESC[comprobante.detraccion_cod_medio_pago ?? '001'] ?? ''}` },
+            { code: '2006', value: `Nro. Cta. Banco de la Nación: ${comprobante.detraccion_cuenta_bn ?? ''}   Porcentaje de detracción: ${Number(comprobante.detraccion_porcentaje ?? 0).toFixed(2)}   Monto detracción: S/ ${Number(comprobante.detraccion_monto ?? 0).toFixed(2)}` },
+          ] : []),
         ],
       };
     })(),

@@ -1,12 +1,21 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { usePedidosList, usePedidoLineas } from '@/hooks/usePedidos';
+import { usePedidosElegiblesFacturacion, usePedidoLineas } from '@/hooks/usePedidos';
 import { useTiposDocumento } from '@/hooks/useCatalogos';
 import { useCompanyConfig } from '@/hooks/useCompanyConfig';
 import { calcularLineaSunat, calcularTotalesSunat } from '@/utils/calculations';
+import { distribuirCuotas } from '@/features/facturacion/nuevaFactura.utils';
 import type { Pedido } from '@/services/pedidos.service';
 import type { Client } from '@/services/clients.service';
+
+// ─── CuotaCredito ─────────────────────────────────────────────
+
+export interface CuotaCredito {
+  id: string;
+  monto: number;
+  fecha: string; // YYYY-MM-DD
+}
 
 // ─── LineaFactura ──────────────────────────────────────────────
 // Representa una línea del comprobante en el formulario.
@@ -62,12 +71,16 @@ const EMPTY_STATE = {
   detraccionPorcentaje: 0,
   detraccionMonto: 0,
   detraccionCuentaBn: '',
+  formaPago: 'Contado' as 'Contado' | 'Credito',
+  cuotas: [] as CuotaCredito[],
+  numeroCuotas: 1,
+  intervaloDias: 30,
 };
 
 // ─── Hook ──────────────────────────────────────────────────────
 
 export function useNuevaFacturaState(initialClients: Client[]) {
-  const { data: pedidos = [] } = usePedidosList();
+  const { data: pedidos = [] } = usePedidosElegiblesFacturacion();
   const { data: tiposDoc = [] } = useTiposDocumento();
   const { data: companyConfig } = useCompanyConfig();
 
@@ -85,12 +98,10 @@ export function useNuevaFacturaState(initialClients: Client[]) {
   const [detraccionPorcentaje, setDetraccionPorcentaje] = useState(0);
   const [detraccionMonto, setDetraccionMonto] = useState(0);
   const [detraccionCuentaBn, setDetraccionCuentaBn] = useState('');
-
-  // Pedidos filtrados para el selector
-  const pendingPedidos = useMemo(
-    () => pedidos.filter((p) => ['pendiente_facturacion', 'error_facturacion'].includes(p.estado)),
-    [pedidos],
-  );
+  const [formaPago, setFormaPago] = useState<'Contado' | 'Credito'>('Contado');
+  const [cuotas, setCuotas] = useState<CuotaCredito[]>([]);
+  const [numeroCuotas, setNumeroCuotas] = useState(1);
+  const [intervaloDias, setIntervaloDias] = useState(30);
 
   // Pedido actualmente seleccionado
   const selectedPedido = useMemo(
@@ -113,6 +124,12 @@ export function useNuevaFacturaState(initialClients: Client[]) {
   const totales = useMemo(
     () => calcularTotalesSunat(lineas, descuentoMonto),
     [lineas, descuentoMonto],
+  );
+
+  // Monto neto a financiar = total - detracción
+  const montoNeto = useMemo(
+    () => Number((totales.total - detraccionMonto).toFixed(2)),
+    [totales.total, detraccionMonto],
   );
 
   // Sincronizar líneas cuando llegan del servidor
@@ -161,7 +178,31 @@ export function useNuevaFacturaState(initialClients: Client[]) {
     }
   }, [tipoOperacion, companyConfig?.detraccion_cuenta_bn]);
 
+  // Re-distribuir cuotas automáticamente cuando cambian parámetros clave
+  useEffect(() => {
+    if (formaPago !== 'Credito' || montoNeto <= 0) return;
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    setCuotas(distribuirCuotas(montoNeto, numeroCuotas, fechaHoy, intervaloDias));
+  }, [formaPago, numeroCuotas, intervaloDias, montoNeto]);
+
   // ─── Handlers ────────────────────────────────────────────────
+
+  const handleFormaPagoChange = (value: 'Contado' | 'Credito') => {
+    setFormaPago(value);
+    if (value === 'Contado') setCuotas([]);
+  };
+
+  const handleNumeroCuotasChange = (n: number) => {
+    setNumeroCuotas(Math.max(1, n));
+  };
+
+  const handleIntervaloDiasChange = (dias: number) => {
+    setIntervaloDias(Math.max(1, dias));
+  };
+
+  const updateCuota = (id: string, patch: Partial<Omit<CuotaCredito, 'id'>>) => {
+    setCuotas((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  };
 
   const handlePedidoSelect = (pedidoId: string | null) => {
     setSelectedPedidoId(pedidoId);
@@ -245,7 +286,7 @@ export function useNuevaFacturaState(initialClients: Client[]) {
     // Pedido
     selectedPedidoId,
     selectedPedido,
-    pendingPedidos,
+    pendingPedidos: pedidos,
     loadingLineas,
     handlePedidoSelect,
     // Cliente
@@ -283,6 +324,16 @@ export function useNuevaFacturaState(initialClients: Client[]) {
     setDireccionFacturacion,
     // Totales
     totales,
+    montoNeto,
+    // Forma de pago / cuotas a crédito
+    formaPago,
+    handleFormaPagoChange,
+    cuotas,
+    updateCuota,
+    numeroCuotas,
+    handleNumeroCuotasChange,
+    intervaloDias,
+    handleIntervaloDiasChange,
     // Clientes para selector standalone
     initialClients,
   };

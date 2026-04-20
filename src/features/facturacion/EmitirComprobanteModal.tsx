@@ -21,7 +21,10 @@ import { numeroALetras } from '@/utils/numeroALetras'
 import type { Pedido, PedidoLinea } from '@/services/pedidos.service'
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters'
 import { calcularLineaSunat, calcularTotalesSunat } from '@/utils/calculations'
-import { validateNuevaFactura } from '@/features/facturacion/nuevaFactura.utils'
+import { validateNuevaFactura, validateCuotas, distribuirCuotas } from '@/features/facturacion/nuevaFactura.utils'
+import type { CuotaCredito } from '@/features/facturacion/useNuevaFacturaState'
+import DetraccionPanel from '@/features/facturacion/DetraccionPanel'
+import FormaPagoPanel from '@/features/facturacion/FormaPagoPanel'
 
 // ─── Tipos ─────────────────────────────────────────────────────
 
@@ -90,10 +93,17 @@ export default function EmitirComprobanteModal({
   const { data: bienesDetraccion = [] } = useBienesDetraccion()
   const { data: companyConfig } = useCompanyConfig()
 
+  const [tipoDocCodigo, setTipoDocCodigo] = useState('01') // default Factura
+  const [aplicaIgv, setAplicaIgv] = useState(true)
+
   // Solo comprobantes activos (01=Factura, 03=Boleta)
   const tiposComprobante = useMemo(
-    () => tiposDoc.filter((t) => t.categoria === 'comprobante'),
-    [tiposDoc]
+    () => tiposDoc.filter((t) => {
+      if (t.categoria !== 'comprobante') return false;
+      if (t.codigo === '80') return !aplicaIgv;
+      return true;
+    }),
+    [tiposDoc, aplicaIgv]
   )
   const descuentosSunat = useMemo(
     () => cargosDescuentos.filter((c) => c.tipo === 'descuento'),
@@ -104,8 +114,6 @@ export default function EmitirComprobanteModal({
     loadingAfectaciones ||
     loadingTiposDoc ||
     loadingCatalog53
-
-  const [tipoDocCodigo, setTipoDocCodigo] = useState('01') // default Factura
   const [direccionFacturacion, setDireccionFacturacion] = useState('')
   const [lineas, setLineas] = useState<LineaEditable[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -114,6 +122,12 @@ export default function EmitirComprobanteModal({
   // Descuento global
   const [descuentoMonto, setDescuentoMonto] = useState(0)
   const [descuentoCodigo, setDescuentoCodigo] = useState('03')
+
+  // Forma de pago / cuotas a crédito
+  const [formaPago, setFormaPago] = useState<'Contado' | 'Credito'>('Contado')
+  const [cuotas, setCuotas] = useState<CuotaCredito[]>([])
+  const [numeroCuotas, setNumeroCuotas] = useState(1)
+  const [intervaloDias, setIntervaloDias] = useState(30)
 
   // Tipo de operación y detracción (Cat. 51 / Cat. 54)
   const [tipoOperacion, setTipoOperacion] = useState('0101')
@@ -145,16 +159,36 @@ export default function EmitirComprobanteModal({
     setDireccionFacturacion(cliente.direccion || '')
   }, [isOpen, pedido?.id, pedido?.clientes, tiposComprobante.length])
 
+  // Inicializar aplicaIgv desde el pedido al abrir
+  useEffect(() => {
+    if (isOpen && pedido) setAplicaIgv(pedido.aplica_igv ?? true)
+  }, [isOpen, pedido?.id])
+
   // Sincronizar líneas cuando llegan del servidor
   useEffect(() => {
     if (!pedidoLineasData) return
-    const defaultAfectacion = pedido?.aplica_igv
+    const defaultAfectacion = aplicaIgv
       ? DEFAULT_AFECTACION_GRAVADA
       : DEFAULT_AFECTACION_EXONERADA
     setLineas(
       pedidoLineasData.map((l) => toLineaEditable(l, defaultAfectacion))
     )
-  }, [pedidoLineasData, pedido?.aplica_igv])
+  }, [pedidoLineasData])
+
+  // Recalcular afectaciones IGV de todas las líneas al cambiar el toggle
+  useEffect(() => {
+    if (lineas.length === 0) return
+    const defaultAfectacion = aplicaIgv
+      ? DEFAULT_AFECTACION_GRAVADA
+      : DEFAULT_AFECTACION_EXONERADA
+    setLineas((prev) =>
+      prev.map((l) => ({
+        ...l,
+        afectacion_igv: defaultAfectacion,
+        ...calcularLineaSunat(l.precio_unitario, l.cantidad, defaultAfectacion, l.descuento_linea_monto ?? 0),
+      }))
+    )
+  }, [aplicaIgv])
 
   // Inicializar descuento desde el pedido
   useEffect(() => {
@@ -166,6 +200,11 @@ export default function EmitirComprobanteModal({
   const totales = useMemo(
     () => calcularTotalesSunat(lineas, descuentoMonto),
     [lineas, descuentoMonto]
+  )
+
+  const montoNeto = useMemo(
+    () => Number((totales.total - detraccionMonto).toFixed(2)),
+    [totales.total, detraccionMonto]
   )
 
   // Pre-fill cuenta BN desde configuración de empresa cuando se activa detracción
@@ -186,15 +225,27 @@ export default function EmitirComprobanteModal({
     }
   }, [totales.total, detraccionPorcentaje, tipoOperacion])
 
-  // Reset detracción al cerrar modal
+  // Re-distribuir cuotas al cambiar parámetros
+  useEffect(() => {
+    if (formaPago !== 'Credito' || montoNeto <= 0) return
+    const fechaHoy = new Date().toISOString().split('T')[0]
+    setCuotas(distribuirCuotas(montoNeto, numeroCuotas, fechaHoy, intervaloDias))
+  }, [formaPago, numeroCuotas, intervaloDias, montoNeto])
+
+  // Reset al cerrar modal
   useEffect(() => {
     if (!isOpen) {
+      setAplicaIgv(true)
       setTipoOperacion('0101')
       setDetraccionCodBien('')
       setDetraccionCodMedioPago('001')
       setDetraccionPorcentaje(0)
       setDetraccionMonto(0)
       setDetraccionCuentaBn('')
+      setFormaPago('Contado')
+      setCuotas([])
+      setNumeroCuotas(1)
+      setIntervaloDias(30)
       setHasUnsavedChanges(false)
     }
   }, [isOpen])
@@ -205,6 +256,18 @@ export default function EmitirComprobanteModal({
       setHasUnsavedChanges(true)
     }
   }, [tipoDocCodigo, direccionFacturacion, descuentoMonto, descuentoCodigo, tipoOperacion, detraccionCodBien, detraccionPorcentaje, detraccionCuentaBn, lineas])
+
+  const handleFormaPagoChange = (tipo: 'Contado' | 'Credito') => {
+    setFormaPago(tipo)
+    if (tipo === 'Contado') setCuotas([])
+  }
+
+  const updateCuota = (id: string, patch: Partial<Omit<CuotaCredito, 'id'>>) => {
+    setCuotas((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+  }
+
+  const handleNumeroCuotasChange = (n: number) => setNumeroCuotas(Math.max(1, n))
+  const handleIntervaloDiasChange = (d: number) => setIntervaloDias(Math.max(1, d))
 
   if (!isOpen || !pedido) return null
 
@@ -273,7 +336,8 @@ export default function EmitirComprobanteModal({
   }
 
   const handleSubmit = async () => {
-    // Validación centralizada usando la misma función que NuevaFacturaForm
+    const fechaHoy = new Date().toISOString().split('T')[0]
+
     const validationError = validateNuevaFactura({
       clienteId: cliente?.id ?? null,
       lineas: lineas.map(l => ({
@@ -305,14 +369,20 @@ export default function EmitirComprobanteModal({
       return;
     }
 
+    if (formaPago === 'Credito') {
+      const cuotasError = validateCuotas(cuotas, montoNeto, fechaHoy)
+      if (cuotasError) {
+        toast.error(cuotasError)
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0]
-
       const comprobanteId = await emitirComprobante.mutateAsync({
         pedido_id: pedido.id,
         tipo_doc_codigo: tipoDocCodigo,
-        cliente_id: cliente.id,
+        cliente_id: pedido.cliente_id,
         fecha_emision: fechaHoy,
         subtotal: totales.subtotal,
         igv_monto: totales.igv,
@@ -334,9 +404,9 @@ export default function EmitirComprobanteModal({
         direccion_facturacion: direccionFacturacion.trim() || undefined,
         descuento_global_monto: totales.descuentoMonto,
         descuento_global_codigo: descuentoCodigo,
-        tipo_operacion: tipoOperacion,
+        tipo_operacion: tipoDocCodigo === '80' ? '0101' : tipoOperacion,
         detraccion:
-          tipoOperacion === '1001'
+          tipoOperacion === '1001' && tipoDocCodigo !== '80'
             ? {
                 cod_bien: detraccionCodBien,
                 cod_medio_pago: detraccionCodMedioPago,
@@ -344,7 +414,9 @@ export default function EmitirComprobanteModal({
                 monto: detraccionMonto,
                 cuenta_bn: detraccionCuentaBn
               }
-            : undefined
+            : undefined,
+        forma_pago: formaPago,
+        cuotas: formaPago === 'Credito' ? cuotas.map((c) => ({ monto: c.monto, fecha: c.fecha })) : undefined,
       })
 
       // Enviar a SUNAT via API Route interna (no-fatal: el comprobante ya está en BD)
@@ -517,6 +589,24 @@ export default function EmitirComprobanteModal({
             </button>
           </div>
 
+          {/* Toggle IGV */}
+          <div className="flex items-center justify-between p-3 bg-[#0F1115] border border-[#334155] rounded-lg">
+            <div>
+              <p className="text-xs font-medium text-[#E2E8F0]">Aplicar IGV (18%)</p>
+              <p className="text-[10px] text-[#94A3B8]">Desactivar para emitir sin impuesto — habilita Nota de Venta</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAplicaIgv((v) => !v)
+                setTipoDocCodigo((prev) => (prev === '80' ? '01' : prev))
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${aplicaIgv ? 'bg-[#10B981]' : 'bg-[#334155]'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aplicaIgv ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
           {/* Tipo comprobante + preview serie */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -542,8 +632,7 @@ export default function EmitirComprobanteModal({
                           : 'border-[#334155] text-[#94A3B8] hover:border-[#3B82F6]/50 hover:text-[#E2E8F0]'
                       }`}
                     >
-                      {tipo.descripcion} ({tipo.codigo === '01' ? 'RUC' : 'DNI'}
-                      )
+                      {tipo.descripcion}{tipo.codigo !== '80' && ` (${tipo.codigo === '01' ? 'RUC' : 'DNI'})`}
                     </button>
                   ))}
                 </div>
@@ -583,7 +672,7 @@ export default function EmitirComprobanteModal({
           </div>
 
           {/* Tipo de Operación (Cat. 51) */}
-          {tiposOperacion.length > 0 && (
+          {tiposOperacion.length > 0 && tipoDocCodigo !== '80' && (
             <div>
               <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
                 Tipo de Operación{' '}
@@ -605,108 +694,35 @@ export default function EmitirComprobanteModal({
             </div>
           )}
 
-          {/* Sección Detracción — visible solo cuando tipo = 1001 */}
-          {tipoOperacion === '1001' && (
-            <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-lg space-y-4">
-              <div className="flex items-center gap-2">
-                <iconify-icon
-                  icon="solar:bill-check-linear"
-                  class="text-amber-400 text-base shrink-0"
-                ></iconify-icon>
-                <p className="text-xs font-semibold text-amber-400">
-                  Datos de Detracción
-                </p>
-              </div>
-
-              {/* Bien / Servicio + Porcentaje */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Bien / Servicio <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    value={detraccionCodBien}
-                    onChange={(e) => setDetraccionCodBien(e.target.value)}
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  >
-                    <option value="">Seleccionar...</option>
-                    {bienesDetraccion.map((b) => (
-                      <option key={b.codigo} value={b.codigo}>
-                        {b.codigo} – {b.descripcion}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Porcentaje (%) <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={detraccionPorcentaje}
-                    onChange={(e) =>
-                      setDetraccionPorcentaje(parseFloat(e.target.value) || 0)
-                    }
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* Monto + Cuenta BN */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Monto Detracción
-                    <span className="ml-1 text-[#64748B] font-normal">
-                      (auto-calculado)
-                    </span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={detraccionMonto}
-                    onChange={(e) =>
-                      setDetraccionMonto(parseFloat(e.target.value) || 0)
-                    }
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-amber-300 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Cuenta Banco de la Nación{' '}
-                    <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={detraccionCuentaBn}
-                    onChange={(e) => setDetraccionCuentaBn(e.target.value)}
-                    placeholder="Ej. 00-123456-0-01"
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* Medio de Pago */}
-              <div>
-                <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                  Medio de Pago
-                </label>
-                <select
-                  value={detraccionCodMedioPago}
-                  onChange={(e) => setDetraccionCodMedioPago(e.target.value)}
-                  className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                >
-                  <option value="001">001 – Depósito en cuenta</option>
-                  <option value="002">002 – Giro</option>
-                  <option value="003">003 – Transferencia de fondos</option>
-                </select>
-              </div>
-            </div>
+          {/* Sección Detracción — visible solo cuando tipo = 1001 y no es NV */}
+          {tipoOperacion === '1001' && tipoDocCodigo !== '80' && (
+            <DetraccionPanel
+              bienesDetraccion={bienesDetraccion}
+              codBien={detraccionCodBien}
+              onCodBienChange={setDetraccionCodBien}
+              porcentaje={detraccionPorcentaje}
+              onPorcentajeChange={setDetraccionPorcentaje}
+              monto={detraccionMonto}
+              onMontoChange={setDetraccionMonto}
+              cuentaBn={detraccionCuentaBn}
+              onCuentaBnChange={setDetraccionCuentaBn}
+              codMedioPago={detraccionCodMedioPago}
+              onCodMedioPagoChange={setDetraccionCodMedioPago}
+            />
           )}
+
+          {/* Forma de Pago */}
+          <FormaPagoPanel
+            formaPago={formaPago}
+            onFormaPagoChange={handleFormaPagoChange}
+            cuotas={cuotas}
+            onCuotaChange={updateCuota}
+            numeroCuotas={numeroCuotas}
+            onNumeroCuotasChange={handleNumeroCuotasChange}
+            intervaloDias={intervaloDias}
+            onIntervaloDiasChange={handleIntervaloDiasChange}
+            montoNeto={montoNeto}
+          />
 
           {/* Dirección de facturación */}
           <div>
@@ -961,7 +977,7 @@ export default function EmitirComprobanteModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !serie}
+            disabled={isSubmitting || !serie || (formaPago === 'Credito' && validateCuotas(cuotas, montoNeto, new Date().toISOString().split('T')[0]) !== null)}
             className="flex-1 bg-[#10B981] text-white text-sm font-medium py-2.5 rounded-md hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSubmitting ? (

@@ -161,7 +161,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
       return;
     }
 
-    let payloadLineas = isNotaParcial ? lineasNCCalculadas : undefined;
+    let payloadLineas: any[] | undefined = isNotaParcial ? lineasNCCalculadas : undefined;
     let payloadTotales = isNotaParcial ? customTotales! : undefined;
 
     if (isNotaGlobal) {
@@ -178,7 +178,7 @@ export default function NotaCreditoModal({ isOpen, onClose, factura }: Props) {
         total_impuestos: payloadTotales.total_impuestos,
         tip_afe_igv_codigo: '10',
         unidad_codigo: 'NIU'
-      }];
+      }] as ComprobanteDetalleDB[];
     }
 
     try {

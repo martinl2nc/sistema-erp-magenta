@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import {
   useQuotesList,
@@ -8,7 +9,7 @@ import {
   useDeleteQuote,
   useUpdateQuoteFollowup
 } from '@/hooks/useQuotes'
-import { useSellersList } from '@/hooks/useSellers'
+import { useSellersActive } from '@/hooks/useSellers'
 import { useDebounce } from '@/hooks/useDebounce'
 import Pagination from '@/components/ui/Pagination'
 import type { Quote, QuoteStatus } from '@/services/quotes.service'
@@ -40,6 +41,7 @@ export default function QuotesList() {
   const {
     data: result,
     isLoading,
+    isFetching,
     isError,
     error
   } = useQuotesList({
@@ -53,7 +55,7 @@ export default function QuotesList() {
   const totalItems = result?.count ?? 0
   const totalPages = Math.ceil(totalItems / pageSize)
 
-  const { data: sellers = [] } = useSellersList()
+  const { data: sellers = [] } = useSellersActive()
   const updateStatusMutation = useUpdateQuoteStatus()
   const deleteMutation = useDeleteQuote()
   const updateFollowupMutation = useUpdateQuoteFollowup()
@@ -80,7 +82,9 @@ export default function QuotesList() {
       '¿Estás seguro de que deseas eliminar esta cotización?'
     )
     if (!confirmed) return
-    deleteMutation.mutate(id)
+    deleteMutation.mutate(id, {
+      onError: (err) => toast.error(err instanceof Error ? err.message : 'Error al eliminar la cotización'),
+    })
   }
 
   const formatDate = (dateString: string) => {
@@ -189,7 +193,7 @@ export default function QuotesList() {
         </div>
       </div>
 
-      <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
+      <div className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1 transition-opacity duration-150 ${isFetching && !isLoading ? 'opacity-50' : ''}`}>
         {isLoading && (
           <div className="flex items-center justify-center gap-2 p-8 text-[#94A3B8] text-sm">
             <iconify-icon

@@ -33,12 +33,12 @@ export default function PedidosPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEstado, setSelectedEstado] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
 
   const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);
 
-  const { data: result, isLoading, isError, error } = usePedidosList({
+  const { data: result, isLoading, isFetching, isError, error } = usePedidosList({
     page,
     pageSize,
     search: debouncedSearch,
@@ -110,7 +110,7 @@ export default function PedidosPage() {
         </div>
       </div>
 
-      <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
+      <div className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1 transition-opacity duration-150 ${isFetching && !isLoading ? 'opacity-50' : ''}`}>
         {isLoading && (
           <div className="flex items-center justify-center gap-2 p-8 text-[#94A3B8] text-sm">
             <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>

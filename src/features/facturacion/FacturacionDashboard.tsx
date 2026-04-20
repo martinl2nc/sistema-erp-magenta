@@ -56,13 +56,13 @@ export default function FacturacionPage() {
   const [searchPendientes, setSearchPendientes] = useState('');
   const [filterEstadoPendiente, setFilterEstadoPendiente] = useState('');
   const [pagePendientes, setPagePendientes] = useState(1);
-  const [pageSizePendientes, setPageSizePendientes] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [pageSizePendientes, setPageSizePendientes] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
 
   // Filtros y paginación tab emitidas
   const [searchEmitidas, setSearchEmitidas] = useState('');
   const [filterTipoDoc, setFilterTipoDoc] = useState('');
   const [pageEmitidas, setPageEmitidas] = useState(1);
-  const [pageSizeEmitidas, setPageSizeEmitidas] = useState(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [pageSizeEmitidas, setPageSizeEmitidas] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
 
   const debouncedSearchEmitidas = useDebounce(searchEmitidas, TIMEOUTS.SEARCH_DEBOUNCE);
 
@@ -73,7 +73,7 @@ export default function FacturacionPage() {
   const pedidos = pedidosResult.data;
 
   // Emitidas: paginación server-side (crece indefinidamente)
-  const { data: comprobantesResult, isLoading: loadingComprobantes, isError: errorComprobantes } = useFacturasList({
+  const { data: comprobantesResult, isLoading: loadingComprobantes, isFetching: fetchingComprobantes, isError: errorComprobantes } = useFacturasList({
     page: pageEmitidas,
     pageSize: pageSizeEmitidas,
     search: debouncedSearchEmitidas,
@@ -158,7 +158,7 @@ export default function FacturacionPage() {
             )}
           </div>
           {role === 'admin' && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <button
                 onClick={() => router.push('/facturacion/externa')}
                 className="bg-[#334155] hover:bg-[#475569] text-[#E2E8F0] px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-[#334155] focus:ring-offset-2 focus:ring-offset-[#0F1115] flex items-center justify-center gap-2 whitespace-nowrap"
@@ -379,7 +379,7 @@ export default function FacturacionPage() {
               />
             </div>
           </div>
-          <div className="bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1">
+          <div className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1 transition-opacity duration-150 ${fetchingComprobantes && !loadingComprobantes ? 'opacity-50' : ''}`}>
           {loadingComprobantes && (
             <div className="flex items-center justify-center gap-2 p-8 text-[#94A3B8] text-sm">
               <iconify-icon icon="solar:spinner-linear" class="animate-spin text-xl text-[#3B82F6]"></iconify-icon>
@@ -414,7 +414,7 @@ export default function FacturacionPage() {
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">SOL</span>
                         )}
                       </div>
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : f.estado_sunat === 'interno' ? 'bg-[#334155]/40 text-[#64748B]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
                         {f.estado_sunat}
                       </span>
                     </div>
@@ -474,7 +474,7 @@ export default function FacturacionPage() {
                           <iconify-icon icon="solar:pen-linear" class="text-base"></iconify-icon>
                         </button>
                       )}
-                      {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
+                      {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && f.tipo_doc_codigo !== '80' && (
                         <button onClick={() => setSelectedComprobante(f)}
                           className="ml-auto text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
                           <iconify-icon icon="solar:document-add-linear" class="text-base"></iconify-icon>
@@ -516,7 +516,7 @@ export default function FacturacionPage() {
                         <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{formatDate(f.fecha_emision)}</td>
                         <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium text-right">{formatCurrency(f.mto_imp_venta)}</td>
                         <td className="px-5 py-3.5">
-                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${f.estado_sunat === 'anulada' ? 'bg-[#94A3B8]/10 text-[#94A3B8]' : f.estado_sunat === 'interno' ? 'bg-[#334155]/40 text-[#64748B]' : 'bg-[#10B981]/10 text-[#10B981]'}`}>
                             {f.estado_sunat}
                           </span>
                         </td>
@@ -572,7 +572,7 @@ export default function FacturacionPage() {
                                 <iconify-icon icon="solar:pen-linear" class="text-xs"></iconify-icon>
                               </button>
                             )}
-                            {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && (
+                            {f.estado_sunat !== 'anulada' && f.tipo_doc_codigo !== '07' && f.tipo_doc_codigo !== '80' && (
                               <button
                                 onClick={() => setSelectedComprobante(f)}
                                 className="border border-red-500/30 text-red-400 text-xs font-medium px-2 py-1.5 rounded-md hover:bg-red-500/10 transition-colors"

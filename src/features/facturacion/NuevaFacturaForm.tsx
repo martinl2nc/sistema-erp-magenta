@@ -20,8 +20,10 @@ import {
 } from '@/hooks/useCatalogos'
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters'
 import { TAX_RATES } from '@/constants'
-import { validateNuevaFactura } from '@/features/facturacion/nuevaFactura.utils'
+import { validateNuevaFactura, validateCuotas } from '@/features/facturacion/nuevaFactura.utils'
 import type { Client } from '@/services/clients.service'
+import DetraccionPanel from '@/features/facturacion/DetraccionPanel'
+import FormaPagoPanel from '@/features/facturacion/FormaPagoPanel'
 
 interface Props {
   initialClients: Client[]
@@ -79,6 +81,8 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
   // ─── Submit ──────────────────────────────────────────────────
 
   const handleSubmit = async () => {
+    const fechaHoy = new Date().toISOString().split('T')[0]
+
     const error = validateNuevaFactura({
       clienteId: state.selectedClienteId,
       lineas: state.lineas,
@@ -98,11 +102,17 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
       return
     }
 
+    if (state.formaPago === 'Credito') {
+      const cuotasError = validateCuotas(state.cuotas, state.montoNeto, fechaHoy)
+      if (cuotasError) {
+        setValidationError(cuotasError)
+        return
+      }
+    }
+
     setValidationError(null)
     setIsSubmitting(true)
     try {
-      const fechaHoy = new Date().toISOString().split('T')[0]
-
       const comprobanteId = await emitirComprobante.mutateAsync({
         pedido_id: state.selectedPedidoId,
         tipo_doc_codigo: state.tipoDocCodigo,
@@ -138,7 +148,9 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                 monto: state.detraccionMonto,
                 cuenta_bn: state.detraccionCuentaBn
               }
-            : undefined
+            : undefined,
+        forma_pago: state.formaPago,
+        cuotas: state.formaPago === 'Credito' ? state.cuotas.map((c) => ({ monto: c.monto, fecha: c.fecha })) : undefined,
       })
 
       try {
@@ -170,6 +182,11 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
 
   // ─── Render ──────────────────────────────────────────────────
 
+  const fechaHoyForValidation = new Date().toISOString().split('T')[0]
+  const cuotasInvalid =
+    state.formaPago === 'Credito' &&
+    validateCuotas(state.cuotas, state.montoNeto, fechaHoyForValidation) !== null
+
   const isPedidoMode = !!state.selectedPedidoId
   const pedidoCliente = state.selectedPedido?.clientes
 
@@ -199,7 +216,7 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
           )}
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || cuotasInvalid}
             className="flex items-center gap-2 bg-[#3B82F6] hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             {isSubmitting ? (
@@ -411,109 +428,35 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
 
           {/* ── Detracción (solo cuando tipo = 1001) ─────────── */}
           {state.tipoOperacion === '1001' && (
-            <section className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-4">
-              <div className="flex items-center gap-2">
-                <iconify-icon
-                  icon="solar:bill-check-linear"
-                  class="text-amber-400 text-base shrink-0"
-                ></iconify-icon>
-                <p className="text-xs font-semibold text-amber-400">
-                  Datos de Detracción
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Bien / Servicio <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    value={state.detraccionCodBien}
-                    onChange={(e) => state.setDetraccionCodBien(e.target.value)}
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-xs text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  >
-                    <option value="">Seleccionar...</option>
-                    {bienesDetraccion.map((b) => (
-                      <option key={b.codigo} value={b.codigo}>
-                        {b.codigo} – {b.descripcion}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Porcentaje (%) <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={state.detraccionPorcentaje}
-                    onChange={(e) =>
-                      state.setDetraccionPorcentaje(
-                        parseFloat(e.target.value) || 0
-                      )
-                    }
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Monto Detracción
-                    <span className="ml-1 text-[#64748B] font-normal">
-                      (auto-calculado)
-                    </span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={state.detraccionMonto}
-                    onChange={(e) =>
-                      state.setDetraccionMonto(parseFloat(e.target.value) || 0)
-                    }
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-amber-300 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                    Cuenta Banco de la Nación{' '}
-                    <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={state.detraccionCuentaBn}
-                    onChange={(e) =>
-                      state.setDetraccionCuentaBn(e.target.value)
-                    }
-                    placeholder="Ej. 00-123456-0-01"
-                    className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[#E2E8F0] mb-1.5">
-                  Medio de Pago
-                </label>
-                <select
-                  value={state.detraccionCodMedioPago}
-                  onChange={(e) =>
-                    state.setDetraccionCodMedioPago(e.target.value)
-                  }
-                  className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                >
-                  <option value="001">001 – Depósito en cuenta</option>
-                  <option value="002">002 – Giro</option>
-                  <option value="003">003 – Transferencia de fondos</option>
-                </select>
-              </div>
-            </section>
+            <DetraccionPanel
+              bienesDetraccion={bienesDetraccion}
+              codBien={state.detraccionCodBien}
+              onCodBienChange={state.setDetraccionCodBien}
+              porcentaje={state.detraccionPorcentaje}
+              onPorcentajeChange={state.setDetraccionPorcentaje}
+              monto={state.detraccionMonto}
+              onMontoChange={state.setDetraccionMonto}
+              cuentaBn={state.detraccionCuentaBn}
+              onCuentaBnChange={state.setDetraccionCuentaBn}
+              codMedioPago={state.detraccionCodMedioPago}
+              onCodMedioPagoChange={state.setDetraccionCodMedioPago}
+            />
           )}
+
+          {/* ── Forma de Pago ────────────────────────────────── */}
+          <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5">
+            <FormaPagoPanel
+              formaPago={state.formaPago}
+              onFormaPagoChange={state.handleFormaPagoChange}
+              cuotas={state.cuotas}
+              onCuotaChange={state.updateCuota}
+              numeroCuotas={state.numeroCuotas}
+              onNumeroCuotasChange={state.handleNumeroCuotasChange}
+              intervaloDias={state.intervaloDias}
+              onIntervaloDiasChange={state.handleIntervaloDiasChange}
+              montoNeto={state.montoNeto}
+            />
+          </section>
 
           {/* ── Dirección de Facturación ─────────────────────── */}
           <section className="bg-[#181B21] border border-[#334155] rounded-xl p-5">
@@ -797,7 +740,7 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
             )}
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || cuotasInvalid}
               className="w-full flex items-center justify-center gap-2 bg-[#10B981] hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-medium py-3 rounded-lg transition-colors"
             >
               {isSubmitting ? (

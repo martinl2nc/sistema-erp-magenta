@@ -91,16 +91,20 @@ export interface QuotePDFTemplateProps {
   quoteIdStr: string;
   companyConfig: CompanyConfig | null;
   products: Product[];
+  bankAccounts?: BankAccount[];
 }
 
-// Bank account type expected in cuentas_bancarias JSON
+// Bank account type from normalized cuentas_bancarias_empresa table
 interface BankAccount {
+  id: string;
   banco: string;
-  tipo?: string;
-  cuentas: { moneda: string; numero: string }[];
+  numero_cuenta: string;
+  cci: string | null;
+  moneda: string;
+  es_detraccion: boolean;
 }
 
-export const QuotePDFDocument = ({ quoteData, totals, lineItems, client, sellerName, quoteIdStr, companyConfig, products }: QuotePDFTemplateProps) => {
+export const QuotePDFDocument = ({ quoteData, totals, lineItems, client, sellerName, quoteIdStr, companyConfig, products, bankAccounts = [] }: QuotePDFTemplateProps) => {
   const formatDate = (d: string) => {
     if (!d) return '';
     return new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(d));
@@ -123,15 +127,8 @@ export const QuotePDFDocument = ({ quoteData, totals, lineItems, client, sellerN
   // Terms
   const termsText = companyConfig?.terminos_condiciones || '';
 
-  // Bank accounts — stored as JSON array in cuentas_bancarias
-  let bankAccounts: BankAccount[] = [];
-  if (companyConfig?.cuentas_bancarias) {
-    try {
-      bankAccounts = JSON.parse(companyConfig.cuentas_bancarias);
-    } catch {
-      bankAccounts = [];
-    }
-  }
+  // Filter out detraccion accounts for the bank section (those show separately if needed)
+  const regularAccounts = bankAccounts.filter(a => !a.es_detraccion);
 
   return (
     <Document>
@@ -251,25 +248,30 @@ export const QuotePDFDocument = ({ quoteData, totals, lineItems, client, sellerN
             </View>
           </View>
 
-          {/* ── Bank Accounts (dynamic) ── */}
-          {bankAccounts.length > 0 && (
+          {/* ── Bank Accounts (from normalized table) ── */}
+          {regularAccounts.length > 0 && (
             <View style={S.banksWrapper} wrap={false}>
               <View style={S.banksHeader}>
                 <Text style={S.banksHeaderText}>Números de cuenta: {companyName}</Text>
               </View>
               <View style={S.banksBody}>
-                {bankAccounts.map((bank, bi) => (
-                  <View key={bi} style={[S.bankCol, bi < bankAccounts.length - 1 ? S.bankColBorder : {}]}>
-                    <Text style={S.bankName}>{bank.banco}</Text>
-                    {bank.tipo ? <Text style={S.bankSub}>{bank.tipo}</Text> : null}
-                    {bank.cuentas?.map((cuenta, ci) => (
-                      <View key={ci} style={S.accountBlock}>
-                        <Text style={S.accountLabel}>{cuenta.moneda}</Text>
+                {regularAccounts.map((account, i) => (
+                  <View key={account.id} style={[S.bankCol, i < regularAccounts.length - 1 ? S.bankColBorder : {}]}>
+                    <Text style={S.bankName}>{account.banco}</Text>
+                    <View style={S.accountBlock}>
+                      <Text style={S.accountLabel}>{account.moneda === 'PEN' ? 'Soles' : account.moneda === 'USD' ? 'Dólares' : account.moneda}</Text>
+                      <View style={S.accountValueBox}>
+                        <Text style={S.accountValue}>{account.numero_cuenta}</Text>
+                      </View>
+                    </View>
+                    {account.cci && (
+                      <View style={S.accountBlock}>
+                        <Text style={S.accountLabel}>CCI</Text>
                         <View style={S.accountValueBox}>
-                          <Text style={S.accountValue}>{cuenta.numero}</Text>
+                          <Text style={S.accountValue}>{account.cci}</Text>
                         </View>
                       </View>
-                    ))}
+                    )}
                   </View>
                 ))}
               </View>

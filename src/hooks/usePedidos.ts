@@ -20,6 +20,13 @@ export function usePedidosList(params?: PedidosListParams) {
   });
 }
 
+export function usePedidosElegiblesFacturacion() {
+  return useQuery({
+    queryKey: [...pedidosKeys.all(), 'elegibles-facturacion'] as const,
+    queryFn: () => pedidosService.getPedidosElegiblesFacturacion(),
+  });
+}
+
 export function useCreatePedido() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -45,8 +52,8 @@ export function useUpdatePedidoForEmision() {
 export function useUpdatePedidoEstado() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, estado }: { id: string; estado: PedidoEstado }) =>
-      pedidosService.updateEstado(id, estado),
+    mutationFn: ({ id, estado, motivo_anulacion }: { id: string; estado: PedidoEstado; motivo_anulacion?: string }) =>
+      pedidosService.updateEstado(id, { estado, motivo_anulacion }),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
       queryClient.invalidateQueries({ queryKey: pedidosKeys.detail(id) });

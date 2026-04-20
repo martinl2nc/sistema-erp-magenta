@@ -9,6 +9,7 @@ import { pdf } from '@react-pdf/renderer';
 import { useSaveQuote, useDeleteQuote, useSendQuoteWebhook } from '@/hooks/useQuotes';
 import { useLogEmailSend } from '@/hooks/useEmailHistory';
 import { clientsKeys } from '@/hooks/useClients';
+import { useCuentasBancarias } from '@/hooks/useCobros';
 
 import ClientFormModal from '@/features/clients/ClientFormModal';
 import QuotePDFPreviewModal from './QuotePDFPreviewModal';
@@ -57,6 +58,7 @@ export default function QuoteForm({
   const webhookMutation = useSendQuoteWebhook();
   const logEmailSendMutation = useLogEmailSend();
   const queryClient = useQueryClient();
+  const { data: bankAccounts = [] } = useCuentasBancarias();
 
   const [error, setError] = useState<string | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -155,6 +157,7 @@ export default function QuoteForm({
           quoteIdStr={quoteIdStr}
           companyConfig={companyConfig}
           products={products}
+          bankAccounts={bankAccounts}
         />
       );
       const blob = await pdf(doc).toBlob();

@@ -20,6 +20,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (path === '/cotizaciones') return pathname.startsWith('/cotizaciones');
     if (path === '/pedidos') return pathname.startsWith('/pedidos');
     if (path === '/facturacion') return pathname.startsWith('/facturacion');
+    if (path === '/cobranzas') return pathname.startsWith('/cobranzas');
     return pathname.startsWith(path);
   };
 
@@ -79,6 +80,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Link href="/facturacion" className={navLinkClass('/facturacion')} onClick={onClose}>
               <iconify-icon icon="solar:bill-list-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
               Facturación
+            </Link>
+          )}
+
+          {role === 'admin' && (
+            <Link href="/cobranzas" className={navLinkClass('/cobranzas')} onClick={onClose}>
+              <iconify-icon icon="solar:wallet-money-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+              Cobranzas
             </Link>
           )}
 

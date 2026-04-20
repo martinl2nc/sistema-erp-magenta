@@ -1,27 +1,26 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { useSellersList, useDeleteSeller, useToggleSellerActive } from '@/hooks/useSellers';
+import { useDeleteSeller, useToggleSellerActive } from '@/hooks/useSellers';
 import SellerFormModal from './SellerFormModal';
 import type { Seller } from '@/services/sellers.service';
 
-export default function SellersTab() {
-  const [searchTerm, setSearchTerm] = useState('');
+interface SellersTabProps {
+  sellers: Seller[];
+  isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: Error | null;
+  searchTerm: string;
+  onSearchChange: (val: string) => void;
+}
+
+export default function SellersTab({ sellers, isLoading, isFetching, isError, error, searchTerm, onSearchChange }: SellersTabProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
 
-  const { data: sellers = [], isLoading, isError, error } = useSellersList();
   const deleteMutation = useDeleteSeller();
   const toggleActiveMutation = useToggleSellerActive();
-
-  const filteredSellers = useMemo(() => {
-    if (!searchTerm.trim()) return sellers;
-    const term = searchTerm.toLowerCase();
-    return sellers.filter(s =>
-      s.nombre.toLowerCase().includes(term) ||
-      s.email.toLowerCase().includes(term)
-    );
-  }, [sellers, searchTerm]);
 
   const handleDelete = (seller: Seller) => {
     const confirmed = window.confirm(`¿Eliminar al vendedor "${seller.nombre}"?`);
@@ -59,7 +58,7 @@ export default function SellersTab() {
               type="text"
               placeholder="Buscar por nombre o email..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => onSearchChange(e.target.value)}
               className="block w-full bg-[#0F1115] border border-[#334155] rounded-lg pl-10 pr-4 py-2 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-shadow"
             />
           </div>
@@ -75,7 +74,7 @@ export default function SellersTab() {
         </div>
       </div>
 
-      <div className="md:flex-1 md:overflow-y-auto">
+      <div className={`md:flex-1 md:overflow-y-auto transition-opacity duration-150 ${isFetching && !isLoading ? 'opacity-50' : ''}`}>
         {isLoading ? (
           <div className="flex items-center justify-center p-12 text-[#94A3B8] text-sm">
             Cargando vendedores...
@@ -84,7 +83,7 @@ export default function SellersTab() {
           <div className="flex items-center justify-center p-12 text-red-400 text-sm">
             {error instanceof Error ? error.message : 'Error al cargar vendedores'}
           </div>
-        ) : filteredSellers.length === 0 ? (
+        ) : sellers.length === 0 ? (
           <div className="flex items-center justify-center p-12 text-[#94A3B8] text-sm">
             {searchTerm ? 'No se encontraron vendedores con esa búsqueda.' : 'No hay vendedores registrados.'}
           </div>
@@ -92,7 +91,7 @@ export default function SellersTab() {
           <>
             {/* Mobile cards */}
             <div className="md:hidden space-y-3 p-4">
-              {filteredSellers.map((seller) => (
+              {sellers.map((seller) => (
                 <div key={seller.id} className="bg-[#0F1115] border border-[#334155] rounded-lg p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium text-[#E2E8F0]">{seller.nombre}</p>
@@ -150,7 +149,7 @@ export default function SellersTab() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#334155]/60 bg-[#181B21]">
-                  {filteredSellers.map((seller) => (
+                  {sellers.map((seller) => (
                     <tr key={seller.id} className="hover:bg-[#334155]/20 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#E2E8F0]">
                         {seller.nombre}
