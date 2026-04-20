@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
 
-export type ComprobanteEstadoSunat = 'borrador' | 'emitida' | 'aceptada_sunat' | 'rechazada_sunat' | 'anulada';
+export type ComprobanteEstadoSunat = 'borrador' | 'emitida' | 'aceptada_sunat' | 'rechazada_sunat' | 'anulada' | 'interno';
 
 export interface Comprobante {
   id: string;
