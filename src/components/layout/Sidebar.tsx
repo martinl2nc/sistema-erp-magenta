@@ -31,6 +31,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         : 'text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#334155]/40'
     }`;
 
+  const subNavLinkClass = (path: string) =>
+    `flex items-center gap-2.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+      pathname === path
+        ? 'text-[#3B82F6] bg-[#3B82F6]/10'
+        : 'text-[#64748B] hover:text-[#94A3B8] hover:bg-[#334155]/30'
+    }`;
+
   const content = (
     <>
       <div>
@@ -84,10 +91,22 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
 
           {role === 'admin' && (
-            <Link href="/cobranzas" className={navLinkClass('/cobranzas')} onClick={onClose}>
-              <iconify-icon icon="solar:wallet-money-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
-              Cobranzas
-            </Link>
+            <div>
+              <Link href="/cobranzas" className={navLinkClass('/cobranzas')} onClick={onClose}>
+                <iconify-icon icon="solar:wallet-money-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+                Cobranzas
+              </Link>
+              <div className="ml-4 mt-0.5 pl-3 border-l border-[#334155] space-y-0.5">
+                <Link href="/cobranzas/transacciones" className={subNavLinkClass('/cobranzas/transacciones')} onClick={onClose}>
+                  <iconify-icon icon="solar:transfer-horizontal-linear" stroke-width="1.5" class="text-sm"></iconify-icon>
+                  Transacciones
+                </Link>
+                <Link href="/cobranzas/aging" className={subNavLinkClass('/cobranzas/aging')} onClick={onClose}>
+                  <iconify-icon icon="solar:chart-2-linear" stroke-width="1.5" class="text-sm"></iconify-icon>
+                  Antigüedad
+                </Link>
+              </div>
+            </div>
           )}
 
           {role === 'admin' && (
