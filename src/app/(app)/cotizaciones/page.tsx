@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import {
   useQuotesList,
   useUpdateQuoteStatus,
@@ -83,7 +83,10 @@ export default function QuotesList() {
     )
     if (!confirmed) return
     deleteMutation.mutate(id, {
-      onError: (err) => toast.error(err instanceof Error ? err.message : 'Error al eliminar la cotización'),
+      onError: (err) =>
+        toast.error(
+          err instanceof Error ? err.message : 'Error al eliminar la cotización'
+        )
     })
   }
 
@@ -193,7 +196,9 @@ export default function QuotesList() {
         </div>
       </div>
 
-      <div className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1 transition-opacity duration-150 ${isFetching && !isLoading ? 'opacity-50' : ''}`}>
+      <div
+        className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1 transition-opacity duration-150 ${isFetching && !isLoading ? 'opacity-50' : ''}`}
+      >
         {isLoading && (
           <div className="flex items-center justify-center gap-2 p-8 text-[#94A3B8] text-sm">
             <iconify-icon
