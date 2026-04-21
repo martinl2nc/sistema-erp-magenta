@@ -7,6 +7,7 @@ const tabs = [
   { id: 'productos', label: 'Productos y Categorías', path: '/admin/productos' },
   { id: 'empresa', label: 'Configuración de Empresa', path: '/admin/empresa' },
   { id: 'clientes', label: 'Clientes y Vendedores', path: '/admin/clientes' },
+  { id: 'proveedores', label: 'Proveedores', path: '/admin/proveedores' },
 ];
 
 export default function AdminTabs() {

@@ -3,6 +3,26 @@
 # PRD — Módulo de Compras y Gastos (Cuentas por Pagar)
 **Fase 1: Registro Directo y Flujo Financiero**
 
+---
+
+## Estado de Implementación
+
+| Componente | Estado | Notas |
+| :--- | :--- | :--- |
+| **BD — 5 tablas** | ✅ Aplicado | `proveedores`, `cat_categorias_gasto`, `comprobantes_compra`, `comprobantes_compras_detalles`, `pagos_emitidos` |
+| **Trigger de saldos** | ✅ Aplicado | `fn_recalcular_saldo_compra` + `trg_recalcular_saldo_compra` en `pagos_emitidos` |
+| **RPC atómica** | ✅ Aplicado | `registrar_comprobante_compra` — lista, no consumida aún |
+| **RLS** | ✅ Aplicado | Admin-only en las 5 tablas vía `perfiles_usuario` |
+| **Bucket Storage** | ✅ Aplicado | `compras_adjuntos` (PDF, XML, imágenes) |
+| **Seed categorías** | ✅ Aplicado | 6 categorías en `cat_categorias_gasto` |
+| **CRUD Proveedores** | ✅ Implementado | `/admin/proveedores` — service, hook, modal, page |
+| **Sidebar** | ✅ Implementado | Secciones Ventas / Compras con placeholders Fase 3 |
+| **Registro de Compras** | 🔜 Pendiente | `/compras/facturacion` + `/compras/nuevo` |
+| **Cuentas por Pagar** | 🔜 Pendiente | `/compras/pagos` — Aging Report + registrar pago |
+| **Dashboard Compras** | 🔜 Pendiente | `/compras/dashboard` |
+
+---
+
 ## 1. Resumen Ejecutivo
 El **Módulo de Compras y Gastos** expande el Sistema de Cotizaciones v2 convirtiéndolo en una herramienta de gestión financiera integral (Mini-ERP). En esta Fase 1, el enfoque es puramente financiero: permitir a la empresa registrar sus gastos, compras de mercadería y pagos a proveedores. 
 
@@ -32,6 +52,8 @@ Fase 3 (fuera del alcance de la iteración actual), en la cual se completará el
 - Cotizaciones de Compra (RFQ de proveedores).
 - Emisión y Aprobación de Órdenes de Compra (OC).
 - Ingreso automático de stock al Kardex.
+
+> **Nota sobre placeholders de UI:** Los ítems de navegación "Cotizaciones" (`/compras/cotizaciones`) y "Órdenes de compra" (`/compras/ordenes`) ya existen en el sidebar como rutas vacías de tipo "En construcción". No tienen funcionalidad en Fase 1; están reservados para Fase 3.
 
 ---
 
@@ -77,7 +99,7 @@ Se implementarán 5 nuevas tablas en Supabase PostgreSQL, manteniendo simetría 
 | `tipo_doc_codigo` | String | 01 (Fact), 02 (RxH), 03 (Bol), 14 (Servicios) |
 | `serie` | String | Serie del documento del proveedor |
 | `correlativo` | String | Número del documento (VARCHAR) |
-| `serie_numero` | String | Unique constraint: `proveedor_id` + `serie_numero` |
+| `serie_numero` | String | Campo calculado: `serie + correlativo` (ej. `"F001-00123"`). Unique constraint compuesto sobre (`proveedor_id`, `serie_numero`) |
 | `comprobante_referencia_id` | UUID | Para Notas de Crédito de proveedores |
 | `motivo_nota` | Text | Motivo si es NC |
 | `tipo_nota_codigo` | String | Código SUNAT de NC |
@@ -168,17 +190,21 @@ Se implementarán 5 nuevas tablas en Supabase PostgreSQL, manteniendo simetría 
 
 - Panel resumen financiero: Total Compras del Mes, IGV Crédito Fiscal Acumulado, Total Cuentas por Pagar.
 
-### `/administración/proveedores`
+### `/admin/proveedores`
 
 - Data Table con listado de proveedores.
 - Modal para Crear/Editar Proveedor (Clon visual del CustomerForm actual).
 
-### `/compras` (Historial de Compras)
+### `/compras/facturacion` (Historial de Compras)
 
-- Tabla principal de registro.
+> Ítem de sidebar: **Facturación** bajo la sección Compras.
+
+- Tabla principal de registro de comprobantes recibidos.
 - Columnas: Fecha Emisión, Proveedor, Comprobante, Categoría, Total, Estado Pago.
 
 ### `/compras/nuevo` (Formulario de Ingreso)
+
+> Accesible desde el botón "Nueva Compra" en `/compras/facturacion`. No aparece en el sidebar.
 
 - Formulario con lógica idéntica a la emisión de facturas:
   1. Selección de Proveedor.
