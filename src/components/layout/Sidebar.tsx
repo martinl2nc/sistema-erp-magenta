@@ -21,6 +21,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (path === '/pedidos') return pathname.startsWith('/pedidos');
     if (path === '/facturacion') return pathname.startsWith('/facturacion');
     if (path === '/cobranzas') return pathname.startsWith('/cobranzas');
+    if (path === '/compras/dashboard') return pathname === '/compras/dashboard';
+    if (path.startsWith('/compras')) return pathname.startsWith(path);
     return pathname.startsWith(path);
   };
 
@@ -67,7 +69,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="p-4 space-y-1">
+        <nav className="p-4 space-y-1 overflow-y-auto">
+          {/* Ventas */}
+          <p className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-widest text-[#475569]">Ventas</p>
+
           <Link href="/dashboard" className={navLinkClass('/')} onClick={onClose}>
             <iconify-icon icon="solar:home-smile-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
             Dashboard
@@ -109,11 +114,46 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           )}
 
+          {/* Compras */}
           {role === 'admin' && (
-            <Link href="/admin/clientes" className={navLinkClass('/admin')} onClick={onClose}>
-              <iconify-icon icon="solar:settings-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
-              Administración
-            </Link>
+            <>
+              <p className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-widest text-[#475569]">Compras</p>
+
+              <Link href="/compras/dashboard" className={navLinkClass('/compras/dashboard')} onClick={onClose}>
+                <iconify-icon icon="solar:home-smile-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+                Dashboard
+              </Link>
+
+              <Link href="/compras/cotizaciones" className={navLinkClass('/compras/cotizaciones')} onClick={onClose}>
+                <iconify-icon icon="solar:document-text-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+                Cotizaciones
+              </Link>
+
+              <Link href="/compras/ordenes" className={navLinkClass('/compras/ordenes')} onClick={onClose}>
+                <iconify-icon icon="solar:box-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+                Órdenes de compra
+              </Link>
+
+              <Link href="/compras/facturacion" className={navLinkClass('/compras/facturacion')} onClick={onClose}>
+                <iconify-icon icon="solar:bill-list-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+                Facturación
+              </Link>
+
+              <Link href="/compras/pagos" className={navLinkClass('/compras/pagos')} onClick={onClose}>
+                <iconify-icon icon="solar:wallet-money-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+                Pagos
+              </Link>
+            </>
+          )}
+
+          {/* Admin */}
+          {role === 'admin' && (
+            <div className="pt-4">
+              <Link href="/admin/clientes" className={navLinkClass('/admin')} onClick={onClose}>
+                <iconify-icon icon="solar:settings-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+                Administración
+              </Link>
+            </div>
           )}
         </nav>
       </div>
