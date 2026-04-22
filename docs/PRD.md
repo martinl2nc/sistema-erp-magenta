@@ -550,4 +550,4 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 
 ---
 
-*Documento generado el 16 de abril de 2026*
+*Documento generado el 22 de abril de 2026*

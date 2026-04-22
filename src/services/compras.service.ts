@@ -232,6 +232,35 @@ export const registrarCompra = async (payload: RegistrarCompraPayload): Promise<
   return data as string;
 };
 
+export interface RegistrarCompraCompletoPayload extends RegistrarCompraPayload {
+  archivoXml?: File | null;
+  archivoPdf?: File | null;
+}
+
+export const registrarCompraCompleto = async ({ archivoXml, archivoPdf, ...payload }: RegistrarCompraCompletoPayload): Promise<{ uuid: string, uploadFailed: boolean }> => {
+  const uuid = await registrarCompra(payload);
+  let uploadFailed = false;
+
+  try {
+    const xmlUrl = archivoXml
+      ? await uploadArchivoCompra(archivoXml, uuid, 'xml')
+      : undefined;
+    const pdfUrl = archivoPdf
+      ? await uploadArchivoCompra(archivoPdf, uuid, 'pdf')
+      : undefined;
+    if (xmlUrl !== undefined || pdfUrl !== undefined) {
+      await updateArchivosCompra(uuid, {
+        archivo_xml_url: xmlUrl,
+        archivo_pdf_url: pdfUrl,
+      });
+    }
+  } catch {
+    uploadFailed = true;
+  }
+
+  return { uuid, uploadFailed };
+};
+
 export const getCategorias = async (): Promise<CategoriaGasto[]> => {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -317,6 +346,67 @@ export interface EditarComprobantePayload {
   archivoXml?: File | null;
 }
 
+export interface EditarCompraCompletoPayload extends RegistrarCompraPayload {
+  archivoXml?: File | null;
+  archivoPdf?: File | null;
+}
+
+export const editarCompraCompleto = async (
+  id: string,
+  payload: EditarCompraCompletoPayload
+): Promise<{ uploadFailed: boolean }> => {
+  const supabase = createClient();
+  let uploadFailed = false;
+  let xmlUrl: string | undefined;
+  let pdfUrl: string | undefined;
+
+  try {
+    if (payload.archivoXml) xmlUrl = await uploadArchivoCompra(payload.archivoXml, id, 'xml');
+    if (payload.archivoPdf) pdfUrl = await uploadArchivoCompra(payload.archivoPdf, id, 'pdf');
+  } catch {
+    uploadFailed = true;
+  }
+
+  const { error } = await supabase.rpc('editar_comprobante_compra_completo', {
+    p_id:                     id,
+    p_proveedor_id:           payload.proveedor_id,
+    p_categoria_gasto_id:     payload.categoria_gasto_id ?? null,
+    p_tipo_doc_codigo:        payload.tipo_doc_codigo,
+    p_serie:                  payload.serie,
+    p_correlativo:            payload.correlativo,
+    p_fecha_emision:          payload.fecha_emision,
+    p_fecha_vencimiento:      payload.fecha_vencimiento ?? null,
+    p_moneda:                 payload.moneda ?? 'PEN',
+    p_tipo_cambio:            payload.tipo_cambio ?? 1,
+    p_forma_pago:             payload.forma_pago ?? 'Contado',
+    p_mto_oper_gravadas:      payload.mto_oper_gravadas,
+    p_mto_oper_exoneradas:    payload.mto_oper_exoneradas ?? 0,
+    p_mto_oper_inafectas:     payload.mto_oper_inafectas ?? 0,
+    p_mto_igv:                payload.mto_igv,
+    p_mto_isc:                payload.mto_isc ?? 0,
+    p_icbper:                 payload.icbper ?? 0,
+    p_total_impuestos:        payload.total_impuestos,
+    p_valor_venta:            payload.valor_venta,
+    p_subtotal:               payload.subtotal,
+    p_mto_imp_venta:          payload.mto_imp_venta,
+    p_descuento_global_monto: payload.descuento_global_monto ?? 0,
+    p_detraccion_cod_bien:    payload.detraccion_cod_bien ?? null,
+    p_detraccion_porcentaje:  payload.detraccion_porcentaje ?? null,
+    p_detraccion_monto:       payload.detraccion_monto ?? null,
+    p_archivo_xml_url:        xmlUrl ?? null,
+    p_archivo_pdf_url:        pdfUrl ?? null,
+    p_notas:                  payload.notas ?? null,
+    p_detalles:               payload.detalles ?? [],
+  });
+
+  if (error) {
+    if (error.code === '23505') throw new Error('Ya existe un comprobante con ese número para este proveedor.');
+    throw new Error('Error al editar el comprobante (completo): ' + error.message);
+  }
+
+  return { uploadFailed };
+};
+
 export interface KpisCompras {
   totalCxP: number;
   countPendientes: number;
@@ -344,15 +434,15 @@ export const getKpisCompras = async (): Promise<KpisCompras> => {
   if (cxpRes.error) throw new Error('Error al cargar KPIs de compras: ' + cxpRes.error.message);
   if (mesRes.error) throw new Error('Error al cargar KPIs del mes: ' + mesRes.error.message);
 
-  const cxpData = cxpRes.data ?? [];
-  const mesData = mesRes.data ?? [];
+  const cxpData = (cxpRes.data ?? []) as Pick<ComprobanteCompra, 'saldo_pendiente' | 'estado_pago'>[];
+  const mesData = (mesRes.data ?? []) as Pick<ComprobanteCompra, 'mto_imp_venta' | 'mto_igv'>[];
 
   return {
-    totalCxP:             cxpData.reduce((s, r) => s + r.saldo_pendiente, 0),
-    countPendientes:      cxpData.filter(r => r.estado_pago === 'pendiente').length,
-    countParciales:       cxpData.filter(r => r.estado_pago === 'parcial').length,
-    totalMes:             mesData.reduce((s, r) => s + r.mto_imp_venta, 0),
-    igvCreditoFiscalMes:  mesData.reduce((s, r) => s + r.mto_igv, 0),
+    totalCxP:             cxpData.reduce((s: number, r) => s + (r.saldo_pendiente || 0), 0),
+    countPendientes:      cxpData.filter((r) => r.estado_pago === 'pendiente').length,
+    countParciales:       cxpData.filter((r) => r.estado_pago === 'parcial').length,
+    totalMes:             mesData.reduce((s: number, r) => s + (r.mto_imp_venta || 0), 0),
+    igvCreditoFiscalMes:  mesData.reduce((s: number, r) => s + (r.mto_igv || 0), 0),
   };
 };
 
@@ -361,9 +451,11 @@ export const comprasService = {
   getCompraById,
   getDetallesCompra,
   registrarCompra,
+  registrarCompraCompleto,
   getCategorias,
   uploadArchivoCompra,
   updateArchivosCompra,
   editarComprobante,
+  editarCompraCompleto,
   getKpisCompras,
 };

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { comprasService } from '@/services/compras.service';
-import type { ComprasListParams, PaginatedCompras, RegistrarCompraPayload, RegistrarCompraCompletoPayload, EditarComprobantePayload, KpisCompras } from '@/services/compras.service';
+import type { ComprasListParams, PaginatedCompras, RegistrarCompraPayload, RegistrarCompraCompletoPayload, EditarComprobantePayload, EditarCompraCompletoPayload, KpisCompras } from '@/services/compras.service';
 
 // ─── Query Key Factories ─────────────────────────────────────
 
@@ -84,27 +84,7 @@ export function useRegistrarCompra() {
 export function useRegistrarCompraCompleto() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ archivoXml, archivoPdf, ...payload }: RegistrarCompraCompletoPayload) => {
-      const uuid = await comprasService.registrarCompra(payload);
-      let uploadFailed = false;
-      try {
-        const xmlUrl = archivoXml
-          ? await comprasService.uploadArchivoCompra(archivoXml, uuid, 'xml')
-          : undefined;
-        const pdfUrl = archivoPdf
-          ? await comprasService.uploadArchivoCompra(archivoPdf, uuid, 'pdf')
-          : undefined;
-        if (xmlUrl !== undefined || pdfUrl !== undefined) {
-          await comprasService.updateArchivosCompra(uuid, {
-            archivo_xml_url: xmlUrl,
-            archivo_pdf_url: pdfUrl,
-          });
-        }
-      } catch {
-        uploadFailed = true;
-      }
-      return { uuid, uploadFailed };
-    },
+    mutationFn: (payload: RegistrarCompraCompletoPayload) => comprasService.registrarCompraCompleto(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
       queryClient.invalidateQueries({ queryKey: kpisComprasKeys.all() });
@@ -119,6 +99,18 @@ export function useEditarCompra(id: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
       queryClient.invalidateQueries({ queryKey: comprasKeys.detail(id) });
+    },
+  });
+}
+
+export function useEditarCompraCompleto(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: EditarCompraCompletoPayload) => comprasService.editarCompraCompleto(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: comprasKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: kpisComprasKeys.all() });
     },
   });
 }
