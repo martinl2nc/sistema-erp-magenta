@@ -172,34 +172,34 @@ export default function RegistrarCompraModal({ isOpen, onClose, onSuccess }: Pro
   // ── Submit ───────────────────────────────────────────────────
   const handleSubmit = async () => {
     // Validación
+    const mostrarDetraccion = totales.total > DETRACCION_THRESHOLD_PEN && moneda === 'PEN'
     if (!proveedorId) {
-      toast.error('Seleccioná un proveedor')
+      setSubmitError('Seleccioná un proveedor')
       return
     }
     if (lineas.length === 0 || lineas.every((l) => !l.descripcion.trim())) {
-      toast.error('Agregá al menos una línea con descripción')
+      setSubmitError('Agregá al menos una línea con descripción')
       return
     }
     if (!serie.trim()) {
-      toast.error('Ingresá la serie del comprobante')
+      setSubmitError('Ingresá la serie del comprobante')
       return
     }
     if (!correlativo.trim()) {
-      toast.error('Ingresá el correlativo del comprobante')
+      setSubmitError('Ingresá el correlativo del comprobante')
       return
     }
     if (!fechaEmision) {
-      toast.error('Ingresá la fecha de emisión')
+      setSubmitError('Ingresá la fecha de emisión')
       return
     }
-    const mostrarDetraccion = totales.total > DETRACCION_THRESHOLD_PEN && moneda === 'PEN'
     if (mostrarDetraccion) {
       if (!detraccionCodBien.trim()) {
-        toast.error('Ingresá el código de bien/servicio para la detracción')
+        setSubmitError('Ingresá el código de bien/servicio para la detracción')
         return
       }
       if (!detraccionPorcentaje) {
-        toast.error('Ingresá el porcentaje de detracción')
+        setSubmitError('Ingresá el porcentaje de detracción')
         return
       }
     }

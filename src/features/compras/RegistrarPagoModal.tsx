@@ -73,15 +73,15 @@ export default function RegistrarPagoModal({
 
   const handleSubmit = async () => {
     if (!metodoPagoCodigo) {
-      toast.error('Seleccioná un método de pago.');
+      setSubmitError('Seleccioná un método de pago.');
       return;
     }
     if (!montoPagado || montoPagado <= 0) {
-      toast.error('El monto debe ser mayor a cero.');
+      setSubmitError('El monto debe ser mayor a cero.');
       return;
     }
     if (montoExcedeSaldo) {
-      toast.error('El monto no puede superar el saldo pendiente.');
+      setSubmitError('El monto no puede superar el saldo pendiente.');
       return;
     }
 

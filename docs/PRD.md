@@ -84,6 +84,13 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 - [x] Reporte de Antigüedad de Deuda (`/cobranzas/aging`): tabla agrupada por cliente con buckets Por Vencer / 1-30 / 31-60 / 61-90 / +90 días, detalle de comprobantes expandible por cliente
 - Para un detalle técnico completo, consulta: `@[docs/prd_modulo_cobros.md]`
 
+#### Módulo de Compras y Gastos (Fase 1)
+- [x] Arquitectura de base de datos implementada (proveedores, categorías, comprobantes de compra, detalles, pagos emitidos)
+- [x] CRUD de proveedores
+- [ ] Registro de compras y gastos (Cuentas por Pagar)
+- [ ] Dashboard de compras y Aging Report inverso
+- Para un detalle técnico completo, consulta: `@[docs/PRD_compras.md]`
+
 #### Módulo de Clientes y Vendedores
 - [x] Registro de clientes con RUC/DNI
 - [x] Datos de contacto (nombre, email, teléfono, dirección)
@@ -195,6 +202,11 @@ src/
 | `cat_metodos_pago` | Catálogo de métodos de pago válidos (Cash, Transferencia, Yape...) |
 | `cuentas_bancarias_empresa` | Cuentas bancarias habilitadas con moneda y detracciones |
 | `empresa_configuracion` | Configuración singleton de la empresa |
+| `proveedores` | Registro de proveedores |
+| `cat_categorias_gasto` | Categorías de gastos y compras |
+| `comprobantes_compra` | Cabecera de comprobantes de compras o gastos recibidos |
+| `comprobantes_compras_detalles` | Líneas de detalle de las compras |
+| `pagos_emitidos` | Historial de pagos emitidos a proveedores (Cuentas por Pagar) |
 
 #### 5.1 Estructura de Tablas Principales
 

@@ -544,3 +544,117 @@ ALTER TABLE "configuracion_series" ADD FOREIGN KEY ("tipo_doc_codigo") REFERENCE
 --   Tipos permitidos: image/jpeg, image/jpg, image/png, application/pdf
 --   Path: {comprobante_id}/{timestamp}.{ext}
 --   Políticas: authenticated can INSERT, SELECT, DELETE
+
+-- ==========================================
+-- COMPRAS Y GASTOS (ACCOUNTS PAYABLE)
+-- ==========================================
+
+CREATE TABLE "proveedores" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "tipo_documento" text DEFAULT 'RUC',
+  "numero_documento" text UNIQUE NOT NULL,
+  "razon_social" text,
+  "nombres_contacto" text DEFAULT '',
+  "apellidos_contacto" text DEFAULT '',
+  "email" text,
+  "telefono" text,
+  "direccion" text,
+  "banco_predeterminado" text,
+  "cuenta_bancaria" text,
+  "cuenta_cci" text,
+  "cuenta_detraccion_bn" text,
+  "activo" boolean DEFAULT true,
+  "fecha_creacion" timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE "cat_categorias_gasto" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "nombre" text UNIQUE NOT NULL,
+  "descripcion" text,
+  "activo" boolean DEFAULT true
+);
+
+CREATE TABLE "comprobantes_compra" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "proveedor_id" uuid NOT NULL,
+  "categoria_gasto_id" uuid,
+  "tipo_doc_codigo" text NOT NULL,
+  "serie" text NOT NULL,
+  "correlativo" text NOT NULL,
+  "serie_numero" text GENERATED ALWAYS AS ((upper(TRIM(BOTH FROM serie)) || '-'::text) || correlativo) STORED,
+  "fecha_emision" date NOT NULL,
+  "fecha_vencimiento" date,
+  "moneda" text DEFAULT 'PEN',
+  "tipo_cambio" numeric DEFAULT 1,
+  "forma_pago" text DEFAULT 'Contado',
+  "mto_oper_gravadas" numeric DEFAULT 0,
+  "mto_oper_exoneradas" numeric DEFAULT 0,
+  "mto_oper_inafectas" numeric DEFAULT 0,
+  "mto_igv" numeric DEFAULT 0,
+  "mto_isc" numeric DEFAULT 0,
+  "icbper" numeric DEFAULT 0,
+  "total_impuestos" numeric DEFAULT 0,
+  "valor_venta" numeric DEFAULT 0,
+  "subtotal" numeric DEFAULT 0,
+  "mto_imp_venta" numeric DEFAULT 0,
+  "descuento_global_monto" numeric DEFAULT 0,
+  "detraccion_cod_bien" text,
+  "detraccion_porcentaje" numeric,
+  "detraccion_monto" numeric,
+  "archivo_xml_url" text,
+  "archivo_pdf_url" text,
+  "notas" text,
+  "estado_pago" text DEFAULT 'pendiente' CHECK (estado_pago IN ('pendiente', 'parcial', 'pagado')),
+  "saldo_pendiente" numeric DEFAULT 0,
+  "created_at" timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE "comprobantes_compras_detalles" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "comprobante_compra_id" uuid NOT NULL,
+  "producto_id" uuid,
+  "cod_producto_proveedor" text,
+  "unidad_codigo" text DEFAULT 'NIU',
+  "descripcion" text NOT NULL,
+  "cantidad" numeric DEFAULT 1,
+  "mto_valor_unitario" numeric DEFAULT 0,
+  "mto_precio_unitario" numeric DEFAULT 0,
+  "mto_valor_venta" numeric DEFAULT 0,
+  "mto_base_igv" numeric DEFAULT 0,
+  "porcentaje_igv" numeric DEFAULT 18,
+  "igv" numeric DEFAULT 0,
+  "tip_afe_igv_codigo" text DEFAULT '10',
+  "descuento" numeric DEFAULT 0,
+  "total_impuestos" numeric DEFAULT 0
+);
+
+CREATE TABLE "pagos_emitidos" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "comprobante_compra_id" uuid NOT NULL,
+  "metodo_pago_codigo" text,
+  "cuenta_bancaria_id" uuid,
+  "monto_pagado" numeric NOT NULL CHECK (monto_pagado > 0),
+  "fecha_pago" date DEFAULT CURRENT_DATE,
+  "referencia_operacion" text,
+  "comprobante_img_url" text,
+  "notas" text,
+  "registrado_por" uuid,
+  "moneda" text DEFAULT 'PEN',
+  "anulado" boolean DEFAULT false,
+  "anulado_por" uuid,
+  "fecha_anulacion" timestamp with time zone,
+  "motivo_anulacion" text,
+  "created_at" timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE "comprobantes_compra" ADD FOREIGN KEY ("proveedor_id") REFERENCES "proveedores" ("id");
+ALTER TABLE "comprobantes_compra" ADD FOREIGN KEY ("categoria_gasto_id") REFERENCES "cat_categorias_gasto" ("id");
+
+ALTER TABLE "comprobantes_compras_detalles" ADD FOREIGN KEY ("comprobante_compra_id") REFERENCES "comprobantes_compra" ("id") ON DELETE CASCADE;
+ALTER TABLE "comprobantes_compras_detalles" ADD FOREIGN KEY ("producto_id") REFERENCES "productos" ("id");
+
+ALTER TABLE "pagos_emitidos" ADD FOREIGN KEY ("comprobante_compra_id") REFERENCES "comprobantes_compra" ("id") ON DELETE CASCADE;
+ALTER TABLE "pagos_emitidos" ADD FOREIGN KEY ("metodo_pago_codigo") REFERENCES "cat_metodos_pago" ("codigo");
+ALTER TABLE "pagos_emitidos" ADD FOREIGN KEY ("cuenta_bancaria_id") REFERENCES "cuentas_bancarias_empresa" ("id");
+ALTER TABLE "pagos_emitidos" ADD FOREIGN KEY ("registrado_por") REFERENCES "perfiles_usuario" ("id");
+ALTER TABLE "pagos_emitidos" ADD FOREIGN KEY ("anulado_por") REFERENCES "perfiles_usuario" ("id");
