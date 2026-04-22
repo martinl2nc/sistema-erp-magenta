@@ -8,8 +8,6 @@ import { formatCurrency, formatDate, getClientDisplayName } from '@/utils/format
 import { PAGINATION } from '@/constants';
 import Pagination from '@/components/ui/Pagination';
 import RegistrarCompraModal from './RegistrarCompraModal';
-import RegistrarPagoModal from './RegistrarPagoModal';
-import HistorialPagosDrawer from './HistorialPagosDrawer';
 import type { ComprobanteCompra, PaginatedCompras } from '@/services/compras.service';
 
 interface Props {
@@ -55,9 +53,7 @@ export default function ComprasFacturacionDashboard({ initialCompras }: Props) {
   const [page,         setPage]         = useState(1);
   const [pageSize,     setPageSize]     = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
 
-  const [isNuevaCompraOpen,    setIsNuevaCompraOpen]    = useState(false);
-  const [selectedForPago,      setSelectedForPago]      = useState<ComprobanteCompra | null>(null);
-  const [selectedForHistorial, setSelectedForHistorial] = useState<ComprobanteCompra | null>(null);
+  const [isNuevaCompraOpen, setIsNuevaCompraOpen] = useState(false);
 
   const debouncedSearch = useDebounce(searchTerm, 300);
 
@@ -213,22 +209,28 @@ export default function ComprasFacturacionDashboard({ initialCompras }: Props) {
                       </div>
                     </div>
                     <div className="flex gap-2 pt-1">
-                      {c.saldo_pendiente > 0 && (
-                        <button
-                          onClick={() => setSelectedForPago(c)}
-                          className="flex-1 bg-[#10B981] text-white text-sm font-medium py-2 rounded-md hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
+                      {c.archivo_pdf_url && (
+                        <a
+                          href={c.archivo_pdf_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 border border-[#334155] text-[#94A3B8] text-sm font-medium py-2 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors flex items-center justify-center gap-2"
                         >
-                          <iconify-icon icon="solar:wallet-money-linear" class="text-base"></iconify-icon>
-                          Registrar Pago
-                        </button>
+                          <iconify-icon icon="solar:file-text-linear" class="text-base"></iconify-icon>
+                          PDF
+                        </a>
                       )}
-                      <button
-                        onClick={() => setSelectedForHistorial(c)}
-                        className="flex-1 border border-[#334155] text-[#94A3B8] text-sm font-medium py-2 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors flex items-center justify-center gap-2"
-                      >
-                        <iconify-icon icon="solar:history-linear" class="text-base"></iconify-icon>
-                        Historial
-                      </button>
+                      {c.archivo_xml_url && (
+                        <a
+                          href={c.archivo_xml_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 border border-[#334155] text-[#94A3B8] text-sm font-medium py-2 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors flex items-center justify-center gap-2"
+                        >
+                          <iconify-icon icon="solar:code-square-linear" class="text-base"></iconify-icon>
+                          XML
+                        </a>
+                      )}
                     </div>
                   </div>
                 );
@@ -277,22 +279,32 @@ export default function ComprasFacturacionDashboard({ initialCompras }: Props) {
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {c.saldo_pendiente > 0 && (
-                              <button
-                                onClick={() => setSelectedForPago(c)}
-                                className="border border-[#10B981]/40 text-[#10B981] text-xs font-medium px-3 py-1.5 rounded-md hover:bg-[#10B981]/10 transition-colors whitespace-nowrap flex items-center gap-1.5"
+                            {c.archivo_pdf_url ? (
+                              <a
+                                href={c.archivo_pdf_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2.5 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors whitespace-nowrap flex items-center gap-1.5"
                               >
-                                <iconify-icon icon="solar:wallet-money-linear" class="text-base"></iconify-icon>
-                                Pago
-                              </button>
+                                <iconify-icon icon="solar:file-text-linear" class="text-base"></iconify-icon>
+                                PDF
+                              </a>
+                            ) : (
+                              <span className="text-xs text-[#334155] px-2.5 py-1.5">PDF</span>
                             )}
-                            <button
-                              onClick={() => setSelectedForHistorial(c)}
-                              className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-3 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors whitespace-nowrap flex items-center gap-1.5"
-                            >
-                              <iconify-icon icon="solar:history-linear" class="text-base"></iconify-icon>
-                              Historial
-                            </button>
+                            {c.archivo_xml_url ? (
+                              <a
+                                href={c.archivo_xml_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2.5 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors whitespace-nowrap flex items-center gap-1.5"
+                              >
+                                <iconify-icon icon="solar:code-square-linear" class="text-base"></iconify-icon>
+                                XML
+                              </a>
+                            ) : (
+                              <span className="text-xs text-[#334155] px-2.5 py-1.5">XML</span>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -320,25 +332,6 @@ export default function ComprasFacturacionDashboard({ initialCompras }: Props) {
         isOpen={isNuevaCompraOpen}
         onClose={() => setIsNuevaCompraOpen(false)}
         onSuccess={() => setIsNuevaCompraOpen(false)}
-      />
-
-      <RegistrarPagoModal
-        isOpen={Boolean(selectedForPago)}
-        onClose={() => setSelectedForPago(null)}
-        comprobanteCompraId={selectedForPago?.id ?? ''}
-        saldoPendiente={selectedForPago?.saldo_pendiente ?? 0}
-        monedaComprobante={selectedForPago?.moneda ?? 'PEN'}
-        serieNumero={selectedForPago?.serie_numero ?? ''}
-        onSuccess={() => setSelectedForPago(null)}
-      />
-
-      <HistorialPagosDrawer
-        isOpen={Boolean(selectedForHistorial)}
-        onClose={() => setSelectedForHistorial(null)}
-        comprobanteCompraId={selectedForHistorial?.id ?? null}
-        serieNumero={selectedForHistorial?.serie_numero ?? ''}
-        montoTotal={selectedForHistorial?.mto_imp_venta ?? 0}
-        saldoPendiente={selectedForHistorial?.saldo_pendiente ?? 0}
       />
     </div>
   );
