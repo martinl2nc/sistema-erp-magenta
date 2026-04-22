@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { comprasService } from '@/services/compras.service';
-import type { ComprasListParams, PaginatedCompras, RegistrarCompraPayload, RegistrarCompraCompletoPayload, KpisCompras } from '@/services/compras.service';
+import type { ComprasListParams, PaginatedCompras, RegistrarCompraPayload, RegistrarCompraCompletoPayload, EditarComprobantePayload, KpisCompras } from '@/services/compras.service';
 
 // ─── Query Key Factories ─────────────────────────────────────
 
@@ -108,6 +108,17 @@ export function useRegistrarCompraCompleto() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
       queryClient.invalidateQueries({ queryKey: kpisComprasKeys.all() });
+    },
+  });
+}
+
+export function useEditarCompra(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: EditarComprobantePayload) => comprasService.editarComprobante(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: comprasKeys.detail(id) });
     },
   });
 }

@@ -287,6 +287,36 @@ export const updateArchivosCompra = async (
   if (error) throw new Error('Error al actualizar archivos del comprobante: ' + error.message);
 };
 
+export const editarComprobante = async (
+  id: string,
+  payload: EditarComprobantePayload
+): Promise<void> => {
+  const supabase = createClient();
+
+  const metaPatch: Record<string, string | null> = {};
+  if ('notas'             in payload) metaPatch.notas              = payload.notas ?? null;
+  if ('fecha_vencimiento' in payload) metaPatch.fecha_vencimiento  = payload.fecha_vencimiento ?? null;
+  if ('categoria_gasto_id' in payload) metaPatch.categoria_gasto_id = payload.categoria_gasto_id ?? null;
+
+  const urlPatch: Record<string, string> = {};
+  if (payload.archivoPdf) urlPatch.archivo_pdf_url = await uploadArchivoCompra(payload.archivoPdf, id, 'pdf');
+  if (payload.archivoXml) urlPatch.archivo_xml_url = await uploadArchivoCompra(payload.archivoXml, id, 'xml');
+
+  const patch = { ...metaPatch, ...urlPatch };
+  if (Object.keys(patch).length === 0) return;
+
+  const { error } = await supabase.from('comprobantes_compra').update(patch).eq('id', id);
+  if (error) throw new Error('Error al editar el comprobante: ' + error.message);
+};
+
+export interface EditarComprobantePayload {
+  notas?: string | null;
+  fecha_vencimiento?: string | null;
+  categoria_gasto_id?: string | null;
+  archivoPdf?: File | null;
+  archivoXml?: File | null;
+}
+
 export interface KpisCompras {
   totalCxP: number;
   countPendientes: number;
@@ -334,5 +364,6 @@ export const comprasService = {
   getCategorias,
   uploadArchivoCompra,
   updateArchivosCompra,
+  editarComprobante,
   getKpisCompras,
 };

@@ -8,6 +8,7 @@ import { formatCurrency, formatDate, getClientDisplayName } from '@/utils/format
 import { PAGINATION } from '@/constants';
 import Pagination from '@/components/ui/Pagination';
 import RegistrarCompraModal from './RegistrarCompraModal';
+import EditarCompraModal from './EditarCompraModal';
 import type { ComprobanteCompra, PaginatedCompras } from '@/services/compras.service';
 
 interface Props {
@@ -53,7 +54,8 @@ export default function ComprasFacturacionDashboard({ initialCompras }: Props) {
   const [page,         setPage]         = useState(1);
   const [pageSize,     setPageSize]     = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
 
-  const [isNuevaCompraOpen, setIsNuevaCompraOpen] = useState(false);
+  const [isNuevaCompraOpen,   setIsNuevaCompraOpen]   = useState(false);
+  const [selectedForEditar,   setSelectedForEditar]   = useState<ComprobanteCompra | null>(null);
 
   const debouncedSearch = useDebounce(searchTerm, 300);
 
@@ -231,6 +233,12 @@ export default function ComprasFacturacionDashboard({ initialCompras }: Props) {
                           XML
                         </a>
                       )}
+                      <button
+                        onClick={() => setSelectedForEditar(c)}
+                        className="border border-[#334155] text-[#94A3B8] text-sm font-medium py-2 px-3 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors flex items-center justify-center gap-2"
+                      >
+                        <iconify-icon icon="solar:pen-linear" class="text-base"></iconify-icon>
+                      </button>
                     </div>
                   </div>
                 );
@@ -305,6 +313,13 @@ export default function ComprasFacturacionDashboard({ initialCompras }: Props) {
                             ) : (
                               <span className="text-xs text-[#334155] px-2.5 py-1.5">XML</span>
                             )}
+                            <button
+                              onClick={() => setSelectedForEditar(c)}
+                              title="Editar comprobante"
+                              className="border border-[#334155] text-[#94A3B8] text-xs font-medium p-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors"
+                            >
+                              <iconify-icon icon="solar:pen-linear" class="text-base"></iconify-icon>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -332,6 +347,13 @@ export default function ComprasFacturacionDashboard({ initialCompras }: Props) {
         isOpen={isNuevaCompraOpen}
         onClose={() => setIsNuevaCompraOpen(false)}
         onSuccess={() => setIsNuevaCompraOpen(false)}
+      />
+
+      <EditarCompraModal
+        isOpen={Boolean(selectedForEditar)}
+        onClose={() => setSelectedForEditar(null)}
+        comprobante={selectedForEditar}
+        onSuccess={() => setSelectedForEditar(null)}
       />
     </div>
   );
