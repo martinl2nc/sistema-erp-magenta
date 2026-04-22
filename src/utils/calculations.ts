@@ -326,3 +326,44 @@ export const calculateDiscountAmount = (
 
 /** @deprecated Use calculateQuoteTotals */
 export const calculateFinancials = calculateQuoteTotals;
+
+// ─── Cálculos para Compras (precio con IGV incluido) ─────────────────────────
+
+export interface LineaCompraCalc {
+  mto_valor_unitario: number;
+  mto_valor_venta: number;
+  igv: number;
+  total_impuestos: number;
+}
+
+// Descompone precio con IGV en sus partes (base + impuesto) y calcula totales de línea
+export const calcLineaCompra = (
+  mto_precio_unitario: number,
+  cantidad: number,
+  descuento: number = 0,
+): LineaCompraCalc => {
+  const mto_valor_unitario = roundToDecimal(mto_precio_unitario / (1 + TAX_RATES.IGV), 6);
+  const mto_valor_venta    = roundToDecimal(mto_valor_unitario * cantidad - descuento);
+  const igv                = roundToDecimal(mto_valor_venta * TAX_RATES.IGV);
+  return { mto_valor_unitario, mto_valor_venta, igv, total_impuestos: igv };
+};
+
+export interface TotalesCompra {
+  baseGravada: number;
+  igvCalculado: number;
+  mtoIgv: number;
+  total: number;
+}
+
+// Calcula totales de un comprobante de compra con soporte de override manual de IGV
+export const calcTotalesCompra = (
+  lineas: Array<{ mto_valor_venta: number }>,
+  descuentoGlobal: number,
+  igvOverride: number | null,
+): TotalesCompra => {
+  const baseGravada  = roundToDecimal(lineas.reduce((s, l) => s + l.mto_valor_venta, 0) - descuentoGlobal);
+  const igvCalculado = roundToDecimal(baseGravada * TAX_RATES.IGV);
+  const mtoIgv       = igvOverride !== null ? igvOverride : igvCalculado;
+  const total        = roundToDecimal(baseGravada + mtoIgv);
+  return { baseGravada, igvCalculado, mtoIgv, total };
+};

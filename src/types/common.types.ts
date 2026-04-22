@@ -137,3 +137,22 @@ export interface LoadingState {
   isLoading: boolean;
   error?: string | null;
 }
+
+export interface MetodoPago {
+  codigo: string;
+  descripcion: string;
+  requiere_referencia: boolean;
+  activo: boolean;
+}
+
+export interface CuentaBancaria {
+  id: string;
+  banco: string;
+  numero_cuenta: string;
+  cci: string | null;
+  moneda: string;
+  es_detraccion: boolean;
+  activo: boolean;
+  created_at: string;
+  _tiene_pagos?: boolean;
+}

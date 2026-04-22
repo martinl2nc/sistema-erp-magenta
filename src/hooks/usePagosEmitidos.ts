@@ -1,0 +1,74 @@
+'use client';
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { pagosEmitidosService } from '@/services/pagos-emitidos.service';
+import type { RegistrarPagoEmitidoPayload, AnularPagoEmitidoPayload } from '@/services/pagos-emitidos.service';
+import { comprasKeys } from '@/hooks/useCompras';
+
+// ─── Query Key Factories ─────────────────────────────────────
+
+export const pagosEmitidosKeys = {
+  all:      ()           => ['pagos-emitidos'] as const,
+  historial: (id: string) => [...pagosEmitidosKeys.all(), 'historial', id] as const,
+};
+
+// ─── Query Hooks ─────────────────────────────────────────────
+
+export function useHistorialPagosEmitidos(id?: string) {
+  return useQuery({
+    queryKey: pagosEmitidosKeys.historial(id ?? ''),
+    queryFn:  () => pagosEmitidosService.getHistorialPagosEmitidos(id!),
+    enabled:  !!id,
+  });
+}
+
+// ─── Mutation Hooks ──────────────────────────────────────────
+
+export function useRegistrarPagoEmitido(comprobanteCompraId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RegistrarPagoEmitidoPayload) =>
+      pagosEmitidosService.registrarPagoEmitido(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: pagosEmitidosKeys.historial(comprobanteCompraId) });
+      queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: comprasKeys.detail(comprobanteCompraId) });
+    },
+  });
+}
+
+export function useAnularPagoEmitido(comprobanteCompraId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AnularPagoEmitidoPayload) =>
+      pagosEmitidosService.anularPagoEmitido(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: pagosEmitidosKeys.historial(comprobanteCompraId) });
+      queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: comprasKeys.detail(comprobanteCompraId) });
+    },
+  });
+}
+
+interface RegistrarPagoCompletoPayload extends RegistrarPagoEmitidoPayload {
+  voucher?: File | null;
+}
+
+export function useRegistrarPagoCompleto(comprobanteCompraId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ voucher, ...payload }: RegistrarPagoCompletoPayload) => {
+      const pagoId = await pagosEmitidosService.registrarPagoEmitido(payload);
+      if (voucher) {
+        const url = await pagosEmitidosService.uploadVoucherPago(voucher, pagoId);
+        await pagosEmitidosService.updateVoucherUrl(pagoId, url);
+      }
+      return pagoId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: pagosEmitidosKeys.historial(comprobanteCompraId) });
+      queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: comprasKeys.detail(comprobanteCompraId) });
+    },
+  });
+}

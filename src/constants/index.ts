@@ -123,6 +123,9 @@ export const TIMEOUTS = {
   AUTO_SAVE: 2000,
 } as const;
 
+// Umbral mínimo en PEN para mostrar panel de detracción en compras
+export const DETRACCION_THRESHOLD_PEN = 700;
+
 /**
  * Rutas de la aplicación
  */
