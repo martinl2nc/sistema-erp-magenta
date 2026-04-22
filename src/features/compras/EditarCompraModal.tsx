@@ -12,17 +12,12 @@ interface Props {
   onSuccess: () => void;
 }
 
-interface FileState {
-  file: File | null;
-  preview: string;
-}
-
 export default function EditarCompraModal({ isOpen, onClose, comprobante, onSuccess }: Props) {
-  const [notas,             setNotas]            = useState('');
-  const [fechaVencimiento,  setFechaVencimiento] = useState('');
-  const [categoriaId,       setCategoriaId]      = useState('');
-  const [pdf,               setPdf]              = useState<FileState>({ file: null, preview: '' });
-  const [xml,               setXml]              = useState<FileState>({ file: null, preview: '' });
+  const [notas,            setNotas]            = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState('');
+  const [categoriaId,      setCategoriaId]      = useState('');
+  const [pdf,              setPdf]              = useState<File | null>(null);
+  const [xml,              setXml]              = useState<File | null>(null);
 
   const pdfRef = useRef<HTMLInputElement>(null);
   const xmlRef = useRef<HTMLInputElement>(null);
@@ -35,17 +30,17 @@ export default function EditarCompraModal({ isOpen, onClose, comprobante, onSucc
     setNotas(comprobante.notas ?? '');
     setFechaVencimiento(comprobante.fecha_vencimiento ?? '');
     setCategoriaId(comprobante.cat_categorias_gasto?.id ?? '');
-    setPdf({ file: null, preview: comprobante.archivo_pdf_url ?? '' });
-    setXml({ file: null, preview: comprobante.archivo_xml_url ?? '' });
+    setPdf(null);
+    setXml(null);
   }, [isOpen, comprobante]);
 
   const handleFileChange = (
     e: React.ChangeEvent<HTMLInputElement>,
-    setter: React.Dispatch<React.SetStateAction<FileState>>
+    setter: React.Dispatch<React.SetStateAction<File | null>>
   ) => {
     const file = e.target.files?.[0] ?? null;
     if (!file) return;
-    setter({ file, preview: file.name });
+    setter(file);
   };
 
   const handleSubmit = async () => {
@@ -55,8 +50,8 @@ export default function EditarCompraModal({ isOpen, onClose, comprobante, onSucc
         notas:             notas.trim() || null,
         fecha_vencimiento: fechaVencimiento || null,
         categoria_gasto_id: categoriaId || null,
-        archivoPdf:        pdf.file ?? undefined,
-        archivoXml:        xml.file ?? undefined,
+        archivoPdf:        pdf ?? undefined,
+        archivoXml:        xml ?? undefined,
       });
       toast.success('Comprobante actualizado correctamente.');
       onSuccess();
@@ -96,9 +91,9 @@ export default function EditarCompraModal({ isOpen, onClose, comprobante, onSucc
                   <div className="flex items-center gap-2 bg-[#0F1115] border border-[#334155] rounded-md px-3 py-2">
                     <iconify-icon icon="solar:file-text-linear" class="text-base text-[#94A3B8] shrink-0"></iconify-icon>
                     <span className="text-xs text-[#94A3B8] truncate flex-1">
-                      {pdf.file ? pdf.file.name : (comprobante.archivo_pdf_url ? 'Archivo existente' : 'Sin archivo')}
+                      {pdf ? pdf.name : (comprobante.archivo_pdf_url ? 'Archivo existente' : 'Sin archivo')}
                     </span>
-                    {comprobante.archivo_pdf_url && !pdf.file && (
+                    {comprobante.archivo_pdf_url && !pdf && (
                       <a
                         href={comprobante.archivo_pdf_url}
                         target="_blank"
@@ -127,9 +122,9 @@ export default function EditarCompraModal({ isOpen, onClose, comprobante, onSucc
                   <div className="flex items-center gap-2 bg-[#0F1115] border border-[#334155] rounded-md px-3 py-2">
                     <iconify-icon icon="solar:code-square-linear" class="text-base text-[#94A3B8] shrink-0"></iconify-icon>
                     <span className="text-xs text-[#94A3B8] truncate flex-1">
-                      {xml.file ? xml.file.name : (comprobante.archivo_xml_url ? 'Archivo existente' : 'Sin archivo')}
+                      {xml ? xml.name : (comprobante.archivo_xml_url ? 'Archivo existente' : 'Sin archivo')}
                     </span>
-                    {comprobante.archivo_xml_url && !xml.file && (
+                    {comprobante.archivo_xml_url && !xml && (
                       <a
                         href={comprobante.archivo_xml_url}
                         target="_blank"
