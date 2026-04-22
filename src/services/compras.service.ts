@@ -115,6 +115,11 @@ export interface RegistrarCompraPayload {
   detalles?: RegistrarCompraDetallePayload[];
 }
 
+export interface RegistrarCompraCompletoPayload extends RegistrarCompraPayload {
+  archivoXml?: File | null;
+  archivoPdf?: File | null;
+}
+
 export interface ComprasListParams {
   page?: number;
   pageSize?: number;
@@ -282,6 +287,45 @@ export const updateArchivosCompra = async (
   if (error) throw new Error('Error al actualizar archivos del comprobante: ' + error.message);
 };
 
+export interface KpisCompras {
+  totalCxP: number;
+  countPendientes: number;
+  countParciales: number;
+  totalMes: number;
+  igvCreditoFiscalMes: number;
+}
+
+export const getKpisCompras = async (): Promise<KpisCompras> => {
+  const supabase = createClient();
+  const now = new Date();
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+
+  const [cxpRes, mesRes] = await Promise.all([
+    supabase
+      .from('comprobantes_compra')
+      .select('saldo_pendiente, estado_pago')
+      .gt('saldo_pendiente', 0),
+    supabase
+      .from('comprobantes_compra')
+      .select('mto_imp_venta, mto_igv')
+      .gte('fecha_emision', firstDayOfMonth),
+  ]);
+
+  if (cxpRes.error) throw new Error('Error al cargar KPIs de compras: ' + cxpRes.error.message);
+  if (mesRes.error) throw new Error('Error al cargar KPIs del mes: ' + mesRes.error.message);
+
+  const cxpData = cxpRes.data ?? [];
+  const mesData = mesRes.data ?? [];
+
+  return {
+    totalCxP:             cxpData.reduce((s, r) => s + r.saldo_pendiente, 0),
+    countPendientes:      cxpData.filter(r => r.estado_pago === 'pendiente').length,
+    countParciales:       cxpData.filter(r => r.estado_pago === 'parcial').length,
+    totalMes:             mesData.reduce((s, r) => s + r.mto_imp_venta, 0),
+    igvCreditoFiscalMes:  mesData.reduce((s, r) => s + r.mto_igv, 0),
+  };
+};
+
 export const comprasService = {
   getCompras,
   getCompraById,
@@ -290,4 +334,5 @@ export const comprasService = {
   getCategorias,
   uploadArchivoCompra,
   updateArchivosCompra,
+  getKpisCompras,
 };

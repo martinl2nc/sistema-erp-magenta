@@ -1,9 +1,10 @@
-export default function ComprasPagosPage() {
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
-      <iconify-icon icon="solar:wallet-money-linear" class="text-5xl text-[#3B82F6]"></iconify-icon>
-      <h1 className="text-2xl font-semibold text-[#E2E8F0]">Pagos de Compras</h1>
-      <p className="text-[#64748B]">Módulo en construcción.</p>
-    </div>
-  );
+import { getKpisComprasServer, getComprasServer } from '@/services/compras-server.service';
+import ComprasPagosDashboard from '@/features/compras/ComprasPagosDashboard';
+
+export default async function ComprasPagosPage() {
+  const [initialKpis, initialCompras] = await Promise.all([
+    getKpisComprasServer(),
+    getComprasServer({ showPagados: false }),
+  ]);
+  return <ComprasPagosDashboard initialKpis={initialKpis} initialCompras={initialCompras} />;
 }

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { comprasService } from '@/services/compras.service';
-import type { ComprasListParams, RegistrarCompraPayload } from '@/services/compras.service';
+import type { ComprasListParams, PaginatedCompras, RegistrarCompraPayload, RegistrarCompraCompletoPayload, KpisCompras } from '@/services/compras.service';
 
 // ─── Query Key Factories ─────────────────────────────────────
 
@@ -18,13 +18,18 @@ export const categoriasGastoKeys = {
   all: () => ['categorias-gasto'] as const,
 };
 
+export const kpisComprasKeys = {
+  all: () => ['compras-kpis'] as const,
+};
+
 // ─── Query Hooks ─────────────────────────────────────────────
 
-export function useCompras(params?: ComprasListParams) {
+export function useCompras(params?: ComprasListParams, initialData?: PaginatedCompras) {
   return useQuery({
     queryKey: comprasKeys.list(params),
     queryFn:  () => comprasService.getCompras(params),
     placeholderData: (prev) => prev,
+    initialData,
   });
 }
 
@@ -54,6 +59,15 @@ export function useCategoriasGasto() {
   });
 }
 
+export function useKpisCompras(initialData?: KpisCompras) {
+  return useQuery({
+    queryKey: kpisComprasKeys.all(),
+    queryFn:  () => comprasService.getKpisCompras(),
+    staleTime: 2 * 60 * 1000,
+    initialData,
+  });
+}
+
 // ─── Mutation Hooks ──────────────────────────────────────────
 
 export function useRegistrarCompra() {
@@ -62,13 +76,9 @@ export function useRegistrarCompra() {
     mutationFn: (payload: RegistrarCompraPayload) => comprasService.registrarCompra(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: kpisComprasKeys.all() });
     },
   });
-}
-
-interface RegistrarCompraCompletoPayload extends RegistrarCompraPayload {
-  archivoXml?: File | null;
-  archivoPdf?: File | null;
 }
 
 export function useRegistrarCompraCompleto() {
@@ -97,6 +107,7 @@ export function useRegistrarCompraCompleto() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: comprasKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: kpisComprasKeys.all() });
     },
   });
 }

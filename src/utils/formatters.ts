@@ -146,14 +146,20 @@ export const formatPhone = (phone: string): string => {
  */
 export const formatDocument = (doc: string, type: 'DNI' | 'RUC' = 'DNI'): string => {
   const cleaned = doc.replace(/\D/g, '');
-  
+
   if (type === 'DNI' && cleaned.length === 8) {
     return cleaned;
   }
-  
+
   if (type === 'RUC' && cleaned.length === 11) {
     return cleaned;
   }
-  
+
   return doc;
 };
+
+export const formatMonthYear = (date: Date): string =>
+  date.toLocaleDateString('es-PE', { month: 'long', year: 'numeric' });
+
+export const formatLongDate = (date: Date): string =>
+  date.toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' });
