@@ -103,7 +103,11 @@ function AnulacionPanel({ cobroId, comprobanteId, onClose }: AnulacionPanelProps
 
 // ─── Main component ───────────────────────────────────────────
 
-export default function ListadoCobros() {
+interface ListadoCobrosProps {
+  embedded?: boolean;
+}
+
+export default function ListadoCobros({ embedded = false }: ListadoCobrosProps) {
   const { role } = useAuth();
 
   const [preset, setPreset] = useState<DatePreset>('mes');
@@ -169,8 +173,9 @@ export default function ListadoCobros() {
   ];
 
   return (
-    <div className="max-w-7xl w-full mx-auto flex flex-col gap-6 md:h-full">
-      {/* Header */}
+    <div className={embedded ? 'flex flex-col gap-6 flex-1' : 'max-w-7xl w-full mx-auto flex flex-col gap-6 md:h-full'}>
+      {/* Header — only when standalone */}
+      {!embedded && (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
@@ -199,6 +204,7 @@ export default function ListadoCobros() {
           </div>
         )}
       </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4 space-y-4">

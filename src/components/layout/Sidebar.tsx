@@ -96,22 +96,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
 
           {role === 'admin' && (
-            <div>
-              <Link href="/cobranzas" className={navLinkClass('/cobranzas')} onClick={onClose}>
-                <iconify-icon icon="solar:wallet-money-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
-                Cobranzas
-              </Link>
-              <div className="ml-4 mt-0.5 pl-3 border-l border-[#334155] space-y-0.5">
-                <Link href="/cobranzas/transacciones" className={subNavLinkClass('/cobranzas/transacciones')} onClick={onClose}>
-                  <iconify-icon icon="solar:transfer-horizontal-linear" stroke-width="1.5" class="text-sm"></iconify-icon>
-                  Transacciones
-                </Link>
-                <Link href="/cobranzas/aging" className={subNavLinkClass('/cobranzas/aging')} onClick={onClose}>
-                  <iconify-icon icon="solar:chart-2-linear" stroke-width="1.5" class="text-sm"></iconify-icon>
-                  Antigüedad
-                </Link>
-              </div>
-            </div>
+            <Link href="/cobranzas" className={navLinkClass('/cobranzas')} onClick={onClose}>
+              <iconify-icon icon="solar:wallet-money-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+              Cobranzas
+            </Link>
           )}
 
           {/* Compras */}

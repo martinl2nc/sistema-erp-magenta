@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAgingReport, useAgingDetalle } from '@/hooks/useCobros';
-import { formatCurrency, formatDate, getClientDisplayName } from '@/utils/formatters';
+import { formatCurrency, formatDate, getClientDisplayName, formatLongDate } from '@/utils/formatters';
 import type { AgingDetalleRow, AgingReportRow } from '@/services/cobros.service';
 
 // ─── Bucket configuration ────────────────────────────────────
@@ -93,7 +93,11 @@ function AgingDetalleRows({ clienteId }: { clienteId: string }) {
 
 // ─── Main component ───────────────────────────────────────────
 
-export default function AgingReport() {
+interface AgingReportProps {
+  embedded?: boolean;
+}
+
+export default function AgingReport({ embedded = false }: AgingReportProps) {
   const { data: rows, isLoading, isError } = useAgingReport();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -119,11 +123,12 @@ export default function AgingReport() {
   const totalVencido = totals.vencido_1_30 + totals.vencido_31_60 + totals.vencido_61_90 + totals.vencido_mas_90;
   const pctVencido = totals.deuda > 0 ? (totalVencido / totals.deuda) * 100 : 0;
 
-  const today = new Date().toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' });
+  const today = formatLongDate(new Date());
 
   return (
-    <div className="max-w-7xl w-full mx-auto flex flex-col">
-      {/* Header */}
+    <div className={embedded ? 'flex flex-col flex-1' : 'max-w-7xl w-full mx-auto flex flex-col'}>
+      {/* Header — only when standalone */}
+      {!embedded && (
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[#E2E8F0]">Antigüedad de Deuda</h1>
@@ -135,6 +140,7 @@ export default function AgingReport() {
           </div>
         )}
       </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
