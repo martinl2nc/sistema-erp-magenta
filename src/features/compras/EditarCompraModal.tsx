@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { X } from 'lucide-react';
-import { useEditarCompra } from '@/hooks/useCompras';
-import { useCategoriasGasto } from '@/hooks/useCompras';
+import { useEditarCompra, useCategoriasGasto } from '@/hooks/useCompras';
 import type { ComprobanteCompra } from '@/services/compras.service';
 
 interface Props {
@@ -81,7 +79,7 @@ export default function EditarCompraModal({ isOpen, onClose, comprobante, onSucc
             <p className="text-xs text-[#94A3B8] mt-0.5">{comprobante.serie_numero}</p>
           </div>
           <button onClick={onClose} className="text-[#94A3B8] hover:text-[#E2E8F0] transition-colors p-1">
-            <X size={20} />
+            <iconify-icon icon="solar:close-linear" class="text-xl"></iconify-icon>
           </button>
         </div>
 
