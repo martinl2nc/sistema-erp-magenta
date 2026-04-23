@@ -12,6 +12,7 @@ import HistorialCobrosDrawer from './HistorialCobrosDrawer';
 import ListadoCobros from './ListadoCobros';
 import AgingReport from './AgingReport';
 import type { CuentaPorCobrar } from '@/services/cobros.service';
+import { ExportButton } from '@/components/ui/ExportButton';
 
 const ESTADO_PAGO_STYLES: Record<string, string> = {
   Pendiente: 'bg-yellow-500/10 text-yellow-400',
@@ -171,6 +172,16 @@ export default function CobranzasDashboard() {
               />
               Mostrar pagados
             </label>
+            <ExportButton
+              getUrl={() => {
+                const params = new URLSearchParams();
+                if (searchTerm) params.set('search', searchTerm);
+                if (formaPagoFilter) params.set('formaPago', formaPagoFilter);
+                if (showPagados) params.set('showPagados', 'true');
+                return `/api/export/cobranzas?${params.toString()}`;
+              }}
+              filename="cobranzas.xlsx"
+            />
           </div>
 
           {/* Table Container */}

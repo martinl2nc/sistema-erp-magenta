@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
 import { PAGINATION, TIMEOUTS } from '@/constants';
 import type { CobroListado } from '@/services/cobros.service';
+import { ExportButton } from '@/components/ui/ExportButton';
 
 // ─── Date preset helpers ──────────────────────────────────────
 
@@ -296,6 +297,18 @@ export default function ListadoCobros({ embedded = false }: ListadoCobrosProps) 
               <iconify-icon icon="solar:alt-arrow-down-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
             </div>
           </div>
+          <ExportButton
+            getUrl={() => {
+              const params = new URLSearchParams();
+              if (dateRange.desde) params.set('fechaDesde', dateRange.desde);
+              if (dateRange.hasta) params.set('fechaHasta', dateRange.hasta);
+              if (cuentaFilter) params.set('cuentaBancariaId', cuentaFilter);
+              if (metodoFilter) params.set('metodoPagoCodigo', metodoFilter);
+              if (searchTerm) params.set('search', searchTerm);
+              return `/api/export/transacciones?${params.toString()}`;
+            }}
+            filename="transacciones.xlsx"
+          />
         </div>
       </div>
 

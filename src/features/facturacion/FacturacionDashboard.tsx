@@ -15,6 +15,7 @@ import type { Pedido } from '@/services/pedidos.service';
 import type { Comprobante } from '@/services/facturas.service';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
 import { PAGINATION, TIMEOUTS } from '@/constants';
+import { ExportButton } from '@/components/ui/ExportButton';
 
 type Tab = 'pendientes' | 'emitidas';
 
@@ -377,6 +378,15 @@ export default function FacturacionPage() {
                 className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
               />
             </div>
+            <ExportButton
+              getUrl={() => {
+                const params = new URLSearchParams();
+                if (searchEmitidas) params.set('search', searchEmitidas);
+                if (filterTipoDoc) params.set('tipo_doc', filterTipoDoc);
+                return `/api/export/comprobantes?${params.toString()}`;
+              }}
+              filename="comprobantes.xlsx"
+            />
           </div>
           <div className={`bg-[#181B21] border border-[#334155] rounded-lg md:overflow-hidden flex flex-col shadow-sm mb-6 md:flex-1 transition-opacity duration-150 ${fetchingComprobantes && !loadingComprobantes ? 'opacity-50' : ''}`}>
             {loadingComprobantes && (
