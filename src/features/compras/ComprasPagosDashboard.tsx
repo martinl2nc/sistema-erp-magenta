@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 import { useCompras, useKpisCompras } from '@/hooks/useCompras';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatDate, formatLongDate, getClientDisplayName } from '@/utils/formatters';
-import { PAGINATION } from '@/constants';
+import { PAGINATION, TIMEOUTS } from '@/constants';
 import Pagination from '@/components/ui/Pagination';
 import RegistrarPagoModal from './RegistrarPagoModal';
 import HistorialPagosDrawer from './HistorialPagosDrawer';
+import ListadoPagosEmitidos from './ListadoPagosEmitidos';
+import AgingReportCompras from './AgingReportCompras';
 import type { ComprobanteCompra, KpisCompras, PaginatedCompras } from '@/services/compras.service';
 
 interface Props {
@@ -53,21 +56,34 @@ function getProveedorName(c: ComprobanteCompra): string {
   }) || '—';
 }
 
+type Tab = 'pagos' | 'transacciones' | 'aging';
+
 export default function ComprasPagosDashboard({ initialKpis, initialCompras }: Props) {
   const { role } = useAuth();
+  const [tab, setTab] = useState<Tab>('pagos');
 
   const [page,     setPage]     = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGINATION.DEFAULT_PAGE_SIZE);
+  const [searchTerm,    setSearchTerm]    = useState('');
+  const [formaPagoFilter, setFormaPagoFilter] = useState('');
+  const [showPagados,   setShowPagados]   = useState(false);
+
+  const debouncedSearch = useDebounce(searchTerm, TIMEOUTS.SEARCH_DEBOUNCE);
 
   const [selectedForPago,      setSelectedForPago]      = useState<ComprobanteCompra | null>(null);
   const [selectedForHistorial, setSelectedForHistorial] = useState<ComprobanteCompra | null>(null);
 
-  const isDefaultQuery = page === 1 && pageSize === PAGINATION.DEFAULT_PAGE_SIZE;
+  const isDefaultQuery = page === 1 && pageSize === PAGINATION.DEFAULT_PAGE_SIZE
+    && !debouncedSearch && !formaPagoFilter && !showPagados;
 
   const { data: result, isLoading, isFetching, isError } = useCompras(
-    { page, pageSize, showPagados: false },
+    { page, pageSize, showPagados, search: debouncedSearch || undefined, formaPago: formaPagoFilter || undefined },
     isDefaultQuery ? initialCompras : undefined,
   );
+
+  const handleSearchChange     = (v: string) => { setSearchTerm(v);      setPage(1); };
+  const handleFormaPagoChange  = (v: string) => { setFormaPagoFilter(v); setPage(1); };
+  const handleShowPagadosChange = (v: boolean) => { setShowPagados(v);   setPage(1); };
 
   const { data: kpis } = useKpisCompras(initialKpis);
 
@@ -106,6 +122,25 @@ export default function ComprasPagosDashboard({ initialKpis, initialCompras }: P
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex border-b border-[#334155] mb-6 gap-1">
+        {([['pagos', 'Pagos'], ['transacciones', 'Transacciones'], ['aging', 'x Antigüedad']] as [Tab, string][]).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${tab === key
+              ? 'border-[#3B82F6] text-[#3B82F6]'
+              : 'border-transparent text-[#94A3B8] hover:text-[#E2E8F0]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab: Pagos */}
+      {tab === 'pagos' && (<>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4">
@@ -120,6 +155,48 @@ export default function ComprasPagosDashboard({ initialKpis, initialCompras }: P
           <p className="text-xs text-[#94A3B8] uppercase tracking-wider mb-1">Pagos Parciales</p>
           <p className="text-xl font-bold text-orange-400">{kpis?.countParciales ?? 0}</p>
         </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-[#181B21] border border-[#334155] rounded-lg p-4 mb-4 shadow-sm flex flex-col lg:flex-row gap-4">
+        <div className="relative group">
+          <select
+            title="Filtrar por forma de pago"
+            value={formaPagoFilter}
+            onChange={(e) => handleFormaPagoChange(e.target.value)}
+            className="appearance-none w-full sm:w-48 bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-3 pr-10 text-sm text-[#E2E8F0] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors cursor-pointer"
+          >
+            <option value="">Todas las formas</option>
+            <option value="Contado">Contado</option>
+            <option value="Credito">Crédito</option>
+          </select>
+          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-[#94A3B8]">
+            <iconify-icon icon="solar:alt-arrow-down-linear" class="text-lg"></iconify-icon>
+          </div>
+        </div>
+
+        <div className="relative flex-1">
+          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-[#94A3B8]">
+            <iconify-icon icon="solar:magnifer-linear" class="text-lg"></iconify-icon>
+          </div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Buscar por serie o proveedor..."
+            className="w-full bg-[#0F1115] border border-[#334155] rounded-md py-2 pl-10 pr-4 text-sm text-[#E2E8F0] placeholder-[#94A3B8]/60 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
+          />
+        </div>
+
+        <label className="flex items-center gap-2 text-sm text-[#94A3B8] cursor-pointer shrink-0 select-none">
+          <input
+            type="checkbox"
+            checked={showPagados}
+            onChange={(e) => handleShowPagadosChange(e.target.checked)}
+            className="w-4 h-4 rounded border-[#334155] bg-[#0F1115] text-[#3B82F6] focus:ring-[#3B82F6] focus:ring-offset-0 cursor-pointer"
+          />
+          Mostrar pagados
+        </label>
       </div>
 
       {/* Table Container */}
@@ -174,6 +251,9 @@ export default function ComprasPagosDashboard({ initialKpis, initialCompras }: P
                       <div className="text-right">
                         <p className="text-[10px] text-[#94A3B8] uppercase">Total</p>
                         <p className="text-sm text-[#94A3B8]">{formatCurrency(c.mto_imp_venta)}</p>
+                        {c.detraccion_monto && c.detraccion_monto > 0 && (
+                          <p className="text-[10px] text-orange-400">-{formatCurrency(c.detraccion_monto)} detr.</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2 pt-1">
@@ -222,7 +302,12 @@ export default function ComprasPagosDashboard({ initialKpis, initialCompras }: P
                         <td className="px-5 py-3.5 text-sm text-[#94A3B8]">
                           {c.fecha_vencimiento ? formatDate(c.fecha_vencimiento) : '—'}
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-[#94A3B8] text-right">{formatCurrency(c.mto_imp_venta)}</td>
+                        <td className="px-5 py-3.5 text-sm text-[#94A3B8] text-right">
+                          {formatCurrency(c.mto_imp_venta)}
+                          {c.detraccion_monto && c.detraccion_monto > 0 && (
+                            <span className="block text-[10px] text-orange-400">-{formatCurrency(c.detraccion_monto)} detr.</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5 text-sm font-semibold text-right text-yellow-400">{formatCurrency(c.saldo_pendiente)}</td>
                         <td className="px-5 py-3.5">
                           <span className={`text-[10px] font-bold px-2 py-1 rounded-full inline-block ${ESTADO_STYLES[c.estado_pago] ?? 'bg-[#334155] text-[#94A3B8]'}`}>
@@ -270,6 +355,14 @@ export default function ComprasPagosDashboard({ initialKpis, initialCompras }: P
           onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
+
+      </>)}
+
+      {/* Tab: Transacciones */}
+      {tab === 'transacciones' && <ListadoPagosEmitidos embedded />}
+
+      {/* Tab: x Antigüedad */}
+      {tab === 'aging' && <AgingReportCompras embedded />}
 
       <RegistrarPagoModal
         isOpen={Boolean(selectedForPago)}

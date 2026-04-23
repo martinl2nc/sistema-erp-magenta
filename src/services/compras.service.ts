@@ -127,6 +127,7 @@ export interface ComprasListParams {
   estadoPago?: 'pendiente' | 'parcial' | 'pagado';
   proveedorId?: string;
   showPagados?: boolean;
+  formaPago?: string;
 }
 
 export interface PaginatedCompras {
@@ -140,7 +141,7 @@ export const getCompras = async (
   params?: ComprasListParams
 ): Promise<PaginatedCompras> => {
   const supabase = createClient();
-  const { page = 1, pageSize = 10, search, estadoPago, proveedorId, showPagados } = params ?? {};
+  const { page = 1, pageSize = 10, search, estadoPago, proveedorId, showPagados, formaPago } = params ?? {};
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -156,9 +157,10 @@ export const getCompras = async (
   if (!showPagados) query = query.gt('saldo_pendiente', 0);
   if (estadoPago) query = query.eq('estado_pago', estadoPago);
   if (proveedorId) query = query.eq('proveedor_id', proveedorId);
+  if (formaPago) query = query.eq('forma_pago', formaPago);
   if (search?.trim()) {
     const term = `%${search.trim()}%`;
-    query = query.or(`serie_numero.ilike.${term}`);
+    query = query.or(`serie_numero.ilike.${term},proveedores.razon_social.ilike.${term},proveedores.nombres_contacto.ilike.${term}`);
   }
 
   const { data, error, count } = await query;
@@ -231,11 +233,6 @@ export const registrarCompra = async (payload: RegistrarCompraPayload): Promise<
 
   return data as string;
 };
-
-export interface RegistrarCompraCompletoPayload extends RegistrarCompraPayload {
-  archivoXml?: File | null;
-  archivoPdf?: File | null;
-}
 
 export const registrarCompraCompleto = async ({ archivoXml, archivoPdf, ...payload }: RegistrarCompraCompletoPayload): Promise<{ uuid: string, uploadFailed: boolean }> => {
   const uuid = await registrarCompra(payload);
