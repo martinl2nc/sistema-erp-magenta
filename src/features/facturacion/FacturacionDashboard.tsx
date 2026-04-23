@@ -474,6 +474,30 @@ export default function FacturacionPage() {
                             <iconify-icon icon="solar:restart-linear" class="text-lg"></iconify-icon>
                           </button>
                         )}
+                        {f.tipo_doc_codigo === '80' && !f.enlace_pdf && f.estado_sunat === 'interno' && (
+                          <button
+                            onClick={async () => {
+                              const win = window.open('', '_blank');
+                              try {
+                                const res = await enviarASunat(f.id);
+                                if (res.enlacePdf && win) {
+                                  win.location.href = res.enlacePdf;
+                                } else {
+                                  win?.close();
+                                  toast.warning('No se pudo generar el PDF');
+                                }
+                              } catch (err) {
+                                win?.close();
+                                toast.error(err instanceof Error ? err.message : 'Error al generar PDF');
+                              }
+                            }}
+                            className="flex items-center gap-1 text-xs text-[#3B82F6] hover:text-blue-400"
+                            title="Generar PDF"
+                          >
+                            <iconify-icon icon="solar:file-download-linear" class="text-base"></iconify-icon>
+                            PDF
+                          </button>
+                        )}
                         {f.origen_emision === 'sol' && (
                           <button
                             onClick={() => router.push(`/facturacion/externa/${f.id}/editar`)}
@@ -570,6 +594,29 @@ export default function FacturacionPage() {
                                   title="Reparar / Re-enviar"
                                 >
                                   <iconify-icon icon="solar:restart-linear" class="text-sm"></iconify-icon>
+                                </button>
+                              )}
+                              {f.tipo_doc_codigo === '80' && !f.enlace_pdf && f.estado_sunat === 'interno' && (
+                                <button
+                                  onClick={async () => {
+                                    const win = window.open('', '_blank');
+                                    try {
+                                      const res = await enviarASunat(f.id);
+                                      if (res.enlacePdf && win) {
+                                        win.location.href = res.enlacePdf;
+                                      } else {
+                                        win?.close();
+                                        toast.warning('No se pudo generar el PDF');
+                                      }
+                                    } catch (err) {
+                                      win?.close();
+                                      toast.error(err instanceof Error ? err.message : 'Error al generar PDF');
+                                    }
+                                  }}
+                                  className="border border-[#334155] text-[#94A3B8] text-xs font-medium px-2 py-1.5 rounded-md hover:bg-[#334155]/50 hover:text-[#E2E8F0] transition-colors"
+                                  title="Generar PDF"
+                                >
+                                  <iconify-icon icon="solar:file-download-linear" class="text-base"></iconify-icon>
                                 </button>
                               )}
                               {f.origen_emision === 'sol' && (

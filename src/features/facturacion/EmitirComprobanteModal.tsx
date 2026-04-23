@@ -419,6 +419,27 @@ export default function EmitirComprobanteModal({
         cuotas: formaPago === 'Credito' ? cuotas.map((c) => ({ monto: c.monto, fecha: c.fecha })) : undefined,
       })
 
+      // Nota de Venta: generar PDF interno sin pasar por SUNAT
+      if (tipoDocCodigo === '80') {
+        const win = window.open('', '_blank')
+        try {
+          const nvResult = await enviarASunatHook.mutateAsync(comprobanteId)
+          if (nvResult.enlacePdf && win) {
+            win.location.href = nvResult.enlacePdf
+          } else {
+            win?.close()
+            toast.success(`Nota de Venta ${nvResult.serie_numero ?? ''} registrada`)
+          }
+        } catch {
+          win?.close()
+          toast.success('Nota de Venta registrada')
+        }
+        setHasUnsavedChanges(false)
+        onSuccess?.()
+        onClose()
+        return
+      }
+
       // Enviar a SUNAT via API Route interna (no-fatal: el comprobante ya está en BD)
       try {
         const sunatResult = await enviarASunatHook.mutateAsync(comprobanteId)

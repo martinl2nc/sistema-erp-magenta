@@ -90,6 +90,7 @@ export interface EmitirComprobantePayload {
 export interface EnviarSunatResponse {
   success: boolean;
   serie_numero?: string;
+  enlacePdf?: string | null;
   enlace_pdf?: string | null;
   enlace_xml?: string | null;
   hash?: string;
