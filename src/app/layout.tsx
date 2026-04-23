@@ -1,18 +1,18 @@
-import type { Metadata } from 'next';
-import { Toaster } from 'sonner';
-import { AuthProvider } from '@/context/AuthContext';
-import QueryProvider from '@/providers/QueryProvider';
-import './globals.css';
+import type { Metadata } from 'next'
+import { AuthProvider } from '@/context/AuthContext'
+import { Toaster } from 'sonner'
+import QueryProvider from '@/providers/QueryProvider'
+import './globals.css'
 
 export const metadata: Metadata = {
   title: 'CotizadorPro',
-  description: 'Sistema de cotizaciones profesional',
-};
+  description: 'Sistema de cotizaciones profesional'
+}
 
 export default function RootLayout({
-  children,
+  children
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   return (
     <html lang="es" className="h-full antialiased" suppressHydrationWarning>
@@ -22,11 +22,16 @@ export default function RootLayout({
       <body className="min-h-full">
         <QueryProvider>
           <AuthProvider>
-            <Toaster position="top-center" theme="dark" duration={5000} richColors />
+            <Toaster
+              position="top-center"
+              theme="dark"
+              duration={5000}
+              richColors
+            />
             {children}
           </AuthProvider>
         </QueryProvider>
       </body>
     </html>
-  );
+  )
 }
