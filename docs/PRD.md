@@ -87,8 +87,12 @@ Digitalizar y automatizar el proceso completo de ventas: desde la cotización in
 #### Módulo de Compras y Gastos (Fase 1)
 - [x] Arquitectura de base de datos implementada (proveedores, categorías, comprobantes de compra, detalles, pagos emitidos)
 - [x] CRUD de proveedores
-- [ ] Registro de compras y gastos (Cuentas por Pagar)
-- [ ] Dashboard de compras y Aging Report inverso
+- [x] Dashboard de Cuentas por Pagar con 3 pestañas: Pagos (listado con filtros), Transacciones (historial de egresos) y x Antigüedad (Aging Report inverso por proveedor)
+- [x] Aging Report inverso: RPCs `get_aging_report_compras` y `get_aging_detalle_compras`, 5 buckets de mora con detalle expandible por proveedor
+- [x] Historial de pagos emitidos (`ListadoPagosEmitidos`) con filtros por fecha, cuenta bancaria, método de pago y búsqueda
+- [x] Monto de detracción visible en la columna Total (texto naranja, espejo de Cobranzas)
+- [ ] Formulario de registro de compras y gastos (`/compras/nuevo`)
+- [ ] Dashboard financiero de compras (`/compras/dashboard`)
 - Para un detalle técnico completo, consulta: `@[docs/PRD_compras.md]`
 
 #### Módulo de Clientes y Vendedores
@@ -531,6 +535,7 @@ A continuación se detalla la estructura de las columnas de las entidades core d
 | 1.2.0 | 2026-04-18 | Cronograma de cuotas en historial de cobranzas (waterfall acumulativo) |
 | 1.3.0 | 2026-04-18 | Anulación auditada de cobros (soft-delete), campo moneda en cobros, upload de vouchers, listado general de transacciones para conciliación bancaria |
 | 1.4.0 | 2026-04-19 | Reporte de Antigüedad de Deuda (Aging Report): RPCs `get_aging_report` y `get_aging_detalle`, vista `/cobranzas/aging` con tabla expandible por cliente y 5 buckets de mora |
+| 1.5.0 | 2026-04-22 | Cuentas por Pagar: dashboard con 3 pestañas (Pagos / Transacciones / x Antigüedad), `ListadoPagosEmitidos` con filtros, `AgingReportCompras` con RPCs `get_aging_report_compras` + `get_aging_detalle_compras`, detracción en columna Total |
 
 ---
 

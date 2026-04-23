@@ -17,9 +17,14 @@
 | **Seed categorías** | ✅ Aplicado | 6 categorías en `cat_categorias_gasto` |
 | **CRUD Proveedores** | ✅ Implementado | `/admin/proveedores` — service, hook, modal, page |
 | **Sidebar** | ✅ Implementado | Secciones Ventas / Compras con placeholders Fase 3 |
-| **Registro de Compras** | 🔜 Pendiente | `/compras/facturacion` + `/compras/nuevo` |
-| **Cuentas por Pagar** | 🔜 Pendiente | `/compras/pagos` — Aging Report + registrar pago |
-| **Dashboard Compras** | 🔜 Pendiente | `/compras/dashboard` |
+| **Cuentas por Pagar (UI)** | ✅ Implementado | `ComprasPagosDashboard` con 3 tabs: Pagos / Transacciones / x Antigüedad |
+| **Tab Pagos — filtros** | ✅ Implementado | Select forma de pago, search, toggle "Mostrar pagados"; detracción en columna Total (naranja) |
+| **ListadoPagosEmitidos** | ✅ Implementado | `src/features/compras/ListadoPagosEmitidos.tsx` — historial paginado de egresos con filtros por fecha, cuenta, método y búsqueda. Anulación auditada (solo admin) |
+| **AgingReportCompras** | ✅ Implementado | `src/features/compras/AgingReportCompras.tsx` — tabla por proveedor, 5 buckets, detalle por comprobante lazy-loaded vía expand |
+| **RPCs Aging Compras** | ✅ Aplicado | `get_aging_report_compras()` y `get_aging_detalle_compras(p_proveedor_id)` — migración `20260423012541_aging_compras` |
+| **Query keys + hooks** | ✅ Implementado | `pagosEmitidosKeys` factory extendido; `useAllPagosEmitidos`, `useAllPagosEmitidosTotales`, `useAgingReportCompras`, `useAgingDetalleCompras` |
+| **Registro de Compras (Form)** | 🔜 Pendiente | `/compras/nuevo` — formulario de ingreso manual de comprobantes |
+| **Dashboard Financiero** | 🔜 Pendiente | `/compras/dashboard` — métricas: Total Compras, IGV Crédito Fiscal, CxP |
 
 ---
 
