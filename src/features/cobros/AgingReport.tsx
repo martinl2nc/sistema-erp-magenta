@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useAgingReport, useAgingDetalle } from '@/hooks/useCobros';
 import { formatCurrency, formatDate, getClientDisplayName, formatLongDate } from '@/utils/formatters';
 import type { AgingDetalleRow, AgingReportRow } from '@/services/cobros.service';
+import { ExportButton } from '@/components/ui/ExportButton';
 
 // ─── Bucket configuration ────────────────────────────────────
 
@@ -141,6 +142,15 @@ export default function AgingReport({ embedded = false }: AgingReportProps) {
         )}
       </div>
       )}
+
+      {/* Toolbar */}
+      <div className="flex justify-end mb-3">
+        <ExportButton
+          getUrl={() => '/api/export/aging'}
+          filename="aging_saldos.xlsx"
+          label="Exportar Excel"
+        />
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">

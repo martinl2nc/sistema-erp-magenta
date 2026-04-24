@@ -1,3 +1,4 @@
+import React from 'react';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -12,6 +13,9 @@ import {
   type ClienteData,
   type EmpresaData,
 } from '@/lib/apisperuFacturacion';
+import { renderToBuffer } from '@react-pdf/renderer';
+import { NotaVentaDocument, type NotaVentaPDFData } from '@/lib/pdf/notaVentaPDF';
+import { getClientDisplayName } from '@/utils/formatters';
 
 // ─── POST /api/facturacion/emitir ────────────────────────────
 export async function POST(request: Request) {
@@ -55,15 +59,75 @@ export async function POST(request: Request) {
     if (comprobante.tipo_doc_codigo === '80') {
       const supabaseAdmin = createAdminClient();
       const serieNumero = `${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}`;
+
+      const [{ data: detallesNV }, { data: clienteNV }, { data: empresaNV }] = await Promise.all([
+        supabase.from('comprobantes_detalles').select('*').eq('comprobante_id', comprobante_id),
+        supabase.from('clientes').select('*').eq('id', comprobante.cliente_id).single(),
+        supabase.from('empresa_configuracion').select('*').limit(1).single(),
+      ]);
+
+      let enlacePdfNV: string | null = null;
+
+      if (detallesNV && clienteNV && empresaNV) {
+        try {
+          const pdfData: NotaVentaPDFData = {
+            serie_numero: serieNumero,
+            fecha_emision: comprobante.fecha_emision,
+            empresa_razon_social: (empresaNV as { razon_social: string }).razon_social,
+            empresa_ruc: (empresaNV as { ruc: string }).ruc,
+            empresa_direccion: (empresaNV as { direccion: string | null }).direccion,
+            empresa_logo_url: (empresaNV as { logo_url: string | null }).logo_url,
+            cliente_nombre: getClientDisplayName(clienteNV as Parameters<typeof getClientDisplayName>[0]),
+            cliente_tipo_doc: (clienteNV as { tipo_documento: string | null }).tipo_documento,
+            cliente_numero_doc: (clienteNV as { numero_documento: string | null }).numero_documento,
+            cliente_direccion: (clienteNV as { direccion: string | null }).direccion,
+            detalles: detallesNV.map((d: Record<string, unknown>) => ({
+              descripcion: d.descripcion as string,
+              cod_producto: d.cod_producto as string | null,
+              cantidad: d.cantidad as number,
+              mto_precio_unitario: d.mto_precio_unitario as number,
+              mto_valor_venta: d.mto_valor_venta as number,
+              unidad_codigo: d.unidad_codigo as string,
+              descuento: d.descuento as number | null,
+            })),
+            subtotal: comprobante.valor_venta ?? comprobante.subtotal ?? 0,
+            igv: comprobante.mto_igv ?? 0,
+            total: comprobante.mto_imp_venta ?? 0,
+            descuento_global: comprobante.descuento_global_monto ?? 0,
+            aplica_igv: (comprobante.mto_igv ?? 0) > 0,
+            terminos_condiciones: (empresaNV as { terminos_condiciones: string | null }).terminos_condiciones,
+          };
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pdfBuffer = await renderToBuffer(
+            React.createElement(NotaVentaDocument, { data: pdfData }) as any
+          );
+          const pdfPath = `pdf/NV-${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}_${(empresaNV as { ruc: string }).ruc}.pdf`;
+          const { error: upErr } = await supabaseAdmin.storage
+            .from('facturas_emitidas')
+            .upload(pdfPath, pdfBuffer, { upsert: true, contentType: 'application/pdf' });
+
+          if (!upErr) {
+            const { data: signedData } = await supabaseAdmin.storage
+              .from('facturas_emitidas')
+              .createSignedUrl(pdfPath, 31536000 * 100);
+            enlacePdfNV = signedData?.signedUrl ?? null;
+          }
+        } catch {
+          // PDF generation is non-fatal — the comprobante is still registered
+        }
+      }
+
       await supabaseAdmin
         .from('comprobantes')
-        .update({ estado_sunat: 'interno' })
+        .update({ estado_sunat: 'interno', enlace_pdf: enlacePdfNV })
         .eq('id', comprobante_id);
+
       return NextResponse.json({
         success: true,
         message: 'Nota de Venta registrada',
         serie_numero: serieNumero,
-        enlacePdf: null,
+        enlacePdf: enlacePdfNV,
         enlaceXml: null,
         enlaceCdr: null,
       });
