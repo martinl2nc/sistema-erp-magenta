@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client';
-import { startOfMonth, endOfMonth, subMonths, subDays, differenceInDays } from 'date-fns';
+import { startOfMonth, subDays } from 'date-fns';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface KpiStats {
   totalMes: number;
@@ -71,6 +72,22 @@ export interface KpiComparison {
 
 const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
+interface CotizacionMontoRow { total_final: number | null; estado: string; }
+interface CotizacionFechaMontoRow { fecha_emision: string; total_final: number | null; }
+interface CotizacionEstadoRow { estado: string; }
+interface CotizacionClienteRow {
+  total_final: number | null;
+  clientes: { razon_social: string | null; nombres_contacto: string; apellidos_contacto: string } | null;
+}
+interface CotizacionIdRow { id: string; }
+interface CotizacionLinhaRow {
+  nombre_producto_historico: string | null;
+  cantidad: number | null;
+  subtotal_linea: number | null;
+}
+interface PedidoFunnelRow { cotizacion_id: string | null; id: string; }
+interface CotizacionFinancialRow { total_final: number | null; descuento_global_monto: number | null; }
+
 export const dashboardService = {
   async getKpis(vendedorId?: string | null): Promise<KpiStats> {
     const supabase = createClient();
@@ -84,21 +101,24 @@ export const dashboardService = {
       .select('total_final, estado')
       .gte('fecha_emision', inicioMes);
     if (vendedorId) qMes = qMes.eq('vendedor_id', vendedorId);
-    const { data: dataMes } = await qMes;
+    const { data: dataMes, error: qMesError } = await qMes;
+    if (qMesError) throw new Error('Error al cargar KPIs del mes: ' + qMesError.message);
 
     const totalMes = dataMes?.length ?? 0;
-    const montoMes = dataMes?.reduce((sum: number, q: any) => sum + (q.total_final ?? 0), 0) ?? 0;
+    const montoMes = (dataMes as CotizacionMontoRow[] | null)?.reduce((sum, q) => sum + (q.total_final ?? 0), 0) ?? 0;
 
     let qTotal = supabase.from('cotizaciones').select('id', { count: 'exact', head: true });
     if (vendedorId) qTotal = qTotal.eq('vendedor_id', vendedorId);
-    const { count: totalAll } = await qTotal;
+    const { count: totalAll, error: qTotalError } = await qTotal;
+    if (qTotalError) throw new Error('Error al cargar total de cotizaciones: ' + qTotalError.message);
 
     let qConv = supabase
       .from('cotizaciones')
       .select('id', { count: 'exact', head: true })
       .in('estado', ['Aprobada', 'Enviada']);
     if (vendedorId) qConv = qConv.eq('vendedor_id', vendedorId);
-    const { count: totalConv } = await qConv;
+    const { count: totalConv, error: qConvError } = await qConv;
+    if (qConvError) throw new Error('Error al cargar conversiones: ' + qConvError.message);
 
     const tasaConversion = totalAll ? Math.round(((totalConv ?? 0) / totalAll) * 100) : 0;
 
@@ -109,7 +129,8 @@ export const dashboardService = {
       .lte('fecha_validez', en3Dias)
       .not('estado', 'in', '("Cancelada","Enviada")');
     if (vendedorId) qVencer = qVencer.eq('vendedor_id', vendedorId);
-    const { count: porVencer } = await qVencer;
+    const { count: porVencer, error: qVencerError } = await qVencer;
+    if (qVencerError) throw new Error('Error al cargar cotizaciones por vencer: ' + qVencerError.message);
 
     return { totalMes, montoMes, tasaConversion, porVencer: porVencer ?? 0 };
   },
@@ -126,7 +147,8 @@ export const dashboardService = {
       .neq('estado', 'Cancelada');
     if (vendedorId) query = query.eq('vendedor_id', vendedorId);
 
-    const { data } = await query;
+    const { data, error: queryError } = await query;
+    if (queryError) throw new Error('Error al cargar cotizaciones por mes: ' + queryError.message);
 
     const mesesMap: Record<string, { count: number; monto: number }> = {};
     for (let i = 0; i < meses; i++) {
@@ -135,7 +157,7 @@ export const dashboardService = {
       mesesMap[key] = { count: 0, monto: 0 };
     }
 
-    data?.forEach((q: any) => {
+    (data as CotizacionFechaMontoRow[] | null)?.forEach(q => {
       const key = q.fecha_emision.substring(0, 7);
       if (mesesMap[key]) {
         mesesMap[key].count++;
@@ -155,10 +177,11 @@ export const dashboardService = {
     let query = supabase.from('cotizaciones').select('estado');
     if (vendedorId) query = query.eq('vendedor_id', vendedorId);
 
-    const { data } = await query;
+    const { data, error: queryError } = await query;
+    if (queryError) throw new Error('Error al cargar distribución por estado: ' + queryError.message);
 
     const counts: Record<string, number> = {};
-    data?.forEach((q: any) => {
+    (data as CotizacionEstadoRow[] | null)?.forEach(q => {
       counts[q.estado] = (counts[q.estado] ?? 0) + 1;
     });
 
@@ -173,10 +196,11 @@ export const dashboardService = {
       .neq('estado', 'Cancelada');
     if (vendedorId) query = query.eq('vendedor_id', vendedorId);
 
-    const { data } = await query;
+    const { data, error: queryError } = await query;
+    if (queryError) throw new Error('Error al cargar top clientes: ' + queryError.message);
 
     const map: Record<string, { total: number; count: number }> = {};
-    (data as any[])?.forEach(q => {
+    (data as CotizacionClienteRow[] | null)?.forEach(q => {
       const nombre = q.clientes?.razon_social?.trim()
         || `${q.clientes?.nombres_contacto || ''} ${q.clientes?.apellidos_contacto || ''}`.trim()
         || 'Sin nombre';
@@ -198,18 +222,20 @@ export const dashboardService = {
       .select('id')
       .neq('estado', 'Cancelada');
     if (vendedorId) qIds = qIds.eq('vendedor_id', vendedorId);
-    const { data: quotes } = await qIds;
+    const { data: quotes, error: qIdsError } = await qIds;
+    if (qIdsError) throw new Error('Error al cargar top productos: ' + qIdsError.message);
 
     if (!quotes || quotes.length === 0) return [];
 
-    const ids = quotes.map((q: any) => q.id);
-    const { data: lines } = await supabase
+    const ids = (quotes as CotizacionIdRow[]).map(q => q.id);
+    const { data: lines, error: linesError } = await supabase
       .from('cotizaciones_lineas')
       .select('nombre_producto_historico, cantidad, precio_unitario, subtotal_linea')
       .in('cotizacion_id', ids);
+    if (linesError) throw new Error('Error al cargar líneas de cotización: ' + linesError.message);
 
     const map: Record<string, { cantidad: number; revenue: number }> = {};
-    lines?.forEach((l: any) => {
+    (lines as CotizacionLinhaRow[] | null)?.forEach(l => {
       const nombre = l.nombre_producto_historico ?? 'Sin nombre';
       if (!map[nombre]) {
         map[nombre] = { cantidad: 0, revenue: 0 };
@@ -235,20 +261,22 @@ export const dashboardService = {
       .select('id', { count: 'exact', head: true })
       .in('estado', ['Enviada', 'Aprobada']);
     if (vendedorId) qCotizaciones = qCotizaciones.eq('vendedor_id', vendedorId);
-    const { count: totalCotizaciones } = await qCotizaciones;
+    const { count: totalCotizaciones, error: qCotizacionesError } = await qCotizaciones;
+    if (qCotizacionesError) throw new Error('Error al cargar estadísticas del funnel: ' + qCotizacionesError.message);
 
     // Etapa 2: Cotizaciones que se convirtieron en pedidos
     let qPedidos = supabase
       .from('pedidos')
       .select('cotizacion_id, id');
     if (vendedorId) qPedidos = qPedidos.eq('vendedor_id', vendedorId);
-    const { data: pedidosData } = await qPedidos;
+    const { data: pedidosData, error: qPedidosError } = await qPedidos;
+    if (qPedidosError) throw new Error('Error al cargar pedidos del funnel: ' + qPedidosError.message);
 
-    const cotizacionesConPedido = new Set(pedidosData?.map((p: any) => p.cotizacion_id) ?? []);
+    const cotizacionesConPedido = new Set((pedidosData as PedidoFunnelRow[] | null)?.map(p => p.cotizacion_id) ?? []);
     const totalPedidos = cotizacionesConPedido.size;
 
     // Etapa 3: Pedidos que se convirtieron en facturas
-    const pedidoIds = pedidosData?.map((p: any) => p.id) ?? [];
+    const pedidoIds = (pedidosData as PedidoFunnelRow[] | null)?.map(p => p.id) ?? [];
     let totalFacturas = 0;
 
     if (pedidoIds.length > 0) {
@@ -282,7 +310,8 @@ export const dashboardService = {
       .neq('estado', 'Cancelada');
     if (vendedorId) query = query.eq('vendedor_id', vendedorId);
 
-    const { data } = await query;
+    const { data, error: queryError } = await query;
+    if (queryError) throw new Error('Error al cargar métricas financieras: ' + queryError.message);
 
     if (!data || data.length === 0) {
       return {
@@ -293,9 +322,10 @@ export const dashboardService = {
       };
     }
 
-    const totalFinal = data.reduce((sum: number, q: any) => sum + (q.total_final ?? 0), 0);
-    const totalDescuentos = data.reduce((sum: number, q: any) => sum + (q.descuento_global_monto ?? 0), 0);
-    const cotizacionesConDescuento = data.filter((q: any) => (q.descuento_global_monto ?? 0) > 0).length;
+    const typed = data as CotizacionFinancialRow[];
+    const totalFinal = typed.reduce((sum, q) => sum + (q.total_final ?? 0), 0);
+    const totalDescuentos = typed.reduce((sum, q) => sum + (q.descuento_global_monto ?? 0), 0);
+    const cotizacionesConDescuento = typed.filter(q => (q.descuento_global_monto ?? 0) > 0).length;
 
     return {
       valorPromedio: Math.round(totalFinal / data.length),
@@ -317,7 +347,8 @@ export const dashboardService = {
       .eq('estado', 'Enviada')
       .lt('fecha_validez', hoy);
     if (vendedorId) qExpiradas = qExpiradas.eq('vendedor_id', vendedorId);
-    const { count: cotizacionesExpiradas } = await qExpiradas;
+    const { count: cotizacionesExpiradas, error: qExpiError } = await qExpiradas;
+    if (qExpiError) throw new Error('Error al cargar cotizaciones expiradas: ' + qExpiError.message);
 
     // Borradores antiguos (>7 días sin actualizar)
     let qBorradores = supabase
@@ -326,14 +357,16 @@ export const dashboardService = {
       .eq('estado', 'Borrador')
       .lt('ultima_actualizacion', hace7Dias);
     if (vendedorId) qBorradores = qBorradores.eq('vendedor_id', vendedorId);
-    const { count: borradoresAntiguos } = await qBorradores;
+    const { count: borradoresAntiguos, error: qBorrError } = await qBorradores;
+    if (qBorrError) throw new Error('Error al cargar borradores antiguos: ' + qBorrError.message);
 
     // Nuevos clientes este mes
     const inicioMes = startOfMonth(new Date()).toISOString().split('T')[0];
-    const { count: nuevosClientes } = await supabase
+    const { count: nuevosClientes, error: qClientesError } = await supabase
       .from('clientes')
       .select('id', { count: 'exact', head: true })
       .gte('fecha_creacion', inicioMes);
+    if (qClientesError) throw new Error('Error al cargar nuevos clientes: ' + qClientesError.message);
 
     return {
       cotizacionesExpiradas: cotizacionesExpiradas ?? 0,
@@ -357,22 +390,25 @@ export const dashboardService = {
       .gte('fecha_emision', start)
       .lte('fecha_emision', end);
     if (vendedorId) qRange = qRange.eq('vendedor_id', vendedorId);
-    const { data: dataRange } = await qRange;
+    const { data: dataRange, error: qRangeError } = await qRange;
+    if (qRangeError) throw new Error('Error al cargar KPIs por rango: ' + qRangeError.message);
 
     const totalMes = dataRange?.length ?? 0;
-    const montoMes = dataRange?.reduce((sum: number, q: any) => sum + (q.total_final ?? 0), 0) ?? 0;
+    const montoMes = (dataRange as CotizacionMontoRow[] | null)?.reduce((sum, q) => sum + (q.total_final ?? 0), 0) ?? 0;
 
     // Todas las cotizaciones para tasa de conversión (sin filtro de fecha)
     let qTotal = supabase.from('cotizaciones').select('id', { count: 'exact', head: true });
     if (vendedorId) qTotal = qTotal.eq('vendedor_id', vendedorId);
-    const { count: totalAll } = await qTotal;
+    const { count: totalAll, error: qTotalRangeError } = await qTotal;
+    if (qTotalRangeError) throw new Error('Error al cargar total de cotizaciones: ' + qTotalRangeError.message);
 
     let qConv = supabase
       .from('cotizaciones')
       .select('id', { count: 'exact', head: true })
       .in('estado', ['Aprobada', 'Enviada']);
     if (vendedorId) qConv = qConv.eq('vendedor_id', vendedorId);
-    const { count: totalConv } = await qConv;
+    const { count: totalConv, error: qConvRangeError } = await qConv;
+    if (qConvRangeError) throw new Error('Error al cargar conversiones: ' + qConvRangeError.message);
 
     const tasaConversion = totalAll ? Math.round(((totalConv ?? 0) / totalAll) * 100) : 0;
 
@@ -384,7 +420,8 @@ export const dashboardService = {
       .lte('fecha_validez', en3Dias)
       .not('estado', 'in', '("Cancelada","Enviada")');
     if (vendedorId) qVencer = qVencer.eq('vendedor_id', vendedorId);
-    const { count: porVencer } = await qVencer;
+    const { count: porVencer, error: qVencerRangeError } = await qVencer;
+    if (qVencerRangeError) throw new Error('Error al cargar cotizaciones por vencer: ' + qVencerRangeError.message);
 
     return { totalMes, montoMes, tasaConversion, porVencer: porVencer ?? 0 };
   },
@@ -415,4 +452,36 @@ export const dashboardService = {
       },
     };
   },
+};
+
+export const getPorMesServer = async (supabase: SupabaseClient, meses = 6): Promise<MesData[]> => {
+  const ahora = new Date();
+  const inicio = new Date(ahora.getFullYear(), ahora.getMonth() - (meses - 1), 1);
+
+  const { data, error } = await supabase
+    .from('cotizaciones')
+    .select('fecha_emision, total_final')
+    .gte('fecha_emision', inicio.toISOString().split('T')[0])
+    .neq('estado', 'Cancelada');
+  if (error) throw new Error('Error al cargar cotizaciones por mes: ' + error.message);
+
+  const mesesMap: Record<string, { count: number; monto: number }> = {};
+  for (let i = 0; i < meses; i++) {
+    const d = new Date(ahora.getFullYear(), ahora.getMonth() - (meses - 1) + i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    mesesMap[key] = { count: 0, monto: 0 };
+  }
+  (data ?? []).forEach((q: { fecha_emision: string; total_final: number | null }) => {
+    const key = q.fecha_emision.substring(0, 7);
+    if (mesesMap[key]) {
+      mesesMap[key].count++;
+      mesesMap[key].monto += q.total_final ?? 0;
+    }
+  });
+
+  return Object.entries(mesesMap).map(([key, val]) => ({
+    mes: MONTHS[parseInt(key.split('-')[1]) - 1],
+    count: val.count,
+    monto: val.monto,
+  }));
 };

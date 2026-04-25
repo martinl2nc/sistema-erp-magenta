@@ -5,8 +5,7 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { pedidosService } from '@/services/pedidos.service';
-import { useCreatePedido, useUpdatePedidoCompleto } from '@/hooks/usePedidos';
+import { useCreatePedido, useUpdatePedidoCompleto, useUploadSustento, useCreatePedidoLineas } from '@/hooks/usePedidos';
 import { clientsKeys } from '@/hooks/useClients';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { usePedidoLineItems } from '@/hooks/usePedidoLineItems';
@@ -18,10 +17,12 @@ import PedidoFormMasterData from '@/components/pedidos/PedidoFormMasterData';
 import PedidoFormLineItems from '@/components/pedidos/PedidoFormLineItems';
 import PedidoFormSustento from '@/components/pedidos/PedidoFormSustento';
 import PedidoFormFooter from '@/components/pedidos/PedidoFormFooter';
+import EmitirGuiaRemisionModal from '@/features/facturacion/guias/EmitirGuiaRemisionModal';
+import { useCompanyConfig } from '@/hooks/useCompanyConfig';
 import type { Client } from '@/services/clients.service';
 import type { Product } from '@/services/products.service';
 import type { Seller } from '@/services/sellers.service';
-import type { Pedido, PedidoLinea } from '@/services/pedidos.service';
+import type { Pedido, PedidoLinea, CreatePedidoPayload } from '@/services/pedidos.service';
 import { formatCurrency, getClientDisplayName } from '@/utils/formatters';
 import { calculateFinancials } from '@/utils/calculations';
 
@@ -47,7 +48,6 @@ export default function PedidoForm({
   const createPedido = useCreatePedido();
   const { user, role } = useAuth();
 
-  // Catalog data from server-side props
   const activeClients = initialActiveClients;
   const allClients = initialAllClients;
   const sellers = initialSellers;
@@ -56,6 +56,8 @@ export default function PedidoForm({
   const isEditing = !!id;
   const existingPedido = initialPedido;
   const updatePedido = useUpdatePedidoCompleto();
+  const uploadSustento = useUploadSustento();
+  const createPedidoLineas = useCreatePedidoLineas();
 
   const selectableClients = activeClients;
   const isVendorLocked = role === 'vendedor';
@@ -92,13 +94,20 @@ export default function PedidoForm({
   });
 
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [isGuiaModalOpen, setIsGuiaModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Financial calculations usando la utility centralizada
-  const { subtotal: subtotalPedido, baseImponible: baseParaIgv, igv: igvMonto, total: totalFinal } = 
+  const { data: empresaConfig } = useCompanyConfig();
+  const canEmitirGuia =
+    isEditing &&
+    role === 'admin' &&
+    !!empresaConfig &&
+    existingPedido?.estado !== 'anulado';
+
+  const { subtotal: subtotalPedido, baseImponible: baseParaIgv, igv: igvMonto, total: totalFinal } =
     calculateFinancials(lineas, descuentoGlobal, aplicaIgv);
 
-  const sumaLineas = subtotalPedido; // Ya está calculado por calculateFinancials
+  const sumaLineas = subtotalPedido;
 
   const handleClientCreated = (newClient: Client) => {
     queryClient.invalidateQueries({ queryKey: clientsKeys.all() });
@@ -121,7 +130,7 @@ export default function PedidoForm({
       setAplicaIgv(existingPedido.aplica_igv ?? true);
       setDescuentoGlobal(existingPedido.descuento_global_monto || 0);
 
-      const loadedLines = existingPedido.lineas?.map((l: any) => ({
+      const loadedLines = existingPedido.lineas?.map((l: PedidoLinea) => ({
         producto_id: l.producto_id,
         nombre_producto_historico: l.nombre_producto_historico,
         cantidad: l.cantidad,
@@ -154,7 +163,7 @@ export default function PedidoForm({
       let nombreToSave = '';
 
       if (file) {
-        const res = await pedidosService.uploadSustento(file, isEditing && existingPedido?.cotizacion_id ? String(existingPedido.cotizacion_id) : null);
+        const res = await uploadSustento.mutateAsync({ file, cotizacionId: isEditing && existingPedido?.cotizacion_id ? String(existingPedido.cotizacion_id) : null });
         pathToSave = res.path;
         nombreToSave = res.nombre;
       } else if (isEditing && existingPedido) {
@@ -162,7 +171,7 @@ export default function PedidoForm({
         nombreToSave = existingPedido.sustento_nombre || '';
       }
 
-      const payload = {
+      const payload: CreatePedidoPayload = {
         cliente_id: clienteId,
         vendedor_id: vendedorId || null,
         nro_oc_cliente: nroOc.trim() || undefined,
@@ -190,13 +199,13 @@ export default function PedidoForm({
       if (isEditing && id) {
         await updatePedido.mutateAsync({ 
           id, 
-          payload: payload as any, 
+          payload, 
           lineas: lineasPayload.map(l => ({ ...l, pedido_id: id }))
         });
         toast.success('Pedido actualizado correctamente');
       } else {
-        const nuevoPedido = await createPedido.mutateAsync(payload as any);
-        await pedidosService.createPedidoLineas(
+        const nuevoPedido = await createPedido.mutateAsync(payload);
+        await createPedidoLineas.mutateAsync(
           lineasPayload.map(l => ({ ...l, pedido_id: nuevoPedido.id }))
         );
         toast.success('Pedido creado correctamente');
@@ -278,7 +287,27 @@ export default function PedidoForm({
           onFileChange={handleFileChange}
           onClearFile={clearFile}
         />
-        
+
+        {/* Guía de Remisión */}
+        {canEmitirGuia && (
+          <div className="bg-[#181B21] border border-[#334155] rounded-xl p-5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-[#E2E8F0]">Guía de Remisión Electrónica</h3>
+              <p className="text-xs text-[#94A3B8] mt-0.5">
+                Emitir GRE ante SUNAT para acreditar el traslado de los bienes de este pedido.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsGuiaModalOpen(true)}
+              className="shrink-0 flex items-center gap-2 bg-[#10B981]/10 hover:bg-[#10B981]/20 border border-[#10B981]/30 text-[#10B981] px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              <iconify-icon icon="solar:document-add-linear" class="text-base"></iconify-icon>
+              Emitir Guía
+            </button>
+          </div>
+        )}
+
         <div className="h-28"></div>
       </main>
 
@@ -297,6 +326,17 @@ export default function PedidoForm({
       />
 
       <ClientFormModal isOpen={isClientModalOpen} onClose={() => setIsClientModalOpen(false)} onSuccess={handleClientCreated} />
+
+      {isGuiaModalOpen && empresaConfig && existingPedido?.clientes && (
+        <EmitirGuiaRemisionModal
+          isOpen={isGuiaModalOpen}
+          onClose={() => setIsGuiaModalOpen(false)}
+          empresa={empresaConfig}
+          cliente={existingPedido.clientes as unknown as Client}
+          pedidoId={id}
+          pedidoLineas={existingPedido.lineas}
+        />
+      )}
     </div>
   );
 }

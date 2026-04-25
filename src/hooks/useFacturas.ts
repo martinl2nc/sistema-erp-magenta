@@ -10,6 +10,8 @@ export const facturasKeys = {
   all: () => ['comprobantes'] as const,
   lists: () => [...facturasKeys.all(), 'list'] as const,
   list: (params?: FacturasListParams) => [...facturasKeys.lists(), params] as const,
+  pedidoComprobante: (pedidoId: string) => [...facturasKeys.all(), 'pedido', pedidoId, 'comprobante'] as const,
+  detalles: (id: string) => [...facturasKeys.all(), 'detalles', id] as const,
 };
 
 export const seriesKeys = {
@@ -35,9 +37,17 @@ export function useFacturasList(params?: FacturasListParams) {
 
 export function useComprobanteDetalles(comprobanteId?: string) {
   return useQuery({
-    queryKey: [...facturasKeys.all(), 'detalles', comprobanteId],
+    queryKey: facturasKeys.detalles(comprobanteId!),
     queryFn: () => facturasService.getDetallesComprobante(comprobanteId!),
     enabled: !!comprobanteId,
+  });
+}
+
+export function usePedidoComprobante(pedidoId?: string) {
+  return useQuery({
+    queryKey: facturasKeys.pedidoComprobante(pedidoId!),
+    queryFn: () => facturasService.getComprobanteByPedido(pedidoId!),
+    enabled: !!pedidoId,
   });
 }
 

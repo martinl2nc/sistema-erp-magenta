@@ -10,6 +10,7 @@ export const pedidosKeys = {
   list: (params?: PedidosListParams) => [...pedidosKeys.lists(), params] as const,
   detail: (id: string) => [...pedidosKeys.all(), 'detail', id] as const,
   lines: (id: string) => [...pedidosKeys.all(), 'lines', id] as const,
+  sustento: (path: string) => [...pedidosKeys.all(), 'sustento', path] as const,
 };
 
 export function usePedidosList(params?: PedidosListParams) {
@@ -94,9 +95,35 @@ export function usePedidoLineas(pedidoId: string | undefined, enabled = true) {
   });
 }
 
+export function usePedidoSustento(path: string | undefined) {
+  return useQuery({
+    queryKey: pedidosKeys.sustento(path!),
+    queryFn: () => pedidosService.getSustentoSignedUrl(path!),
+    enabled: !!path,
+    staleTime: 1000 * 60 * 5, // 5 mins
+  });
+}
+
 export function useSustentoSignedUrl() {
   return useMutation({
     mutationFn: (path: string) => pedidosService.getSustentoSignedUrl(path),
+  });
+}
+
+export function useUploadSustento() {
+  return useMutation({
+    mutationFn: ({ file, cotizacionId }: { file: File; cotizacionId: string | null }) =>
+      pedidosService.uploadSustento(file, cotizacionId),
+  });
+}
+
+export function useCreatePedidoLineas() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lineas: CreatePedidoLineaPayload[]) => pedidosService.createPedidoLineas(lineas),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: pedidosKeys.lists() });
+    },
   });
 }
 

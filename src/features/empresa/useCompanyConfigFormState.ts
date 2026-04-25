@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useCompanyConfig, useSaveCompanyConfig, useUploadCompanyLogo, useDeleteCompanyLogo } from '@/hooks/useCompanyConfig';
 import { validateCompanyConfig } from './companyConfigForm.utils';
 import type { CompanyConfig, CompanyConfigFormData } from '@/services/companyConfig.service';
+import type { UbigeoRecord } from '@/services/ubigeo.service';
 
 const initialFormState: CompanyConfigFormData = {
   razon_social: '',
@@ -11,6 +12,10 @@ const initialFormState: CompanyConfigFormData = {
   terminos_condiciones: '',
   logo_url: null,
   detraccion_cuenta_bn: '',
+  ubigueo: null,
+  departamento: null,
+  provincia: null,
+  distrito: null,
 };
 
 export interface UseCompanyConfigFormStateProps {
@@ -25,21 +30,22 @@ export interface UseCompanyConfigFormStateReturn {
   error: Error | null;
   errorMsg: string | null;
   initialized: boolean;
-  
+
   // Mutations
   saveMutation: ReturnType<typeof useSaveCompanyConfig>;
   uploadMutation: ReturnType<typeof useUploadCompanyLogo>;
   deleteMutation: ReturnType<typeof useDeleteCompanyLogo>;
-  
+
   // Refs
   fileInputRef: React.RefObject<HTMLInputElement | null>;
-  
+
   // Setters
   setFormData: React.Dispatch<React.SetStateAction<CompanyConfigFormData>>;
   setErrorMsg: React.Dispatch<React.SetStateAction<string | null>>;
-  
+
   // Handlers
   handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  handleUbigeoChange: (codigo: string, record: UbigeoRecord) => void;
   handleLogoUpload: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleDeleteLogo: () => Promise<void>;
   handleSubmit: (e: React.FormEvent) => void;
@@ -72,6 +78,10 @@ export const useCompanyConfigFormState = ({
         terminos_condiciones: configData.terminos_condiciones || '',
         logo_url: configData.logo_url || null,
         detraccion_cuenta_bn: configData.detraccion_cuenta_bn || '',
+        ubigueo: configData.ubigueo || null,
+        departamento: configData.departamento || null,
+        provincia: configData.provincia || null,
+        distrito: configData.distrito || null,
       });
       setInitialized(true);
     }
@@ -84,6 +94,16 @@ export const useCompanyConfigFormState = ({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleUbigeoChange = (codigo: string, record: UbigeoRecord) => {
+    setFormData(prev => ({
+      ...prev,
+      ubigueo: codigo,
+      departamento: record.departamento,
+      provincia: record.provincia,
+      distrito: record.distrito,
+    }));
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,6 +210,7 @@ export const useCompanyConfigFormState = ({
     
     // Handlers
     handleChange,
+    handleUbigeoChange,
     handleLogoUpload,
     handleDeleteLogo,
     handleSubmit,

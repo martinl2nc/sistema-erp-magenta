@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { pedidosService } from '@/services/pedidos.service';
-import { useUpdatePedidoBasic, useUpdatePedidoEstado } from '@/hooks/usePedidos';
-import type { Pedido, PedidoEstado } from '@/services/pedidos.service';
+import { useUpdatePedidoBasic, useUpdatePedidoEstado, usePedidoLineas, usePedidoSustento } from '@/hooks/usePedidos';
+import { useCompanyConfig } from '@/hooks/useCompanyConfig';
+import EmitirGuiaRemisionModal from '@/features/facturacion/guias/EmitirGuiaRemisionModal';
+import type { Pedido, PedidoEstado, PedidoLinea, CreatePedidoPayload } from '@/services/pedidos.service';
+import type { Client } from '@/services/clients.service';
 import { formatCurrency, formatDate as formatDateUtil, getClientDisplayName } from '@/utils/formatters';
+import { TAX_RATES } from '@/constants';
+import { calculatePedidoTotalsFromLines } from '@/utils/calculations';
 
 interface Props {
   pedido: Pedido | null;
@@ -48,6 +51,10 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
   const [localDireccion, setLocalDireccion] = useState('');
   const [isCanceling, setIsCanceling] = useState(false);
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
+  const [isGuiaModalOpen, setIsGuiaModalOpen] = useState(false);
+
+  const { data: empresaConfig } = useCompanyConfig();
+  const canEmitirGuia = role === 'admin' && !!empresaConfig && pedido?.estado !== 'anulado';
 
   // Sync form fields when pedido changes
   useEffect(() => {
@@ -59,20 +66,9 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
     }
   }, [pedido]);
 
-  // Line items
-  const { data: lineas = [], isLoading: loadingLineas } = useQuery({
-    queryKey: ['pedidos', 'lineas', pedido?.id],
-    queryFn: () => pedidosService.getPedidoLineas(pedido!.id),
-    enabled: !!pedido?.id,
-  });
-
-  // Signed URL for sustento
-  const { data: sustentoUrl } = useQuery({
-    queryKey: ['pedidos', 'sustento', pedido?.sustento_url],
-    queryFn: () => pedidosService.getSustentoSignedUrl(pedido!.sustento_url),
-    enabled: !!pedido?.sustento_url,
-    staleTime: 50 * 60 * 1000, // 50 min (URL válida 1h)
-  });
+  // Hooks for fetching lines and signed URL
+  const { data: lineas = [], isLoading: loadingLineas } = usePedidoLineas(pedido?.id);
+  const { data: sustentoUrl } = usePedidoSustento(pedido?.sustento_url || undefined);
 
   const isDirty =
     localOc !== (pedido?.nro_oc_cliente ?? '') ||
@@ -311,11 +307,12 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                     ))}
                   </tbody>
                   {(() => {
-                    // Sum subtotal_linea directly as it already has the line discount applied
-                    const baseTotal = lineas.reduce((acc, l) => acc + Number(l.subtotal_linea), 0);
-                    const igvTotal = pedido.aplica_igv ? Number((baseTotal * 0.18).toFixed(2)) : 0;
-                    const subtotalConIgv = baseTotal + igvTotal;
-                    const totalFinal = subtotalConIgv - (pedido.descuento_global_monto || 0);
+                    const { baseTotal, igvTotal, totalFinal } = calculatePedidoTotalsFromLines(
+                      lineas,
+                      pedido.descuento_global_monto || 0,
+                      pedido.aplica_igv
+                    );
+                    const igvPct = TAX_RATES.IGV * 100;
 
                     return (
                       <tfoot>
@@ -325,7 +322,7 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                         </tr>
                         {pedido.aplica_igv && (
                           <tr className="bg-[#181B21]">
-                            <td colSpan={4} className="px-4 py-2 text-xs text-[#94A3B8] text-right">IGV (18%)</td>
+                            <td colSpan={4} className="px-4 py-2 text-xs text-[#94A3B8] text-right">IGV ({igvPct}%)</td>
                             <td className="px-4 py-2 text-sm text-[#E2E8F0] text-right">{formatCurrency(igvTotal)}</td>
                           </tr>
                         )}
@@ -373,6 +370,29 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
                 ) : (
                   <span className="text-xs text-[#94A3B8]">Cargando...</span>
                 )}
+              </div>
+            </section>
+          )}
+
+          {/* Guía de Remisión */}
+          {canEmitirGuia && (
+            <section>
+              <h3 className="text-xs font-medium text-[#94A3B8] uppercase tracking-wider mb-3">
+                Guía de Remisión
+              </h3>
+              <div className="bg-[#0F1115] border border-[#334155] rounded-lg px-4 py-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-[#E2E8F0] font-medium">Emitir GRE ante SUNAT</p>
+                  <p className="text-xs text-[#94A3B8] mt-0.5">Acredita el traslado de los bienes de este pedido.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsGuiaModalOpen(true)}
+                  className="shrink-0 flex items-center gap-1.5 bg-[#10B981]/10 hover:bg-[#10B981]/20 border border-[#10B981]/30 text-[#10B981] px-3 py-2 rounded-lg text-xs font-medium transition-colors"
+                >
+                  <iconify-icon icon="solar:document-add-linear" class="text-sm"></iconify-icon>
+                  Emitir Guía
+                </button>
               </div>
             </section>
           )}
@@ -458,6 +478,18 @@ export default function PedidoDetailDrawer({ pedido, onClose }: Props) {
         </div>
 
       </div>
+
+      {isGuiaModalOpen && empresaConfig && pedido.clientes && (
+        <EmitirGuiaRemisionModal
+          isOpen={isGuiaModalOpen}
+          onClose={() => setIsGuiaModalOpen(false)}
+          empresa={empresaConfig}
+          cliente={pedido.clientes as unknown as Client}
+          pedidoId={pedido.id}
+          pedidoLineas={lineas}
+          onSuccess={() => setIsGuiaModalOpen(false)}
+        />
+      )}
     </>
   );
 }

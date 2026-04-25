@@ -10,6 +10,10 @@ export interface CompanyConfig {
   terminos_condiciones: string | null;
   logo_url: string | null;
   detraccion_cuenta_bn: string | null;
+  ubigueo: string | null;
+  departamento: string | null;
+  provincia: string | null;
+  distrito: string | null;
 }
 
 export interface CompanyConfigFormData {
@@ -19,14 +23,14 @@ export interface CompanyConfigFormData {
   terminos_condiciones: string;
   logo_url: string | null;
   detraccion_cuenta_bn: string;
+  ubigueo: string | null;
+  departamento: string | null;
+  provincia: string | null;
+  distrito: string | null;
 }
 
 // ─── Service Functions (Capa 1) ──────────────────────────────
 
-/**
- * Gets the single company configuration row.
- * This table follows a singleton pattern (always 1 row).
- */
 export const getCompanyConfig = async (): Promise<CompanyConfig | null> => {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -43,10 +47,6 @@ export const getCompanyConfig = async (): Promise<CompanyConfig | null> => {
   return data as CompanyConfig;
 };
 
-/**
- * Updates the existing company configuration row.
- * If no row exists, inserts a new one (upsert).
- */
 export const saveCompanyConfig = async (
   id: string | null,
   data: CompanyConfigFormData
@@ -74,10 +74,6 @@ export const saveCompanyConfig = async (
   }
 };
 
-/**
- * Uploads a company logo to the 'company-assets' storage bucket.
- * Returns the public URL of the uploaded image.
- */
 export const uploadCompanyLogo = async (file: File): Promise<string> => {
   const supabase = createClient();
   const fileExt = file.name.split('.').pop();
@@ -98,9 +94,6 @@ export const uploadCompanyLogo = async (file: File): Promise<string> => {
   return data.publicUrl;
 };
 
-/**
- * Deletes a company logo from the 'company-assets' storage bucket.
- */
 export const deleteCompanyLogo = async (publicUrl: string): Promise<void> => {
   const supabase = createClient();
   const urlParts = publicUrl.split('/company-assets/');
