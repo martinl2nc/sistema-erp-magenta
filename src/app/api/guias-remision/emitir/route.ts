@@ -185,6 +185,9 @@ export async function POST(request: Request) {
 
 
 
+    // DEBUG — remove after inspection
+    console.log('[guias-remision] payload to ApisPeru:', JSON.stringify(despatchPayload, null, 2));
+
     // 3. Send to ApisPeru
     let apisPeruResponse: ApisPeruDespatchResponse = {};
     try {
