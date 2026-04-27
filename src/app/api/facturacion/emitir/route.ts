@@ -281,37 +281,33 @@ export async function POST(request: Request) {
       }
     }
 
-    // XML
-    if (!enlaceXml && apisunatResponse.xml) {
-      try {
-        const xmlBuffer = Buffer.from(apisunatResponse.xml, 'utf-8');
-        const xmlPath = `xml/${fileBaseName}.xml`;
-        const { error: upErr } = await supabaseAdmin.storage
-          .from('facturas_emitidas')
-          .upload(xmlPath, xmlBuffer, { upsert: true, contentType: 'application/xml' });
+    // CDR ZIP — ApiSunat DEV devuelve la URL del ZIP en el campo `xml`
+    // ApiSunat PROD devuelve el ZIP en base64 dentro de sunatResponse.cdrZip
+    const cdrZipBase64 = apisunatResponse.sunatResponse?.cdrZip;
+    const cdrZipUrl = apisunatResponse.xml; // URL a Azure Blob (DEV)
 
-        if (!upErr) {
-          enlaceXml = await getFileUrl(xmlPath);
-        } else if (yaAceptado) {
-          enlaceXml = comprobante.enlace_xml ?? null;
+    if (!enlaceCdr) {
+      try {
+        let cdrBuffer: Buffer | null = null;
+
+        if (cdrZipBase64) {
+          cdrBuffer = Buffer.from(cdrZipBase64, 'base64');
+        } else if (cdrZipUrl?.startsWith('http')) {
+          const cdrRes = await fetch(cdrZipUrl);
+          if (cdrRes.ok) cdrBuffer = Buffer.from(await cdrRes.arrayBuffer());
         }
-      } catch {
-        if (yaAceptado) enlaceXml = comprobante.enlace_xml ?? null;
-      }
-    }
 
-    // CDR
-    const cdrZip = apisunatResponse.sunatResponse?.cdrZip;
-    if (!enlaceCdr && cdrZip) {
-      try {
-        const cdrBuffer = Buffer.from(cdrZip, 'base64');
-        const cdrPath = `cdr/R-${fileBaseName}.zip`;
-        const { error: upErr } = await supabaseAdmin.storage
-          .from('facturas_emitidas')
-          .upload(cdrPath, cdrBuffer, { upsert: true, contentType: 'application/zip' });
+        if (cdrBuffer) {
+          const cdrPath = `cdr/R-${fileBaseName}.zip`;
+          const { error: upErr } = await supabaseAdmin.storage
+            .from('facturas_emitidas')
+            .upload(cdrPath, cdrBuffer, { upsert: true, contentType: 'application/zip' });
 
-        if (!upErr) {
-          enlaceCdr = await getFileUrl(cdrPath);
+          if (!upErr) {
+            enlaceCdr = await getFileUrl(cdrPath);
+          } else if (yaAceptado) {
+            enlaceCdr = comprobante.enlace_cdr ?? null;
+          }
         } else if (yaAceptado) {
           enlaceCdr = comprobante.enlace_cdr ?? null;
         }
