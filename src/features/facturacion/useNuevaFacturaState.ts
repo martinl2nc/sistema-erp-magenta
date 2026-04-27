@@ -122,8 +122,8 @@ export function useNuevaFacturaState(initialClients: Client[]) {
 
   // Totales derivados (memoizados)
   const totales = useMemo(
-    () => calcularTotalesSunat(lineas, descuentoMonto),
-    [lineas, descuentoMonto],
+    () => calcularTotalesSunat(lineas, descuentoMonto, descuentoCodigo),
+    [lineas, descuentoMonto, descuentoCodigo],
   );
 
   // Monto neto a financiar = total - detracción

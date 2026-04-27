@@ -107,6 +107,7 @@ export interface TotalesSunat {
 export const calcularTotalesSunat = (
   lineas: Array<Pick<LineaSunatCalc, 'mto_base_igv' | 'mto_igv' | 'subtotal'> & { afectacion_igv: string }>,
   descuentoMonto: number,
+  descuentoCodigo: string = '03',
 ): TotalesSunat => {
   let baseGravada = 0;
   let baseExonerada = 0;
@@ -124,15 +125,32 @@ export const calcularTotalesSunat = (
     }
   }
 
-  const subtotalConIgv = roundToDecimal(baseGravada + baseExonerada + baseInafecta + totalIgv);
+  const discount = roundToDecimal(descuentoMonto);
+  // subtotal = base neta SIN IGV y ANTES del descuento global (para display correcto)
+  const subtotal = roundToDecimal(baseGravada + baseExonerada + baseInafecta);
+
+  let igv: number;
+  let total: number;
+
+  if (descuentoCodigo === '02' && discount > 0) {
+    // El descuento global reduce la base imponible del IGV
+    const gravadaNeta = roundToDecimal(Math.max(0, baseGravada - discount));
+    igv = roundToDecimal(gravadaNeta * TAX_RATES.IGV);
+    total = roundToDecimal(gravadaNeta + igv + baseExonerada + baseInafecta);
+  } else {
+    // El descuento global se aplica al total (no afecta la base del IGV)
+    igv = roundToDecimal(totalIgv);
+    total = roundToDecimal(subtotal + igv - discount);
+  }
+
   return {
-    subtotal: subtotalConIgv,
+    subtotal,
     mto_oper_gravadas: roundToDecimal(baseGravada),
     mto_oper_exoneradas: roundToDecimal(baseExonerada),
     mto_oper_inafectas: roundToDecimal(baseInafecta),
-    igv: roundToDecimal(totalIgv),
-    total: roundToDecimal(subtotalConIgv - descuentoMonto),
-    descuentoMonto: roundToDecimal(descuentoMonto),
+    igv,
+    total,
+    descuentoMonto: discount,
   };
 };
 
@@ -155,6 +173,7 @@ export const buildSunatPayloadTotals = (
     tip_afe_igv_codigo: string | null;
   }>,
   descuentoGlobalMonto: number,
+  descuentoCodigo: string = '03',
 ): SunatPayloadTotals => {
   let mtoOperGravadas = 0;
   let mtoOperExoneradas = 0;
@@ -182,10 +201,20 @@ export const buildSunatPayloadTotals = (
     valorVenta = roundToDecimal(valorVenta + itemBase);
   }
 
-  const subTotal = roundToDecimal(valorVenta + mtoIGV);
   const discount = roundToDecimal(descuentoGlobalMonto);
-  const mtoImpVenta = roundToDecimal(subTotal - discount);
+  // subTotal = valorVenta + IGV bruto (sin descuento) → usado como BaseAmount del AllowanceCharge
+  const subTotal = roundToDecimal(valorVenta + mtoIGV);
 
+  if (descuentoCodigo === '02' && discount > 0) {
+    // El descuento global reduce la base imponible: recalcular IGV sobre la base neta
+    const gravadaNeta = roundToDecimal(Math.max(0, mtoOperGravadas - discount));
+    const mtoIGV_neto = roundToDecimal(gravadaNeta * TAX_RATES.IGV);
+    const mtoImpVenta = roundToDecimal(gravadaNeta + mtoIGV_neto + mtoOperExoneradas + mtoOperInafectas);
+    return { mtoOperGravadas, mtoOperExoneradas, mtoOperInafectas, mtoIGV: mtoIGV_neto, totalImpuestos: mtoIGV_neto, valorVenta, subTotal, mtoImpVenta };
+  }
+
+  // Tipo '03' o sin descuento: el IGV no cambia, el descuento se resta del total
+  const mtoImpVenta = roundToDecimal(subTotal - discount);
   return { mtoOperGravadas, mtoOperExoneradas, mtoOperInafectas, mtoIGV, totalImpuestos, valorVenta, subTotal, mtoImpVenta };
 };
 

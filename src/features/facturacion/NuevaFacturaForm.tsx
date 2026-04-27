@@ -688,17 +688,21 @@ export default function NuevaFacturaForm({ initialClients }: Props) {
                     className="flex-1 bg-[#0F1115] border border-[#334155] rounded-md py-2 px-3 text-sm text-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] focus:border-[#3B82F6] transition-colors"
                   />
                   {descuentosSunat.length > 0 && (
-                    <select
-                      value={state.descuentoCodigo}
-                      onChange={(e) => state.setDescuentoCodigo(e.target.value)}
-                      className="bg-[#0F1115] border border-[#334155] rounded-md py-2 px-2 text-xs text-[#94A3B8] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] transition-colors"
-                    >
-                      {descuentosSunat.map((d) => (
-                        <option key={d.codigo} value={d.codigo}>
-                          {d.codigo}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-[10px] text-[#64748B]">Tipo</label>
+                      <select
+                        value={state.descuentoCodigo}
+                        onChange={(e) => state.setDescuentoCodigo(e.target.value)}
+                        title="Tipo de descuento SUNAT"
+                        className="bg-[#0F1115] border border-[#334155] rounded-md py-2 px-2 text-xs text-[#94A3B8] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] transition-colors"
+                      >
+                        {descuentosSunat.map((d) => (
+                          <option key={d.codigo} value={d.codigo}>
+                            {d.codigo} – {d.descripcion ?? d.nombre ?? ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
               </div>

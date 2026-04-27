@@ -132,7 +132,7 @@ export interface ApisunatInvoiceBody {
   'cac:Signature': ApisunatSignature;
   'cac:AccountingSupplierParty': ApisunatSupplierParty;
   'cac:AccountingCustomerParty': ApisunatCustomerParty;
-  'cac:PaymentMeans'?: ApisunatPaymentMeans;
+  'cac:PaymentMeans'?: ApisunatPaymentMeans[];
   'cac:PaymentTerms'?: ApisunatPaymentTerm[];
   'cac:AllowanceCharge'?: ApisunatHeaderAllowanceCharge[];
   'cac:TaxTotal': ApisunatTaxTotalHeader;
@@ -371,18 +371,24 @@ function buildCustomerParty(cliente: ClienteData): ApisunatCustomerParty {
 function buildHeaderTaxTotal(
   detalles: ComprobanteDetalle[],
   moneda: string,
+  globalDiscount: number = 0,
+  descuentoCodigo: string = '03',
 ): ApisunatTaxTotalHeader {
-  // Sum from line-level rounded values to match exactly what SUNAT sees in each line
   const igvLines = detalles.filter(d => !['20', '21', '30', '31', '32', '33', '34', '35', '36'].includes(String(d.tip_afe_igv_codigo)));
-  const totalBase = Number(igvLines.reduce((acc, d) => acc + Number(d.mto_base_igv.toFixed(2)), 0).toFixed(2));
-  const totalIgv  = Number(igvLines.reduce((acc, d) => acc + Number(d.igv.toFixed(2)), 0).toFixed(2));
+  const baseFromLines = Number(igvLines.reduce((acc, d) => acc + Number(d.mto_base_igv.toFixed(2)), 0).toFixed(2));
+
+  // Para tipo '02' el descuento global reduce la base imponible antes de calcular IGV
+  const taxableBase = descuentoCodigo === '02' && globalDiscount > 0
+    ? Number(Math.max(0, baseFromLines - globalDiscount).toFixed(2))
+    : baseFromLines;
+  const taxAmount = Number((taxableBase * TAX_RATES.IGV).toFixed(2));
 
   return {
-    'cbc:TaxAmount': { _attributes: { currencyID: moneda }, _text: totalIgv },
+    'cbc:TaxAmount': { _attributes: { currencyID: moneda }, _text: taxAmount },
     'cac:TaxSubtotal': [
       {
-        'cbc:TaxableAmount': { _attributes: { currencyID: moneda }, _text: totalBase },
-        'cbc:TaxAmount': { _attributes: { currencyID: moneda }, _text: totalIgv },
+        'cbc:TaxableAmount': { _attributes: { currencyID: moneda }, _text: taxableBase },
+        'cbc:TaxAmount': { _attributes: { currencyID: moneda }, _text: taxAmount },
         'cac:TaxCategory': {
           'cac:TaxScheme': {
             'cbc:ID': { _text: '1000' },
@@ -441,22 +447,32 @@ function buildLegalMonetaryTotal(
   detalles: ComprobanteDetalle[],
   moneda: string,
   descuentoGlobal: number,
+  descuentoCodigo: string = '03',
 ): ApisunatLegalMonetaryTotal {
-  // Compute all totals from line-level rounded values so SUNAT arithmetic holds exactly:
-  // PayableAmount = LineExtensionAmount - AllowanceTotalAmount + TaxTotal
+  // SUNAT 3300 formula: PayableAmount = TaxInclusiveAmount - AllowanceTotalAmount
+  // TaxInclusiveAmount = LineExtensionAmount + IGV efectivo (ANTES del descuento global)
   const lineExtension = Number(
     detalles.reduce((acc, d) => acc + Number(d.mto_base_igv.toFixed(2)), 0).toFixed(2)
   );
-  const totalIgv = Number(
-    detalles.reduce((acc, d) => acc + Number(d.igv.toFixed(2)), 0).toFixed(2)
-  );
   const discount = Number(descuentoGlobal.toFixed(2));
-  const payable = Number((lineExtension - discount + totalIgv).toFixed(2));
 
-  // UBL 2.1 MonetaryTotalType order: LineExtensionAmount → TaxInclusiveAmount → AllowanceTotalAmount → PayableAmount
+  let effectiveIgv: number;
+  if (descuentoCodigo === '02' && discount > 0) {
+    // El IGV se calcula sobre la base reducida por el descuento global
+    const gravadaNeta = Number(Math.max(0, lineExtension - discount).toFixed(2));
+    effectiveIgv = Number((gravadaNeta * TAX_RATES.IGV).toFixed(2));
+  } else {
+    effectiveIgv = Number(
+      detalles.reduce((acc, d) => acc + Number(d.igv.toFixed(2)), 0).toFixed(2)
+    );
+  }
+
+  const taxInclusive = Number((lineExtension + effectiveIgv).toFixed(2));
+  const payable = Number((taxInclusive - discount).toFixed(2));
+
   return {
     'cbc:LineExtensionAmount': { _attributes: { currencyID: moneda }, _text: lineExtension },
-    'cbc:TaxInclusiveAmount': { _attributes: { currencyID: moneda }, _text: payable },
+    'cbc:TaxInclusiveAmount': { _attributes: { currencyID: moneda }, _text: taxInclusive },
     ...(discount > 0 ? {
       'cbc:AllowanceTotalAmount': { _attributes: { currencyID: moneda }, _text: discount },
     } : {}),
@@ -477,15 +493,16 @@ function buildPaymentTerms(
   if (comprobante.detraccion_cod_bien && comprobante.detraccion_porcentaje && comprobante.detraccion_monto) {
     terms.push({
       'cbc:ID': { _text: 'Detraccion' },
-      'cbc:PaymentMeansID': { _text: comprobante.detraccion_cod_medio_pago ?? '001' },
+      'cbc:PaymentMeansID': { _text: comprobante.detraccion_cod_bien },
       'cbc:PaymentPercent': { _text: Number(comprobante.detraccion_porcentaje) },
       'cbc:Amount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.detraccion_monto.toFixed(2)) },
     });
   }
 
   if (comprobante.forma_pago === 'Credito' && comprobante.cuotas?.length) {
+    // La suma exacta de cuotas garantiza que SUNAT no rechace por error 3319
     const montoCredito = Number(
-      (comprobante.mto_imp_venta - (comprobante.detraccion_monto ?? 0)).toFixed(2)
+      comprobante.cuotas.reduce((sum, c) => sum + c.monto, 0).toFixed(2)
     );
     terms.push({
       'cbc:ID': { _text: 'FormaPago' },
@@ -513,26 +530,29 @@ function buildPaymentTerms(
 
 function buildPaymentMeans(
   comprobante: ComprobanteData,
-): ApisunatPaymentMeans | undefined {
+): ApisunatPaymentMeans[] | undefined {
   if (!comprobante.detraccion_cod_bien || !comprobante.detraccion_cuenta_bn) return undefined;
 
-  return {
-    'cbc:ID': { _text: '999' },
-    'cbc:PaymentMeansCode': { _text: '999' },
-    'cac:PayeeFinancialAccount': { 'cbc:ID': { _text: comprobante.detraccion_cuenta_bn } },
-  };
+  return [
+    {
+      'cbc:ID': { _text: 'Detraccion' },
+      'cbc:PaymentMeansCode': { _text: comprobante.detraccion_cod_medio_pago ?? '001' },
+      'cac:PayeeFinancialAccount': { 'cbc:ID': { _text: comprobante.detraccion_cuenta_bn } },
+    },
+  ];
 }
 
 function buildHeaderAllowanceCharge(
   descuento: number,
   base: number,
   moneda: string,
+  reasonCode: string = '02',
 ): ApisunatHeaderAllowanceCharge[] | undefined {
   if (descuento <= 0) return undefined;
   return [
     {
       'cbc:ChargeIndicator': { _text: false },
-      'cbc:AllowanceChargeReasonCode': { _text: '00' },
+      'cbc:AllowanceChargeReasonCode': { _text: reasonCode },
       'cbc:Amount': { _attributes: { currencyID: moneda }, _text: Number(descuento.toFixed(2)) },
       'cbc:BaseAmount': { _attributes: { currencyID: moneda }, _text: Number(base.toFixed(2)) },
     },
@@ -594,8 +614,9 @@ function buildInvoiceLines(
     const allowance = buildLineAllowanceCharge(descuentoLinea, moneda);
     const codProducto = d.cod_producto;
 
+    const descripcion = d.descripcion?.trim() || '-';
     const item: ApisunatInvoiceLine['cac:Item'] = {
-      'cbc:Description': { _text: d.descripcion },
+      'cbc:Description': { _text: descripcion },
     };
     if (codProducto && codProducto !== '-') {
       item['cac:SellersItemIdentification'] = { 'cbc:ID': { _text: codProducto } };
@@ -645,30 +666,16 @@ export function buildInvoicePayload(
   const moneda = comprobante.tipo_moneda || 'PEN';
   const isNC = comprobante.tipo_doc_codigo === '07';
   const discountAmount = isNC ? 0 : Number((comprobante.descuento_global_monto || 0).toFixed(2));
+  const descuentoCodigo = isNC ? '03' : (comprobante.descuento_global_codigo || '03');
 
-  const totals = buildSunatPayloadTotals(detalles, discountAmount);
+  const totals = buildSunatPayloadTotals(detalles, discountAmount, descuentoCodigo);
   const fileName = buildFileName(empresa.ruc, comprobante.tipo_doc_codigo, comprobante.serie, comprobante.correlativo);
   const docId = `${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}`;
   const fechaEmision = comprobante.fecha_emision.split('T')[0];
 
-  const body: ApisunatInvoiceBody = {
-    'cbc:UBLVersionID': { _text: '2.1' },
-    'cbc:CustomizationID': { _text: '2.0' },
-    'cbc:ID': { _text: docId },
-    'cbc:IssueDate': { _text: fechaEmision },
-    'cbc:IssueTime': { _text: '00:00:00' },
-    'cbc:DocumentCurrencyCode': { _text: moneda },
-    'cac:Signature': buildSignature(empresa),
-    'cac:AccountingSupplierParty': buildSupplierParty(empresa),
-    'cac:AccountingCustomerParty': buildCustomerParty(cliente),
-    'cac:TaxTotal': buildHeaderTaxTotal(detalles, moneda),
-    'cac:LegalMonetaryTotal': buildLegalMonetaryTotal(comprobante, detalles, moneda, discountAmount),
-    'cac:InvoiceLine': buildInvoiceLines(detalles, moneda, isNC),
-  };
-
-  // InvoiceTypeCode: solo facturas (01) y boletas (03), no NC
-  if (!isNC) {
-    body['cbc:InvoiceTypeCode'] = {
+  // Pre-computar elementos opcionales para poder incluirlos en el objeto con el orden UBL correcto
+  const invoiceTypeCode = !isNC ? {
+    'cbc:InvoiceTypeCode': {
       _attributes: {
         listID: comprobante.tipo_operacion || '0101',
         listAgencyName: 'PE:SUNAT',
@@ -676,43 +683,53 @@ export function buildInvoicePayload(
         listURI: 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01',
       },
       _text: comprobante.tipo_doc_codigo,
-    };
-  }
+    },
+  } : {};
 
-  // Notes: monto en letras + detracción
   const notes = buildNotes(comprobante, totals.mtoImpVenta);
-  if (notes.length) body['cbc:Note'] = notes;
+  const paymentTerms = !isNC ? buildPaymentTerms(comprobante, moneda) : undefined;
+  const paymentMeans = !isNC ? buildPaymentMeans(comprobante) : undefined;
+  // AllowanceCharge debe ir ANTES de TaxTotal en el XML (UBL 2.1)
+  const headerAllowance = !isNC && discountAmount > 0
+    ? buildHeaderAllowanceCharge(discountAmount, totals.subTotal, moneda, descuentoCodigo)
+    : undefined;
 
-  // PaymentTerms (no en NC)
-  const paymentTerms = buildPaymentTerms(comprobante, moneda);
-  if (paymentTerms) body['cac:PaymentTerms'] = paymentTerms;
-
-  // PaymentMeans (solo si hay detracción, no en NC)
-  if (!isNC) {
-    const paymentMeans = buildPaymentMeans(comprobante);
-    if (paymentMeans) body['cac:PaymentMeans'] = paymentMeans;
-  }
-
-  // Descuento global header (no en NC)
-  if (!isNC && discountAmount > 0) {
-    const allowance = buildHeaderAllowanceCharge(discountAmount, totals.subTotal, moneda);
-    if (allowance) body['cac:AllowanceCharge'] = allowance;
-  }
-
-  // NC fields
-  if (isNC && comprobanteReferenciado) {
-    body['cac:DiscrepancyResponse'] = {
+  // NC fields pre-computados
+  const discrepancyResponse = isNC && comprobanteReferenciado ? {
+    'cac:DiscrepancyResponse': {
       'cbc:ReferenceID': { _text: comprobanteReferenciado.serie_numero },
       'cbc:ResponseCode': { _text: comprobante.tipo_nota_codigo! },
       'cbc:Description': { _text: comprobante.motivo_nota! },
-    };
-    body['cac:BillingReference'] = {
+    },
+    'cac:BillingReference': {
       'cac:InvoiceDocumentReference': {
         'cbc:ID': { _text: comprobanteReferenciado.serie_numero },
         'cbc:DocumentTypeCode': { _text: comprobanteReferenciado.tipo_doc_codigo },
       },
-    };
-  }
+    },
+  } : {};
+
+  // Orden UBL 2.1 estricto: todos los elementos en el literal para preservar insertion order
+  const body: ApisunatInvoiceBody = {
+    'cbc:UBLVersionID': { _text: '2.1' },
+    'cbc:CustomizationID': { _text: '2.0' },
+    'cbc:ID': { _text: docId },
+    'cbc:IssueDate': { _text: fechaEmision },
+    'cbc:IssueTime': { _text: '00:00:00' },
+    ...invoiceTypeCode,
+    ...(notes.length ? { 'cbc:Note': notes } : {}),
+    'cbc:DocumentCurrencyCode': { _text: moneda },
+    ...discrepancyResponse,
+    'cac:Signature': buildSignature(empresa),
+    'cac:AccountingSupplierParty': buildSupplierParty(empresa),
+    'cac:AccountingCustomerParty': buildCustomerParty(cliente),
+    ...(paymentMeans ? { 'cac:PaymentMeans': paymentMeans } : {}),
+    ...(paymentTerms ? { 'cac:PaymentTerms': paymentTerms } : {}),
+    ...(headerAllowance ? { 'cac:AllowanceCharge': headerAllowance } : {}),
+    'cac:TaxTotal': buildHeaderTaxTotal(detalles, moneda, discountAmount, descuentoCodigo),
+    'cac:LegalMonetaryTotal': buildLegalMonetaryTotal(comprobante, detalles, moneda, discountAmount, descuentoCodigo),
+    'cac:InvoiceLine': buildInvoiceLines(detalles, moneda, isNC),
+  };
 
   return {
     personaId: empresa.apisunat_persona_id.trim(),

@@ -219,6 +219,7 @@ export const facturasService = {
         { count: 'exact' }
       )
       .order('fecha_emision', { ascending: false })
+      .order('correlativo', { ascending: false })
       .range(from, to);
 
     if (tipo_doc) query = query.eq('tipo_doc_codigo', tipo_doc);

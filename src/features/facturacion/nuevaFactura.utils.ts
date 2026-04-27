@@ -16,6 +16,19 @@ export function validateNuevaFactura(params: {
   if (params.lineas.length === 0) return 'Agregá al menos una línea al comprobante';
   if (!params.serie) return 'No hay serie activa configurada para este tipo de comprobante';
 
+  for (let i = 0; i < params.lineas.length; i++) {
+    const l = params.lineas[i];
+    if (!l.nombre_producto?.trim()) {
+      return `La línea ${i + 1} no tiene descripción. Completá el campo antes de emitir.`;
+    }
+    if (l.cantidad <= 0) {
+      return `La línea ${i + 1} tiene cantidad inválida.`;
+    }
+    if (l.precio_unitario <= 0) {
+      return `La línea ${i + 1} tiene precio unitario inválido.`;
+    }
+  }
+
   // Validar detracción si la operación está sujeta a detracción (Cat. 51 código 1001)
   if (params.tipoOperacion === '1001') {
     if (!params.detraccion?.cod_bien?.trim()) {

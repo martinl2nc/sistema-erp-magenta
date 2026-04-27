@@ -291,7 +291,8 @@ export async function POST(request: Request) {
         };
         const docInfo = await getDocumentFromApisunat(documentId, auth);
 
-        // Descarga y sube un archivo desde una URL de ApiSunat
+        // Descarga y sube un archivo desde una URL de ApiSunat.
+        // Usa magic bytes para detectar ZIPs que Azure Blob sirve con content-type incorrecto.
         const downloadAndUpload = async (
           url: string,
           path: string,
@@ -300,21 +301,19 @@ export async function POST(request: Request) {
           const res = await fetch(url);
           if (!res.ok) return null;
           const buffer = Buffer.from(await res.arrayBuffer());
-          const contentType = res.headers.get('content-type') ?? fallbackContentType;
+          const isZipMagic = buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4b;
+          const actualContentType = isZipMagic ? 'application/zip' : (res.headers.get('content-type') ?? fallbackContentType);
+          const actualPath = isZipMagic && path.endsWith('.xml') ? path.replace('.xml', '.zip') : path;
           const { error: upErr } = await supabaseAdmin.storage
             .from('facturas_emitidas')
-            .upload(path, buffer, { upsert: true, contentType });
-          return upErr ? null : getFileUrl(path);
+            .upload(actualPath, buffer, { upsert: true, contentType: actualContentType });
+          return upErr ? null : getFileUrl(actualPath);
         };
 
-        // XML — ApiSunat DEV puede devolver un ZIP aquí; se guarda con el content-type real
+        // XML — ApiSunat DEV puede devolver un ZIP desde Azure Blob (magic bytes lo corrige)
         if (!enlaceXml && docInfo?.xml?.startsWith('http')) {
           try {
-            const url = docInfo.xml;
-            const isZip = url.toLowerCase().includes('.zip');
-            const path = isZip ? `xml/${fileBaseName}.zip` : `xml/${fileBaseName}.xml`;
-            const ct = isZip ? 'application/zip' : 'application/xml';
-            const result = await downloadAndUpload(url, path, ct);
+            const result = await downloadAndUpload(docInfo.xml, `xml/${fileBaseName}.xml`, 'application/xml');
             if (result) enlaceXml = result;
           } catch { /* XML no bloquea */ }
         }
