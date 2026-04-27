@@ -189,6 +189,7 @@ export interface ApisunatPaymentMeans {
 export interface ApisunatPaymentTerm {
   'cbc:ID': { _text: string };
   'cbc:PaymentMeansID'?: { _text: string };
+  'cbc:PaymentPercent'?: { _text: number };
   'cbc:Amount'?: { _attributes: { currencyID: string }; _text: number };
   'cbc:PaymentDueDate'?: { _text: string };
 }
@@ -368,15 +369,20 @@ function buildCustomerParty(cliente: ClienteData): ApisunatCustomerParty {
 }
 
 function buildHeaderTaxTotal(
-  comprobante: ComprobanteData,
+  detalles: ComprobanteDetalle[],
   moneda: string,
 ): ApisunatTaxTotalHeader {
+  // Sum from line-level rounded values to match exactly what SUNAT sees in each line
+  const igvLines = detalles.filter(d => !['20', '21', '30', '31', '32', '33', '34', '35', '36'].includes(String(d.tip_afe_igv_codigo)));
+  const totalBase = Number(igvLines.reduce((acc, d) => acc + Number(d.mto_base_igv.toFixed(2)), 0).toFixed(2));
+  const totalIgv  = Number(igvLines.reduce((acc, d) => acc + Number(d.igv.toFixed(2)), 0).toFixed(2));
+
   return {
-    'cbc:TaxAmount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.mto_igv.toFixed(2)) },
+    'cbc:TaxAmount': { _attributes: { currencyID: moneda }, _text: totalIgv },
     'cac:TaxSubtotal': [
       {
-        'cbc:TaxableAmount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.mto_oper_gravadas.toFixed(2)) },
-        'cbc:TaxAmount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.mto_igv.toFixed(2)) },
+        'cbc:TaxableAmount': { _attributes: { currencyID: moneda }, _text: totalBase },
+        'cbc:TaxAmount': { _attributes: { currencyID: moneda }, _text: totalIgv },
         'cac:TaxCategory': {
           'cac:TaxScheme': {
             'cbc:ID': { _text: '1000' },
@@ -432,23 +438,23 @@ function buildLineTaxTotal(
 
 function buildLegalMonetaryTotal(
   comprobante: ComprobanteData,
+  detalles: ComprobanteDetalle[],
   moneda: string,
   descuentoGlobal: number,
 ): ApisunatLegalMonetaryTotal {
-  const total: ApisunatLegalMonetaryTotal = {
-    'cbc:LineExtensionAmount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.valor_venta.toFixed(2)) },
+  // Sum from line-level rounded values to match exactly what SUNAT sees in each InvoiceLine
+  const lineExtension = Number(
+    detalles.reduce((acc, d) => acc + Number(d.mto_base_igv.toFixed(2)), 0).toFixed(2)
+  );
+  // UBL 2.1 MonetaryTotalType order: LineExtensionAmount → TaxInclusiveAmount → AllowanceTotalAmount → PayableAmount
+  return {
+    'cbc:LineExtensionAmount': { _attributes: { currencyID: moneda }, _text: lineExtension },
     'cbc:TaxInclusiveAmount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.mto_imp_venta.toFixed(2)) },
+    ...(descuentoGlobal > 0 ? {
+      'cbc:AllowanceTotalAmount': { _attributes: { currencyID: moneda }, _text: Number(descuentoGlobal.toFixed(2)) },
+    } : {}),
     'cbc:PayableAmount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.mto_imp_venta.toFixed(2)) },
   };
-
-  if (descuentoGlobal > 0) {
-    total['cbc:AllowanceTotalAmount'] = {
-      _attributes: { currencyID: moneda },
-      _text: Number(descuentoGlobal.toFixed(2)),
-    };
-  }
-
-  return total;
 }
 
 function buildPaymentTerms(
@@ -459,6 +465,16 @@ function buildPaymentTerms(
   if (comprobante.tipo_doc_codigo === '07') return undefined;
 
   const terms: ApisunatPaymentTerm[] = [];
+
+  // Detracción va PRIMERO (SUNAT error 3127 si falta)
+  if (comprobante.detraccion_cod_bien && comprobante.detraccion_porcentaje && comprobante.detraccion_monto) {
+    terms.push({
+      'cbc:ID': { _text: 'Detraccion' },
+      'cbc:PaymentMeansID': { _text: comprobante.detraccion_cod_medio_pago ?? '001' },
+      'cbc:PaymentPercent': { _text: Number(comprobante.detraccion_porcentaje) },
+      'cbc:Amount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.detraccion_monto.toFixed(2)) },
+    });
+  }
 
   if (comprobante.forma_pago === 'Credito' && comprobante.cuotas?.length) {
     const montoCredito = Number(
@@ -568,6 +584,18 @@ function buildInvoiceLines(
 
     const mtoPrecioUnitario = Number(((itemBase / d.cantidad) * factorImpuesto).toFixed(10));
 
+    const allowance = buildLineAllowanceCharge(descuentoLinea, moneda);
+    const codProducto = d.cod_producto;
+
+    const item: ApisunatInvoiceLine['cac:Item'] = {
+      'cbc:Description': { _text: d.descripcion },
+    };
+    if (codProducto && codProducto !== '-') {
+      item['cac:SellersItemIdentification'] = { 'cbc:ID': { _text: codProducto } };
+    }
+
+    // UBL 2.1 strict element order: ID → InvoicedQuantity → LineExtensionAmount →
+    // PricingReference → AllowanceCharge → TaxTotal → Item → Price
     const line: ApisunatInvoiceLine = {
       'cbc:ID': { _text: String(idx + 1) },
       'cbc:InvoicedQuantity': {
@@ -581,24 +609,13 @@ function buildInvoiceLines(
           'cbc:PriceTypeCode': { _text: '01' },
         },
       },
+      ...(allowance ? { 'cac:AllowanceCharge': allowance } : {}),
       'cac:TaxTotal': buildLineTaxTotal(d, moneda),
-      'cac:Item': {
-        'cbc:Description': { _text: d.descripcion },
-      },
+      'cac:Item': item,
       'cac:Price': {
         'cbc:PriceAmount': { _attributes: { currencyID: moneda }, _text: Number(mtoValorUnitario.toFixed(10)) },
       },
     };
-
-    const codProducto = d.cod_producto;
-    if (codProducto && codProducto !== '-') {
-      line['cac:Item']['cac:SellersItemIdentification'] = { 'cbc:ID': { _text: codProducto } };
-    }
-
-    const allowance = buildLineAllowanceCharge(descuentoLinea, moneda);
-    if (allowance) {
-      line['cac:AllowanceCharge'] = allowance;
-    }
 
     return line;
   });
@@ -637,8 +654,8 @@ export function buildInvoicePayload(
     'cac:Signature': buildSignature(empresa),
     'cac:AccountingSupplierParty': buildSupplierParty(empresa),
     'cac:AccountingCustomerParty': buildCustomerParty(cliente),
-    'cac:TaxTotal': buildHeaderTaxTotal(comprobante, moneda),
-    'cac:LegalMonetaryTotal': buildLegalMonetaryTotal(comprobante, moneda, discountAmount),
+    'cac:TaxTotal': buildHeaderTaxTotal(detalles, moneda),
+    'cac:LegalMonetaryTotal': buildLegalMonetaryTotal(comprobante, detalles, moneda, discountAmount),
     'cac:InvoiceLine': buildInvoiceLines(detalles, moneda, isNC),
   };
 
