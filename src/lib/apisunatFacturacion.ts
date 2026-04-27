@@ -119,7 +119,6 @@ export interface ApisunatInvoiceBody {
   'cbc:Note'?: Array<{ _attributes: { languageLocaleID: string }; _text: string }>;
   'cbc:DocumentCurrencyCode': { _text: string };
   'cac:DiscrepancyResponse'?: {
-    'cbc:ReferenceID': { _text: string };
     'cbc:ResponseCode': { _text: string };
     'cbc:Description': { _text: string };
   };
@@ -137,7 +136,8 @@ export interface ApisunatInvoiceBody {
   'cac:AllowanceCharge'?: ApisunatHeaderAllowanceCharge[];
   'cac:TaxTotal': ApisunatTaxTotalHeader;
   'cac:LegalMonetaryTotal': ApisunatLegalMonetaryTotal;
-  'cac:InvoiceLine': ApisunatInvoiceLine[];
+  'cac:InvoiceLine'?: ApisunatInvoiceLine[];
+  'cac:CreditNoteLine'?: ApisunatInvoiceLine[];
 }
 
 export interface ApisunatSignature {
@@ -248,7 +248,11 @@ export interface ApisunatLegalMonetaryTotal {
 
 export interface ApisunatInvoiceLine {
   'cbc:ID': { _text: string };
-  'cbc:InvoicedQuantity': {
+  'cbc:InvoicedQuantity'?: {
+    _attributes: { unitCode: string };
+    _text: number;
+  };
+  'cbc:CreditedQuantity'?: {
     _attributes: { unitCode: string };
     _text: number;
   };
@@ -622,11 +626,12 @@ function buildInvoiceLines(
       item['cac:SellersItemIdentification'] = { 'cbc:ID': { _text: codProducto } };
     }
 
-    // UBL 2.1 strict element order: ID → InvoicedQuantity → LineExtensionAmount →
+    // UBL 2.1 strict element order: ID → InvoicedQuantity/CreditedQuantity → LineExtensionAmount →
     // PricingReference → AllowanceCharge → TaxTotal → Item → Price
+    const quantityField = isNC ? 'cbc:CreditedQuantity' : 'cbc:InvoicedQuantity';
     const line: ApisunatInvoiceLine = {
       'cbc:ID': { _text: String(idx + 1) },
-      'cbc:InvoicedQuantity': {
+      [quantityField]: {
         _attributes: { unitCode: d.unidad_codigo || 'NIU' },
         _text: d.cantidad,
       },
@@ -697,7 +702,6 @@ export function buildInvoicePayload(
   // NC fields pre-computados
   const discrepancyResponse = isNC && comprobanteReferenciado ? {
     'cac:DiscrepancyResponse': {
-      'cbc:ReferenceID': { _text: comprobanteReferenciado.serie_numero },
       'cbc:ResponseCode': { _text: comprobante.tipo_nota_codigo! },
       'cbc:Description': { _text: comprobante.motivo_nota! },
     },
@@ -728,7 +732,9 @@ export function buildInvoicePayload(
     ...(headerAllowance ? { 'cac:AllowanceCharge': headerAllowance } : {}),
     'cac:TaxTotal': buildHeaderTaxTotal(detalles, moneda, discountAmount, descuentoCodigo),
     'cac:LegalMonetaryTotal': buildLegalMonetaryTotal(comprobante, detalles, moneda, discountAmount, descuentoCodigo),
-    'cac:InvoiceLine': buildInvoiceLines(detalles, moneda, isNC),
+    ...(isNC
+      ? { 'cac:CreditNoteLine': buildInvoiceLines(detalles, moneda, isNC) }
+      : { 'cac:InvoiceLine': buildInvoiceLines(detalles, moneda, isNC) }),
   };
 
   return {

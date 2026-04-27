@@ -1,0 +1,403 @@
+payload completo: {
+    "personaId": "69ed41bd5652d20015116961\r\n",
+    "personaToken": "DEV_ER6L0YCdxLMj0oRyaw3CyoSCRo2678CAhN7ZSFfn1F0mqw6QLkjZUBalY64M2WP6",
+    "fileName": "20602384315-01-F002-00000009",
+    "documentBody": {
+        "cbc:UBLVersionID": {
+            "_text": "2.1"
+        },
+        "cbc:CustomizationID": {
+            "_text": "2.0"
+        },
+        "cbc:ID": {
+            "_text": "F002-00000009"
+        },
+        "cbc:IssueDate": {
+            "_text": "2026-04-27"
+        },
+        "cbc:IssueTime": {
+            "_text": "00:00:00"
+        },
+        "cbc:DocumentCurrencyCode": {
+            "_text": "PEN"
+        },
+        "cac:Signature": {
+            "cbc:ID": {
+                "_text": "20602384315"
+            },
+            "cac:SignatoryParty": {
+                "cac:PartyIdentification": {
+                    "cbc:ID": {
+                        "_text": "20602384315"
+                    }
+                },
+                "cac:PartyName": {
+                    "cbc:Name": {
+                        "_text": "Magenta Consultoría"
+                    }
+                }
+            },
+            "cac:DigitalSignatureAttachment": {
+                "cac:ExternalReference": {
+                    "cbc:URI": {
+                        "_text": "#SignatureKG20602384315"
+                    }
+                }
+            }
+        },
+        "cac:AccountingSupplierParty": {
+            "cac:Party": {
+                "cac:PartyIdentification": {
+                    "cbc:ID": {
+                        "_attributes": {
+                            "schemeID": "6"
+                        },
+                        "_text": "20602384315"
+                    }
+                },
+                "cac:PartyLegalEntity": {
+                    "cbc:RegistrationName": {
+                        "_text": "Magenta Consultoría"
+                    },
+                    "cac:RegistrationAddress": {
+                        "cbc:AddressTypeCode": {
+                            "_text": "0000"
+                        },
+                        "cac:AddressLine": {
+                            "cbc:Line": {
+                                "_text": "Av. Javier Prado Este 1234, San Isidro, Lima"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "cac:AccountingCustomerParty": {
+            "cac:Party": {
+                "cac:PartyIdentification": {
+                    "cbc:ID": {
+                        "_attributes": {
+                            "schemeID": "6"
+                        },
+                        "_text": "20538874061"
+                    }
+                },
+                "cac:PartyLegalEntity": {
+                    "cbc:RegistrationName": {
+                        "_text": "MJM EXPRESS E.I.R.L"
+                    },
+                    "cac:RegistrationAddress": {
+                        "cac:AddressLine": {
+                            "cbc:Line": {
+                                "_text": "CAL. CORONEL JOSE JOAQUIN BERN NRO. 1069 URB. SAN JUAN ZN. D LIMA LIMA SAN JUAN DE MIRAFLORES"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "cac:TaxTotal": {
+            "cbc:TaxAmount": {
+                "_attributes": {
+                    "currencyID": "PEN"
+                },
+                "_text": 18.9
+            },
+            "cac:TaxSubtotal": [
+                {
+                    "cbc:TaxableAmount": {
+                        "_attributes": {
+                            "currencyID": "PEN"
+                        },
+                        "_text": 113.9
+                    },
+                    "cbc:TaxAmount": {
+                        "_attributes": {
+                            "currencyID": "PEN"
+                        },
+                        "_text": 18.9
+                    },
+                    "cac:TaxCategory": {
+                        "cac:TaxScheme": {
+                            "cbc:ID": {
+                                "_text": "1000"
+                            },
+                            "cbc:Name": {
+                                "_text": "IGV"
+                            },
+                            "cbc:TaxTypeCode": {
+                                "_text": "VAT"
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "cac:LegalMonetaryTotal": {
+            "cbc:LineExtensionAmount": {
+                "_attributes": {
+                    "currencyID": "PEN"
+                },
+                "_text": 123.9
+            },
+            "cbc:TaxInclusiveAmount": {
+                "_attributes": {
+                    "currencyID": "PEN"
+                },
+                "_text": 113.9
+            },
+            "cbc:PayableAmount": {
+                "_attributes": {
+                    "currencyID": "PEN"
+                },
+                "_text": 113.9
+            },
+            "cbc:AllowanceTotalAmount": {
+                "_attributes": {
+                    "currencyID": "PEN"
+                },
+                "_text": 10
+            }
+        },
+        "cac:InvoiceLine": [
+            {
+                "cbc:ID": {
+                    "_text": "1"
+                },
+                "cbc:InvoicedQuantity": {
+                    "_attributes": {
+                        "unitCode": "NIU"
+                    },
+                    "_text": 1
+                },
+                "cbc:LineExtensionAmount": {
+                    "_attributes": {
+                        "currencyID": "PEN"
+                    },
+                    "_text": 100
+                },
+                "cac:PricingReference": {
+                    "cac:AlternativeConditionPrice": {
+                        "cbc:PriceAmount": {
+                            "_attributes": {
+                                "currencyID": "PEN"
+                            },
+                            "_text": 118
+                        },
+                        "cbc:PriceTypeCode": {
+                            "_text": "01"
+                        }
+                    }
+                },
+                "cac:TaxTotal": {
+                    "cbc:TaxAmount": {
+                        "_attributes": {
+                            "currencyID": "PEN"
+                        },
+                        "_text": 18
+                    },
+                    "cac:TaxSubtotal": {
+                        "cbc:TaxableAmount": {
+                            "_attributes": {
+                                "currencyID": "PEN"
+                            },
+                            "_text": 100
+                        },
+                        "cbc:TaxAmount": {
+                            "_attributes": {
+                                "currencyID": "PEN"
+                            },
+                            "_text": 18
+                        },
+                        "cac:TaxCategory": {
+                            "cbc:Percent": {
+                                "_text": 18
+                            },
+                            "cbc:TaxExemptionReasonCode": {
+                                "_text": "10"
+                            },
+                            "cac:TaxScheme": {
+                                "cbc:ID": {
+                                    "_text": "1000"
+                                },
+                                "cbc:Name": {
+                                    "_text": "IGV"
+                                },
+                                "cbc:TaxTypeCode": {
+                                    "_text": "VAT"
+                                }
+                            }
+                        }
+                    }
+                },
+                "cac:Item": {
+                    "cbc:Description": {
+                        "_text": "Consultoría IT"
+                    },
+                    "cac:SellersItemIdentification": {
+                        "cbc:ID": {
+                            "_text": "SRV-002"
+                        }
+                    }
+                },
+                "cac:Price": {
+                    "cbc:PriceAmount": {
+                        "_attributes": {
+                            "currencyID": "PEN"
+                        },
+                        "_text": 150
+                    }
+                },
+                "cac:AllowanceCharge": [
+                    {
+                        "cbc:ChargeIndicator": {
+                            "_text": false
+                        },
+                        "cbc:AllowanceChargeReasonCode": {
+                            "_text": "00"
+                        },
+                        "cbc:Amount": {
+                            "_attributes": {
+                                "currencyID": "PEN"
+                            },
+                            "_text": 50
+                        }
+                    }
+                ]
+            },
+            {
+                "cbc:ID": {
+                    "_text": "2"
+                },
+                "cbc:InvoicedQuantity": {
+                    "_attributes": {
+                        "unitCode": "NIU"
+                    },
+                    "_text": 1
+                },
+                "cbc:LineExtensionAmount": {
+                    "_attributes": {
+                        "currencyID": "PEN"
+                    },
+                    "_text": 5
+                },
+                "cac:PricingReference": {
+                    "cac:AlternativeConditionPrice": {
+                        "cbc:PriceAmount": {
+                            "_attributes": {
+                                "currencyID": "PEN"
+                            },
+                            "_text": 5.9
+                        },
+                        "cbc:PriceTypeCode": {
+                            "_text": "01"
+                        }
+                    }
+                },
+                "cac:TaxTotal": {
+                    "cbc:TaxAmount": {
+                        "_attributes": {
+                            "currencyID": "PEN"
+                        },
+                        "_text": 0.9
+                    },
+                    "cac:TaxSubtotal": {
+                        "cbc:TaxableAmount": {
+                            "_attributes": {
+                                "currencyID": "PEN"
+                            },
+                            "_text": 5
+                        },
+                        "cbc:TaxAmount": {
+                            "_attributes": {
+                                "currencyID": "PEN"
+                            },
+                            "_text": 0.9
+                        },
+                        "cac:TaxCategory": {
+                            "cbc:Percent": {
+                                "_text": 18
+                            },
+                            "cbc:TaxExemptionReasonCode": {
+                                "_text": "10"
+                            },
+                            "cac:TaxScheme": {
+                                "cbc:ID": {
+                                    "_text": "1000"
+                                },
+                                "cbc:Name": {
+                                    "_text": "IGV"
+                                },
+                                "cbc:TaxTypeCode": {
+                                    "_text": "VAT"
+                                }
+                            }
+                        }
+                    }
+                },
+                "cac:Item": {
+                    "cbc:Description": {
+                        "_text": "entrega"
+                    }
+                },
+                "cac:Price": {
+                    "cbc:PriceAmount": {
+                        "_attributes": {
+                            "currencyID": "PEN"
+                        },
+                        "_text": 5
+                    }
+                }
+            }
+        ],
+        "cbc:InvoiceTypeCode": {
+            "_attributes": {
+                "listID": "0101",
+                "listAgencyName": "PE:SUNAT",
+                "listName": "Tipo de Documento",
+                "listURI": "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01"
+            },
+            "_text": "01"
+        },
+        "cbc:Note": [
+            {
+                "_attributes": {
+                    "languageLocaleID": "1000"
+                },
+                "_text": "SON CIENTO TRECE Y 90/100 SOLES"
+            }
+        ],
+        "cac:PaymentTerms": [
+            {
+                "cbc:ID": {
+                    "_text": "FormaPago"
+                },
+                "cbc:PaymentMeansID": {
+                    "_text": "Contado"
+                }
+            }
+        ],
+        "cac:AllowanceCharge": [
+            {
+                "cbc:ChargeIndicator": {
+                    "_text": false
+                },
+                "cbc:AllowanceChargeReasonCode": {
+                    "_text": "00"
+                },
+                "cbc:Amount": {
+                    "_attributes": {
+                        "currencyID": "PEN"
+                    },
+                    "_text": 10
+                },
+                "cbc:BaseAmount": {
+                    "_attributes": {
+                        "currencyID": "PEN"
+                    },
+                    "_text": 123.9
+                }
+            }
+        ]
+    }
+}
