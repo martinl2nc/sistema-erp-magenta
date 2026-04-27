@@ -4,15 +4,15 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   buildInvoicePayload,
-  sendInvoiceToApisPeru,
-  getPdfFromApisPeru,
-  type ApisPeruResponse,
+  sendInvoiceToApisunat,
+  getInvoicePdfFromApisunat,
+  type ApisunatResponse,
   type ComprobanteData,
   type ComprobanteDetalle,
   type ComprobanteReferenciadoData,
   type ClienteData,
   type EmpresaData,
-} from '@/lib/apisperuFacturacion';
+} from '@/lib/apisunatFacturacion';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { NotaVentaDocument, type NotaVentaPDFData } from '@/lib/pdf/notaVentaPDF';
 import { getClientDisplayName } from '@/utils/formatters';
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
 
     const { data: detalles } = await supabase.from('comprobantes_detalles').select('*').eq('comprobante_id', comprobante_id);
     const { data: cliente } = await supabase.from('clientes').select('*').eq('id', comprobante.cliente_id).single();
-    const { data: empresa } = await supabase.from('empresa_configuracion').select('*').limit(1).single();
+    const { data: empresa } = await supabase.from('empresa_configuracion').select('*, apisunat_persona_id, apisunat_persona_token').limit(1).single();
     const { data: cuotasRaw } = await supabase
       .from('comprobantes_cuotas')
       .select('monto, fecha_pago')
@@ -193,22 +193,26 @@ export async function POST(request: Request) {
     );
 
     const supabaseAdmin = createAdminClient();
-    let apisPeruResponse: ApisPeruResponse = (comprobante.apisperu_response ?? {}) as ApisPeruResponse;
+    let apisunatResponse: ApisunatResponse = (comprobante.apisperu_response ?? {}) as ApisunatResponse;
 
     // 1. Enviar a SUNAT (solo si no está aceptado)
     if (!yaAceptado) {
       try {
-        apisPeruResponse = await sendInvoiceToApisPeru(payload);
-        const sunatRes = apisPeruResponse.sunatResponse;
-        const isAccepted = sunatRes?.success === true || sunatRes?.cdrResponse?.code === '0';
+        apisunatResponse = await sendInvoiceToApisunat(payload);
+        const sunatRes = apisunatResponse.sunatResponse;
+        const isAccepted =
+          sunatRes?.success === true ||
+          sunatRes?.cdrResponse?.code === '0' ||
+          apisunatResponse.status === 'PENDIENTE' ||
+          (!sunatRes && !!apisunatResponse.documentId);
 
         if (!isAccepted) {
           const errorMsg = sunatRes?.error?.message ?? sunatRes?.cdrResponse?.description ?? 'Error de SUNAT';
-          await supabaseAdmin.from('comprobantes').update({ 
-            estado_sunat: 'rechazada_sunat', 
-            apisperu_response: apisPeruResponse 
+          await supabaseAdmin.from('comprobantes').update({
+            estado_sunat: 'rechazada_sunat',
+            apisperu_response: apisunatResponse,
           }).eq('id', comprobante_id);
-          return NextResponse.json({ success: false, error: `SUNAT rechazó: ${errorMsg}`, apisPeruResponse }, { status: 400 });
+          return NextResponse.json({ success: false, error: `SUNAT rechazó: ${errorMsg}`, apisunatResponse }, { status: 400 });
         }
       } catch (apiError: unknown) {
         const msg = apiError instanceof Error ? apiError.message : String(apiError);
@@ -216,41 +220,51 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Generar/Subir archivos
+    // 2. Persistir documentId ANTES de descargar PDF (recovery boundary)
+    const documentId = apisunatResponse.documentId;
+    const fileName = `${empresa.ruc}-${comprobante.tipo_doc_codigo}-${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}`;
+
+    if (!yaAceptado) {
+      await supabaseAdmin.from('comprobantes').update({
+        estado_sunat: 'aceptada_sunat',
+        apisperu_response: apisunatResponse,
+        apisunat_document_id: documentId ?? null,
+      }).eq('id', comprobante_id);
+    }
+
+    // 3. Generar/Subir archivos
     const serieNumero = `${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}`;
     const fileBaseName = `${serieNumero}_${empresa.ruc}`;
-    
-    // Función para obtener URL firmada de larga duración (evita problemas de bucket privado)
+
     const getFileUrl = async (path: string) => {
       try {
         const { data, error } = await supabaseAdmin.storage
           .from('facturas_emitidas')
-          .createSignedUrl(path, 31536000 * 100); // 100 años
-        if (error) {
-          return null;
-        }
+          .createSignedUrl(path, 31536000 * 100);
+        if (error) return null;
         return data?.signedUrl || null;
       } catch {
         return null;
       }
     };
 
-    // Start with existing links as fallback; on yaAceptado force re-generation by clearing them
     let enlacePdf: string | null = comprobante.enlace_pdf ?? null;
     let enlaceXml: string | null = comprobante.enlace_xml ?? null;
     let enlaceCdr: string | null = comprobante.enlace_cdr ?? null;
 
     if (yaAceptado) {
-      // Force re-upload of all files for a repair attempt, but keep old values as fallback
       enlacePdf = null;
       enlaceXml = null;
       enlaceCdr = null;
     }
 
-    // PDF
-    if (!enlacePdf) {
+    // PDF — descargar desde ApiSunat usando documentId
+    if (!enlacePdf && documentId) {
       try {
-        const pdfBuffer = await getPdfFromApisPeru(payload);
+        const { buffer: pdfBuffer } = await getInvoicePdfFromApisunat(documentId, fileName, {
+          personaId: empresa.apisunat_persona_id,
+          personaToken: empresa.apisunat_persona_token,
+        });
         const pdfPath = `pdf/${fileBaseName}.pdf`;
         const { error: upErr } = await supabaseAdmin.storage
           .from('facturas_emitidas')
@@ -258,19 +272,19 @@ export async function POST(request: Request) {
 
         if (!upErr) {
           enlacePdf = await getFileUrl(pdfPath);
-        } else {
-          // Preserve the previously valid link if upload fails on re-generation
-          if (yaAceptado) enlacePdf = comprobante.enlace_pdf ?? null;
+        } else if (yaAceptado) {
+          enlacePdf = comprobante.enlace_pdf ?? null;
         }
       } catch {
+        // PDF falla no bloquea — documentId ya está guardado, reparar puede reintentarlo
         if (yaAceptado) enlacePdf = comprobante.enlace_pdf ?? null;
       }
     }
 
     // XML
-    if (!enlaceXml && apisPeruResponse.xml) {
+    if (!enlaceXml && apisunatResponse.xml) {
       try {
-        const xmlBuffer = Buffer.from(apisPeruResponse.xml, 'utf-8');
+        const xmlBuffer = Buffer.from(apisunatResponse.xml, 'utf-8');
         const xmlPath = `xml/${fileBaseName}.xml`;
         const { error: upErr } = await supabaseAdmin.storage
           .from('facturas_emitidas')
@@ -278,16 +292,16 @@ export async function POST(request: Request) {
 
         if (!upErr) {
           enlaceXml = await getFileUrl(xmlPath);
-        } else {
-          if (yaAceptado) enlaceXml = comprobante.enlace_xml ?? null;
+        } else if (yaAceptado) {
+          enlaceXml = comprobante.enlace_xml ?? null;
         }
       } catch {
         if (yaAceptado) enlaceXml = comprobante.enlace_xml ?? null;
       }
     }
 
-    // CDR (Constancia de Recepción de SUNAT)
-    const cdrZip = apisPeruResponse.sunatResponse?.cdrZip;
+    // CDR
+    const cdrZip = apisunatResponse.sunatResponse?.cdrZip;
     if (!enlaceCdr && cdrZip) {
       try {
         const cdrBuffer = Buffer.from(cdrZip, 'base64');
@@ -298,15 +312,15 @@ export async function POST(request: Request) {
 
         if (!upErr) {
           enlaceCdr = await getFileUrl(cdrPath);
-        } else {
-          if (yaAceptado) enlaceCdr = comprobante.enlace_cdr ?? null;
+        } else if (yaAceptado) {
+          enlaceCdr = comprobante.enlace_cdr ?? null;
         }
       } catch {
         if (yaAceptado) enlaceCdr = comprobante.enlace_cdr ?? null;
       }
     }
 
-    // 3. Actualizar registro final
+    // 4. Actualizar registro final con URLs de archivos
     const { data: updateData, error: dbErr } = await supabaseAdmin
       .from('comprobantes')
       .update({
@@ -314,7 +328,8 @@ export async function POST(request: Request) {
         enlace_pdf: enlacePdf,
         enlace_xml: enlaceXml,
         enlace_cdr: enlaceCdr,
-        apisperu_response: apisPeruResponse
+        apisperu_response: apisunatResponse,
+        apisunat_document_id: documentId ?? null,
       })
       .eq('id', comprobante_id)
       .select();
@@ -335,10 +350,11 @@ export async function POST(request: Request) {
       success: true,
       message: yaAceptado ? 'Comprobante reparado con éxito' : 'Comprobante emitido',
       serie_numero: serieNumero,
+      documentId: documentId ?? null,
       enlacePdf,
       enlaceXml,
       enlaceCdr,
-      comprobante: updateData[0]
+      comprobante: updateData[0],
     });
 
   } catch (error: unknown) {

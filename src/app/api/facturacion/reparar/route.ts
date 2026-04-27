@@ -1,15 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import {
-  buildInvoicePayload,
-  getPdfFromApisPeru,
-  type ApisPeruResponse,
-  type ComprobanteData,
-  type ComprobanteDetalle,
-  type ClienteData,
-  type EmpresaData,
-} from '@/lib/apisperuFacturacion';
+import { getInvoicePdfFromApisunat } from '@/lib/apisunatFacturacion';
 
 export async function POST(request: Request) {
   try {
@@ -33,55 +25,72 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = createAdminClient();
 
-    // 1. Obtener datos
-    const { data: comprobante } = await supabaseAdmin.from('comprobantes').select('*').eq('id', comprobante_id).single();
+    // 1. Obtener comprobante y empresa
+    const { data: comprobante } = await supabaseAdmin
+      .from('comprobantes')
+      .select('id, apisunat_document_id, tipo_doc_codigo, serie, correlativo, cliente_id, enlace_pdf, enlace_xml, apisperu_response')
+      .eq('id', comprobante_id)
+      .single();
     if (!comprobante) return NextResponse.json({ error: 'No existe' }, { status: 404 });
 
-    const { data: detalles } = await supabaseAdmin.from('comprobantes_detalles').select('*').eq('comprobante_id', comprobante_id);
-    const { data: cliente } = await supabaseAdmin.from('clientes').select('*').eq('id', comprobante.cliente_id).single();
-    const { data: empresa } = await supabaseAdmin.from('empresa_configuracion').select('*').limit(1).single();
+    // 2. Legacy check — comprobantes emitidos con ApisPeru no tienen documentId
+    if (!comprobante.apisunat_document_id) {
+      return NextResponse.json(
+        { error: 'Este comprobante fue emitido con el proveedor anterior (ApisPeru) y no puede re-descargarse desde aquí.' },
+        { status: 409 },
+      );
+    }
 
-    if (!detalles || !cliente || !empresa) return NextResponse.json({ error: 'Datos incompletos para reparar' }, { status: 400 });
+    const { data: empresa } = await supabaseAdmin
+      .from('empresa_configuracion')
+      .select('ruc, apisunat_persona_id, apisunat_persona_token')
+      .limit(1)
+      .single();
+    if (!empresa) return NextResponse.json({ error: 'Configuración de empresa no encontrada' }, { status: 400 });
 
-    // 2. Build payload
-    const payload = buildInvoicePayload(
-      comprobante as ComprobanteData,
-      detalles as ComprobanteDetalle[],
-      cliente as ClienteData,
-      empresa as EmpresaData
-    );
-
+    const fileName = `${empresa.ruc}-${comprobante.tipo_doc_codigo}-${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}`;
     const serieNumero = `${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}`;
     const fileBaseName = `${serieNumero}_${empresa.ruc}`;
 
-    let enlacePdf = null;
-    let enlaceXml = null;
+    // 3. Descargar PDF desde ApiSunat usando documentId persistido
+    const { buffer: pdfBuffer } = await getInvoicePdfFromApisunat(
+      comprobante.apisunat_document_id,
+      fileName,
+      {
+        personaId: empresa.apisunat_persona_id,
+        personaToken: empresa.apisunat_persona_token,
+      },
+    );
 
-    // 3. Reparar PDF
-    try {
-      const pdfBuffer = await getPdfFromApisPeru(payload);
-      const pdfPath = `${fileBaseName}.pdf`;
-      await supabaseAdmin.storage.from('facturas_emitidas').upload(pdfPath, pdfBuffer, { upsert: true });
-      const { data: pdfUrl } = await supabaseAdmin.storage.from('facturas_emitidas').createSignedUrl(pdfPath, 365 * 24 * 60 * 60);
-      enlacePdf = pdfUrl?.signedUrl || pdfPath;
-    } catch (e: unknown) {
-      console.error('Error reparando PDF:', e);
+    const pdfPath = `pdf/${fileBaseName}.pdf`;
+    await supabaseAdmin.storage
+      .from('facturas_emitidas')
+      .upload(pdfPath, pdfBuffer, { upsert: true, contentType: 'application/pdf' });
+
+    const { data: pdfUrl } = await supabaseAdmin.storage
+      .from('facturas_emitidas')
+      .createSignedUrl(pdfPath, 31536000 * 100);
+    const enlacePdf = pdfUrl?.signedUrl ?? null;
+
+    // 4. Reparar XML desde la respuesta guardada si existe
+    let enlaceXml: string | null = comprobante.enlace_xml ?? null;
+    const savedResponse = (comprobante.apisperu_response ?? {}) as { xml?: string };
+    if (savedResponse.xml && !enlaceXml) {
+      const xmlBuffer = Buffer.from(savedResponse.xml, 'utf-8');
+      const xmlPath = `xml/${fileBaseName}.xml`;
+      await supabaseAdmin.storage
+        .from('facturas_emitidas')
+        .upload(xmlPath, xmlBuffer, { upsert: true, contentType: 'application/xml' });
+      const { data: xmlUrl } = await supabaseAdmin.storage
+        .from('facturas_emitidas')
+        .createSignedUrl(xmlPath, 31536000 * 100);
+      enlaceXml = xmlUrl?.signedUrl ?? null;
     }
 
-    // 4. Reparar XML (desde la respuesta guardada si existe)
-    const resp = (comprobante.apisperu_response ?? {}) as ApisPeruResponse;
-    if (resp.xml) {
-      const xmlBuffer = Buffer.from(resp.xml, 'utf-8');
-      const xmlPath = `${fileBaseName}.xml`;
-      await supabaseAdmin.storage.from('facturas_emitidas').upload(xmlPath, xmlBuffer, { upsert: true });
-      const { data: xmlUrl } = await supabaseAdmin.storage.from('facturas_emitidas').createSignedUrl(xmlPath, 365 * 24 * 60 * 60);
-      enlaceXml = xmlUrl?.signedUrl || xmlPath;
-    }
-
-    // 5. Update database
+    // 5. Actualizar BD
     await supabaseAdmin.from('comprobantes').update({
       enlace_pdf: enlacePdf,
-      enlace_xml: enlaceXml
+      enlace_xml: enlaceXml,
     }).eq('id', comprobante_id);
 
     return NextResponse.json({ success: true, pdf: enlacePdf, xml: enlaceXml });

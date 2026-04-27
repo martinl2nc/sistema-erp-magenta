@@ -3,10 +3,10 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   buildDespatchPayload,
-  sendDespatchToApisPeru,
-  getDespatchPdfFromApisPeru,
-  type ApisPeruDespatchResponse,
-} from '@/lib/apisperuGuiasRemision';
+  sendDespatchToApisunat,
+  getDespatchPdfFromApisunat,
+  type ApisunatDespatchResponse,
+} from '@/lib/apisunatGuiasRemision';
 import type { EmitirGuiaRemisionPayload } from '@/services/guiasRemision.service';
 
 export async function POST(request: Request) {
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     // Load empresa config
     const { data: empresa, error: empErr } = await supabaseAdmin
       .from('empresa_configuracion')
-      .select('ruc, razon_social, nombre_comercial, direccion, departamento, provincia, distrito, ubigueo')
+      .select('ruc, razon_social, nombre_comercial, direccion, departamento, provincia, distrito, ubigueo, apisunat_persona_id, apisunat_persona_token')
       .limit(1)
       .single();
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
       correlativo: number;
     };
 
-    // 2. Build ApisPeru payload
+    // 2. Build ApiSunat payload
     const despatchPayload = buildDespatchPayload({
       guia: {
         serie,
@@ -185,23 +185,20 @@ export async function POST(request: Request) {
 
 
 
-    // DEBUG — remove after inspection
-    console.log('[guias-remision] payload to ApisPeru:', JSON.stringify(despatchPayload, null, 2));
-
-    // 3. Send to ApisPeru
-    let apisPeruResponse: ApisPeruDespatchResponse = {};
+    // 3. Send to ApiSunat
+    let apisunatResponse: ApisunatDespatchResponse = {};
     try {
-      apisPeruResponse = await sendDespatchToApisPeru(despatchPayload);
+      apisunatResponse = await sendDespatchToApisunat(despatchPayload);
     } catch (apiError: unknown) {
       const msg = apiError instanceof Error ? apiError.message : String(apiError);
       await supabaseAdmin
         .from('guias_remision')
         .update({ estado_sunat: 'rechazada_sunat', apisperu_response: { error: msg } })
         .eq('id', guia_id);
-      return NextResponse.json({ success: false, error: `Error ApisPeru: ${msg}` }, { status: 502 });
+      return NextResponse.json({ success: false, error: `Error ApiSunat: ${msg}` }, { status: 502 });
     }
 
-    const sunatRes = apisPeruResponse.sunatResponse;
+    const sunatRes = apisunatResponse.sunatResponse;
     const isAccepted =
       sunatRes?.success === true || sunatRes?.cdrResponse?.code === '0';
 
@@ -212,7 +209,7 @@ export async function POST(request: Request) {
         'SUNAT rechazó la guía';
       await supabaseAdmin
         .from('guias_remision')
-        .update({ estado_sunat: 'rechazada_sunat', apisperu_response: apisPeruResponse })
+        .update({ estado_sunat: 'rechazada_sunat', apisperu_response: apisunatResponse })
         .eq('id', guia_id);
       return NextResponse.json(
         { success: false, error: `SUNAT rechazó: ${errorMsg}` },
@@ -220,7 +217,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // 4. Upload files to storage
+    // 4. Persistir documentId ANTES de descargar PDF (recovery boundary)
+    const documentId = apisunatResponse.documentId;
+    const fileName = `${empresa.ruc}-09-${serie}-${String(correlativo).padStart(8, '0')}`;
+
+    await supabaseAdmin
+      .from('guias_remision')
+      .update({
+        estado_sunat: 'aceptada_sunat',
+        apisperu_response: apisunatResponse,
+        apisunat_document_id: documentId ?? null,
+      })
+      .eq('id', guia_id);
+
+    // 5. Upload files to storage
     const fileBase = `${guia_id}/${serie_numero}`;
     let enlacePdf: string | null = null;
     let enlaceXml: string | null = null;
@@ -237,22 +247,27 @@ export async function POST(request: Request) {
       }
     };
 
-    // PDF
-    try {
-      const pdfBuffer = await getDespatchPdfFromApisPeru(despatchPayload);
-      const pdfPath = `${fileBase}.pdf`;
-      const { error: upErr } = await supabaseAdmin.storage
-        .from('guias_remision')
-        .upload(pdfPath, pdfBuffer, { upsert: true, contentType: 'application/pdf' });
-      if (!upErr) enlacePdf = await getSignedUrl(pdfPath);
-    } catch {
-      // PDF is non-fatal
+    // PDF — usar documentId de ApiSunat
+    if (documentId) {
+      try {
+        const { buffer: pdfBuffer } = await getDespatchPdfFromApisunat(documentId, fileName, {
+          personaId: empresa.apisunat_persona_id,
+          personaToken: empresa.apisunat_persona_token,
+        });
+        const pdfPath = `${fileBase}.pdf`;
+        const { error: upErr } = await supabaseAdmin.storage
+          .from('guias_remision')
+          .upload(pdfPath, pdfBuffer, { upsert: true, contentType: 'application/pdf' });
+        if (!upErr) enlacePdf = await getSignedUrl(pdfPath);
+      } catch {
+        // PDF is non-fatal — documentId ya persistido, se puede recuperar después
+      }
     }
 
     // XML
-    if (apisPeruResponse.xml) {
+    if (apisunatResponse.xml) {
       try {
-        const xmlBuffer = Buffer.from(apisPeruResponse.xml, 'utf-8');
+        const xmlBuffer = Buffer.from(apisunatResponse.xml, 'utf-8');
         const xmlPath = `${fileBase}.xml`;
         const { error: upErr } = await supabaseAdmin.storage
           .from('guias_remision')
@@ -277,21 +292,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. Update final state
+    // 6. Actualizar con URLs de archivos
     await supabaseAdmin
       .from('guias_remision')
       .update({
-        estado_sunat: 'aceptada_sunat',
         enlace_pdf: enlacePdf,
         enlace_xml: enlaceXml,
         enlace_cdr: enlaceCdr,
-        apisperu_response: apisPeruResponse,
       })
       .eq('id', guia_id);
 
     return NextResponse.json({
       success: true,
       serie_numero,
+      documentId: documentId ?? null,
       enlace_pdf: enlacePdf,
       enlace_xml: enlaceXml,
       enlace_cdr: enlaceCdr,
