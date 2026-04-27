@@ -6,6 +6,7 @@ import {
   buildInvoicePayload,
   sendInvoiceToApisunat,
   getInvoicePdfFromApisunat,
+  getDocumentFromApisunat,
   type ApisunatResponse,
   type ComprobanteData,
   type ComprobanteDetalle,
@@ -281,39 +282,68 @@ export async function POST(request: Request) {
       }
     }
 
-    // CDR ZIP — ApiSunat DEV devuelve la URL del ZIP en el campo `xml`
-    // ApiSunat PROD devuelve el ZIP en base64 dentro de sunatResponse.cdrZip
-    const cdrZipBase64 = apisunatResponse.sunatResponse?.cdrZip;
-    const cdrZipUrl = apisunatResponse.xml; // URL a Azure Blob (DEV)
-
-    if (!enlaceCdr) {
+    // XML + CDR — obtener URLs desde getById, luego descargar y subir a storage
+    if (documentId && (!enlaceXml || !enlaceCdr)) {
       try {
-        let cdrBuffer: Buffer | null = null;
+        const auth = {
+          personaId: empresa.apisunat_persona_id.trim(),
+          personaToken: empresa.apisunat_persona_token.trim(),
+        };
+        const docInfo = await getDocumentFromApisunat(documentId, auth);
 
-        if (cdrZipBase64) {
-          cdrBuffer = Buffer.from(cdrZipBase64, 'base64');
-        } else if (cdrZipUrl?.startsWith('http')) {
-          const cdrRes = await fetch(cdrZipUrl);
-          if (cdrRes.ok) cdrBuffer = Buffer.from(await cdrRes.arrayBuffer());
+        // Descarga y sube un archivo desde una URL de ApiSunat
+        const downloadAndUpload = async (
+          url: string,
+          path: string,
+          fallbackContentType: string,
+        ): Promise<string | null> => {
+          const res = await fetch(url);
+          if (!res.ok) return null;
+          const buffer = Buffer.from(await res.arrayBuffer());
+          const contentType = res.headers.get('content-type') ?? fallbackContentType;
+          const { error: upErr } = await supabaseAdmin.storage
+            .from('facturas_emitidas')
+            .upload(path, buffer, { upsert: true, contentType });
+          return upErr ? null : getFileUrl(path);
+        };
+
+        // XML — ApiSunat DEV puede devolver un ZIP aquí; se guarda con el content-type real
+        if (!enlaceXml && docInfo?.xml?.startsWith('http')) {
+          try {
+            const url = docInfo.xml;
+            const isZip = url.toLowerCase().includes('.zip');
+            const path = isZip ? `xml/${fileBaseName}.zip` : `xml/${fileBaseName}.xml`;
+            const ct = isZip ? 'application/zip' : 'application/xml';
+            const result = await downloadAndUpload(url, path, ct);
+            if (result) enlaceXml = result;
+          } catch { /* XML no bloquea */ }
         }
 
-        if (cdrBuffer) {
+        // CDR
+        if (!enlaceCdr && docInfo?.cdr?.startsWith('http')) {
+          try {
+            const result = await downloadAndUpload(docInfo.cdr, `cdr/R-${fileBaseName}.zip`, 'application/zip');
+            if (result) enlaceCdr = result;
+          } catch { /* CDR no bloquea */ }
+        }
+      } catch { /* getById no bloquea */ }
+
+      // Fallback: CDR desde sunatResponse.cdrZip (base64) si getById no devolvió nada
+      if (!enlaceCdr && apisunatResponse.sunatResponse?.cdrZip) {
+        try {
+          const cdrBuffer = Buffer.from(apisunatResponse.sunatResponse.cdrZip, 'base64');
           const cdrPath = `cdr/R-${fileBaseName}.zip`;
           const { error: upErr } = await supabaseAdmin.storage
             .from('facturas_emitidas')
             .upload(cdrPath, cdrBuffer, { upsert: true, contentType: 'application/zip' });
-
-          if (!upErr) {
-            enlaceCdr = await getFileUrl(cdrPath);
-          } else if (yaAceptado) {
-            enlaceCdr = comprobante.enlace_cdr ?? null;
-          }
-        } else if (yaAceptado) {
-          enlaceCdr = comprobante.enlace_cdr ?? null;
-        }
-      } catch {
-        if (yaAceptado) enlaceCdr = comprobante.enlace_cdr ?? null;
+          if (!upErr) enlaceCdr = await getFileUrl(cdrPath);
+        } catch { /* fallback no bloquea */ }
       }
+    }
+
+    if (yaAceptado) {
+      if (!enlaceXml) enlaceXml = comprobante.enlace_xml ?? null;
+      if (!enlaceCdr) enlaceCdr = comprobante.enlace_cdr ?? null;
     }
 
     // 4. Actualizar registro final con URLs de archivos

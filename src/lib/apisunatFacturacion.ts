@@ -442,18 +442,25 @@ function buildLegalMonetaryTotal(
   moneda: string,
   descuentoGlobal: number,
 ): ApisunatLegalMonetaryTotal {
-  // Sum from line-level rounded values to match exactly what SUNAT sees in each InvoiceLine
+  // Compute all totals from line-level rounded values so SUNAT arithmetic holds exactly:
+  // PayableAmount = LineExtensionAmount - AllowanceTotalAmount + TaxTotal
   const lineExtension = Number(
     detalles.reduce((acc, d) => acc + Number(d.mto_base_igv.toFixed(2)), 0).toFixed(2)
   );
+  const totalIgv = Number(
+    detalles.reduce((acc, d) => acc + Number(d.igv.toFixed(2)), 0).toFixed(2)
+  );
+  const discount = Number(descuentoGlobal.toFixed(2));
+  const payable = Number((lineExtension - discount + totalIgv).toFixed(2));
+
   // UBL 2.1 MonetaryTotalType order: LineExtensionAmount → TaxInclusiveAmount → AllowanceTotalAmount → PayableAmount
   return {
     'cbc:LineExtensionAmount': { _attributes: { currencyID: moneda }, _text: lineExtension },
-    'cbc:TaxInclusiveAmount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.mto_imp_venta.toFixed(2)) },
-    ...(descuentoGlobal > 0 ? {
-      'cbc:AllowanceTotalAmount': { _attributes: { currencyID: moneda }, _text: Number(descuentoGlobal.toFixed(2)) },
+    'cbc:TaxInclusiveAmount': { _attributes: { currencyID: moneda }, _text: payable },
+    ...(discount > 0 ? {
+      'cbc:AllowanceTotalAmount': { _attributes: { currencyID: moneda }, _text: discount },
     } : {}),
-    'cbc:PayableAmount': { _attributes: { currencyID: moneda }, _text: Number(comprobante.mto_imp_venta.toFixed(2)) },
+    'cbc:PayableAmount': { _attributes: { currencyID: moneda }, _text: payable },
   };
 }
 
@@ -767,6 +774,34 @@ export async function getInvoicePdfFromApisunat(
     buffer: Buffer.from(arrayBuffer),
     contentType: 'application/pdf',
   };
+}
+
+// ─── Get document status + file URLs from ApiSunat ───────────
+
+export interface ApisunatDocumentInfo {
+  status: 'ACEPTADO' | 'RECHAZADO' | 'EXCEPCION' | 'PENDIENTE' | string;
+  xml?: string;  // URL al XML firmado
+  cdr?: string;  // URL al CDR ZIP
+  faults?: unknown[];
+  notes?: unknown[];
+}
+
+export async function getDocumentFromApisunat(
+  documentId: string,
+  auth: { personaId: string; personaToken: string },
+): Promise<ApisunatDocumentInfo | null> {
+  const url = `${APISUNAT_BASE}/documents/${documentId}/getById`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'personaId': auth.personaId,
+      'personaToken': auth.personaToken,
+    },
+  });
+
+  if (!response.ok) return null;
+  return response.json() as Promise<ApisunatDocumentInfo>;
 }
 
 // Helper re-exportado para que los routes puedan reconstruir el fileName sin importar buildInvoicePayload
