@@ -3,8 +3,9 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { usePedidosList } from '@/hooks/usePedidos';
+import { usePedidosList, usePedido } from '@/hooks/usePedidos';
 import { useFacturasList, useEnviarASunat } from '@/hooks/useFacturas';
+import PedidoDetailDrawer from '@/features/pedidos/PedidoDetailDrawer';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/Pagination';
 import { useTiposDocumento } from '@/hooks/useCatalogos';
@@ -37,6 +38,11 @@ const ESTADO_LABELS: Record<string, string> = {
 
 // TIPO_DOC_LABELS se construye dinámicamente desde cat_tipo_documento
 
+function PedidoDrawerLoader({ pedidoId, onClose }: { pedidoId: string | null; onClose: () => void }) {
+  const { data: pedido = null } = usePedido(pedidoId ?? undefined);
+  return <PedidoDetailDrawer pedido={pedido} onClose={onClose} />;
+}
+
 export default function FacturacionPage() {
   const router = useRouter();
   const { role } = useAuth();
@@ -52,6 +58,7 @@ export default function FacturacionPage() {
   const [tab, setTab] = useState<Tab>('pendientes');
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
   const [selectedComprobante, setSelectedComprobante] = useState<Comprobante | null>(null);
+  const [drawerPedidoId, setDrawerPedidoId] = useState<string | null>(null);
 
   // Filtros y paginación tab pendientes
   const [searchPendientes, setSearchPendientes] = useState('');
@@ -428,6 +435,14 @@ export default function FacturacionPage() {
                         </span>
                       </div>
                       <p className="text-sm text-[#E2E8F0]">{getClienteNameComprobante(f)}</p>
+                      {f.pedidos?.numero_pedido ? (
+                        <button
+                          onClick={() => setDrawerPedidoId(f.pedido_id)}
+                          className="text-xs text-[#3B82F6] hover:text-blue-400 font-medium text-left"
+                        >
+                          PED-{f.pedidos.numero_pedido}
+                        </button>
+                      ) : null}
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-[#94A3B8]">{formatDate(f.fecha_emision)}</span>
                         <span className="text-sm font-semibold text-[#E2E8F0]">{formatCurrency(f.mto_imp_venta)}</span>
@@ -521,12 +536,13 @@ export default function FacturacionPage() {
 
                 {/* Desktop table */}
                 <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[950px]">
+                  <table className="w-full text-left border-collapse min-w-[1060px]">
                     <thead>
                       <tr className="border-b border-[#334155] bg-[#0F1115]">
                         <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[110px]">Serie-Nro.</th>
                         <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[80px]">Tipo</th>
                         <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase">Cliente</th>
+                        <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[110px]">Pedido</th>
                         <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[120px]">Fecha</th>
                         <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[120px] text-right">Total</th>
                         <th className="px-5 py-3 text-xs font-medium tracking-wider text-[#94A3B8] uppercase w-[100px]">Estado</th>
@@ -546,6 +562,18 @@ export default function FacturacionPage() {
                           </td>
                           <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{tipoDocLabels[f.tipo_doc_codigo] || f.tipo_doc_codigo}</td>
                           <td className="px-5 py-3.5 text-sm text-[#E2E8F0]">{getClienteNameComprobante(f)}</td>
+                          <td className="px-5 py-3.5 text-sm">
+                            {f.pedidos?.numero_pedido ? (
+                              <button
+                                onClick={() => setDrawerPedidoId(f.pedido_id)}
+                                className="text-[#3B82F6] hover:text-blue-400 font-medium"
+                              >
+                                PED-{f.pedidos.numero_pedido}
+                              </button>
+                            ) : (
+                              <span className="text-[#94A3B8]">—</span>
+                            )}
+                          </td>
                           <td className="px-5 py-3.5 text-sm text-[#94A3B8]">{formatDate(f.fecha_emision)}</td>
                           <td className="px-5 py-3.5 text-sm text-[#E2E8F0] font-medium text-right">{formatCurrency(f.mto_imp_venta)}</td>
                           <td className="px-5 py-3.5">
@@ -670,6 +698,12 @@ export default function FacturacionPage() {
         onClose={() => setSelectedComprobante(null)}
         factura={selectedComprobante}
       />
+      {drawerPedidoId && (
+        <PedidoDrawerLoader
+          pedidoId={drawerPedidoId}
+          onClose={() => setDrawerPedidoId(null)}
+        />
+      )}
     </div>
   );
 }

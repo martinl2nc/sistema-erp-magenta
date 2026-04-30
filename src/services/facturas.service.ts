@@ -39,6 +39,7 @@ export interface Comprobante {
     numero_documento: string | null;
   };
   pedidos?: {
+    numero_pedido: number;
     cotizaciones?: { numero_correlativo: number };
   };
 }
@@ -215,7 +216,7 @@ export const facturasService = {
     let query = supabase
       .from('comprobantes')
       .select(
-        `*, clientes ( razon_social, nombres_contacto, apellidos_contacto, numero_documento ), pedidos ( cotizaciones ( numero_correlativo ) )`,
+        `*, clientes ( razon_social, nombres_contacto, apellidos_contacto, numero_documento ), pedidos ( numero_pedido, cotizaciones ( numero_correlativo ) )`,
         { count: 'exact' }
       )
       .order('fecha_emision', { ascending: false })
